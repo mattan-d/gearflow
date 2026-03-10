@@ -106,6 +106,14 @@ $me = current_user();
             margin-bottom: 0.75rem;
             opacity: 0.9;
         }
+        footer {
+            background: #111827;
+            color: #9ca3af;
+            text-align: center;
+            padding: 0.75rem 1rem;
+            font-size: 0.8rem;
+            border-top: 1px solid #1f2937;
+        }
     </style>
 </head>
 <body>
@@ -147,5 +155,8 @@ $me = current_user();
         </a>
     </div>
 </main>
+<footer>
+    © 2026 CentricApp LTD
+</footer>
 </body>
 </html>
