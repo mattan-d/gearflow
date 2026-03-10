@@ -123,6 +123,8 @@ $me = current_user();
         <div class="muted">פלטפורמה לניהול השאלת ציוד</div>
         <div class="nav-links">
             <a href="admin.php" class="active">ניהול מערכת</a>
+            <a href="admin_design.php">עיצוב ממשק</a>
+            <a href="admin_orders.php">ניהול הזמנות</a>
         </div>
     </div>
     <div class="user-info">
