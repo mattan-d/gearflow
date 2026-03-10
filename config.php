@@ -13,11 +13,23 @@ function get_db(): PDO
         return $pdo;
     }
 
-    $pdo = new PDO('sqlite:' . DB_PATH);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+    if (!in_array('sqlite', PDO::getAvailableDrivers(), true)) {
+        http_response_code(500);
+        echo 'SQLite driver for PDO is not enabled on this server. Please enable pdo_sqlite in php.ini.';
+        exit;
+    }
 
-    initialize_database($pdo);
+    try {
+        $pdo = new PDO('sqlite:' . DB_PATH);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+
+        initialize_database($pdo);
+    } catch (PDOException $e) {
+        http_response_code(500);
+        echo 'Database connection error: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
+        exit;
+    }
 
     return $pdo;
 }
