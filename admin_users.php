@@ -222,6 +222,18 @@ $users = $usersStmt->fetchAll();
             color: #6b7280;
             font-size: 0.8rem;
         }
+        .nav-links {
+            margin-top: 0.4rem;
+        }
+        .nav-links a {
+            color: #e5e7eb;
+            font-size: 0.82rem;
+            margin-left: 0.75rem;
+        }
+        .nav-links a.active {
+            font-weight: 600;
+            text-decoration: underline;
+        }
     </style>
 </head>
 <?php $me = current_user(); ?>
@@ -230,6 +242,10 @@ $users = $usersStmt->fetchAll();
     <div>
         <h1>ניהול משתמשים</h1>
         <div class="muted">פלטפורמה לניהול השאלת ציוד</div>
+        <div class="nav-links">
+            <a href="admin_equipment.php">ניהול ציוד</a>
+            <a href="admin_users.php" class="active">ניהול משתמשים</a>
+        </div>
     </div>
     <div class="user-info">
         מחובר כ־<?= htmlspecialchars($me['username'] ?? '', ENT_QUOTES, 'UTF-8') ?> (אדמין)
