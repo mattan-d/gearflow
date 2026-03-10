@@ -244,6 +244,7 @@ $users = $usersStmt->fetchAll();
         <div class="muted">פלטפורמה לניהול השאלת ציוד</div>
         <div class="nav-links">
             <a href="admin_equipment.php">ניהול ציוד</a>
+            <a href="admin_orders.php">ניהול הזמנות</a>
             <a href="admin_users.php" class="active">ניהול משתמשים</a>
         </div>
     </div>

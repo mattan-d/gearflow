@@ -63,6 +63,21 @@ function initialize_database(PDO $pdo): void
         )
     ");
 
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            equipment_id INTEGER NOT NULL,
+            borrower_name TEXT NOT NULL,
+            borrower_contact TEXT,
+            start_date TEXT NOT NULL,
+            end_date TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )
+    ");
+
     // Ensure default admin user exists: admin / admin
     $stmt = $pdo->prepare('SELECT COUNT(*) AS cnt FROM users WHERE username = :username');
     $stmt->execute([':username' => 'admin']);
