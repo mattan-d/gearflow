@@ -47,8 +47,8 @@ function initialize_database(PDO $pdo): void
         )'
     );
 
-    $pdo->exec(
-        'CREATE TABLE IF NOT EXISTS equipment (
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS equipment (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             code TEXT NOT NULL UNIQUE,
@@ -57,11 +57,11 @@ function initialize_database(PDO $pdo): void
             location TEXT,
             quantity_total INTEGER NOT NULL DEFAULT 0,
             quantity_available INTEGER NOT NULL DEFAULT 0,
-            status TEXT NOT NULL DEFAULT ''active'',
+            status TEXT NOT NULL DEFAULT 'active',
             created_at TEXT NOT NULL,
             updated_at TEXT
-        )'
-    );
+        )
+    ");
 
     // Ensure default admin user exists: admin / admin
     $stmt = $pdo->prepare('SELECT COUNT(*) AS cnt FROM users WHERE username = :username');
