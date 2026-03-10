@@ -290,9 +290,12 @@ $me = current_user();
         <h1>ניהול הזמנות</h1>
         <div class="muted">פלטפורמה לניהול השאלת ציוד</div>
         <div class="nav-links">
+            <a href="admin.php">ניהול מערכת</a>
+            <a href="admin_design.php">עיצוב ממשק</a>
+            <a href="admin_times.php">ניהול זמנים</a>
+            <a href="admin_users.php">ניהול משתמשים</a>
             <a href="admin_equipment.php">ניהול ציוד</a>
             <a href="admin_orders.php" class="active">ניהול הזמנות</a>
-            <a href="admin_users.php">ניהול משתמשים</a>
         </div>
     </div>
     <div class="user-info">
