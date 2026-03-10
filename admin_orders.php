@@ -6,15 +6,34 @@ require_once __DIR__ . '/auth.php';
 
 require_admin();
 
-$pdo = get_db();
-$error = '';
-$success = '';
+$pdo      = get_db();
+$error    = '';
+$success  = '';
+$editingOrder = null;
 
-// Handle create / status update
+// עריכת הזמנה קיימת - טעינת נתונים לטופס
+if (isset($_GET['edit_id'])) {
+    $editId = (int)$_GET['edit_id'];
+    if ($editId > 0) {
+        $stmt = $pdo->prepare(
+            'SELECT o.*,
+                    e.name AS equipment_name,
+                    e.code AS equipment_code
+             FROM orders o
+             JOIN equipment e ON e.id = o.equipment_id
+             WHERE o.id = :id'
+        );
+        $stmt->execute([':id' => $editId]);
+        $editingOrder = $stmt->fetch() ?: null;
+    }
+}
+
+// טיפול ביצירה / עדכון / סטטוס / מחיקה / שכפול
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'create') {
+    if ($action === 'create' || $action === 'update') {
+        $id              = (int)($_POST['id'] ?? 0);
         $equipmentId     = (int)($_POST['equipment_id'] ?? 0);
         $borrowerName    = trim($_POST['borrower_name'] ?? '');
         $borrowerContact = trim($_POST['borrower_contact'] ?? '');
@@ -26,25 +45,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'יש למלא ציוד, שם שואל, ותאריכי התחלה וסיום.';
         } else {
             try {
-                $stmt = $pdo->prepare(
-                    'INSERT INTO orders
-                     (equipment_id, borrower_name, borrower_contact, start_date, end_date, status, notes, created_at)
-                     VALUES
-                     (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :status, :notes, :created_at)'
-                );
-                $stmt->execute([
-                    ':equipment_id'     => $equipmentId,
-                    ':borrower_name'    => $borrowerName,
-                    ':borrower_contact' => $borrowerContact,
-                    ':start_date'       => $startDate,
-                    ':end_date'         => $endDate,
-                    ':status'           => 'pending',
-                    ':notes'            => $notes,
-                    ':created_at'       => date('Y-m-d H:i:s'),
-                ]);
-                $success = 'הזמנה נוצרה בהצלחה.';
+                if ($action === 'create') {
+                    $stmt = $pdo->prepare(
+                        'INSERT INTO orders
+                         (equipment_id, borrower_name, borrower_contact, start_date, end_date, status, notes, created_at)
+                         VALUES
+                         (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :status, :notes, :created_at)'
+                    );
+                    $stmt->execute([
+                        ':equipment_id'     => $equipmentId,
+                        ':borrower_name'    => $borrowerName,
+                        ':borrower_contact' => $borrowerContact,
+                        ':start_date'       => $startDate,
+                        ':end_date'         => $endDate,
+                        ':status'           => 'pending',
+                        ':notes'            => $notes,
+                        ':created_at'       => date('Y-m-d H:i:s'),
+                    ]);
+                    $success = 'הזמנה נוצרה בהצלחה.';
+                } elseif ($action === 'update' && $id > 0) {
+                    $stmt = $pdo->prepare(
+                        'UPDATE orders
+                         SET equipment_id     = :equipment_id,
+                             borrower_name    = :borrower_name,
+                             borrower_contact = :borrower_contact,
+                             start_date       = :start_date,
+                             end_date         = :end_date,
+                             notes            = :notes,
+                             updated_at       = :updated_at
+                         WHERE id = :id'
+                    );
+                    $stmt->execute([
+                        ':equipment_id'     => $equipmentId,
+                        ':borrower_name'    => $borrowerName,
+                        ':borrower_contact' => $borrowerContact,
+                        ':start_date'       => $startDate,
+                        ':end_date'         => $endDate,
+                        ':notes'            => $notes,
+                        ':updated_at'       => date('Y-m-d H:i:s'),
+                        ':id'               => $id,
+                    ]);
+                    $success = 'הזמנה עודכנה בהצלחה.';
+                }
             } catch (PDOException $e) {
-                $error = 'שגיאה ביצירת ההזמנה.';
+                $error = 'שגיאה בשמירת ההזמנה.';
             }
         }
     } elseif ($action === 'update_status') {
@@ -59,16 +103,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  WHERE id = :id'
             );
             $stmt->execute([
-                ':status'    => $status,
-                ':updated_at'=> date('Y-m-d H:i:s'),
-                ':id'        => $id,
+                ':status'     => $status,
+                ':updated_at' => date('Y-m-d H:i:s'),
+                ':id'         => $id,
             ]);
             $success = 'סטטוס ההזמנה עודכן.';
+        }
+    } elseif ($action === 'delete') {
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id > 0) {
+            $stmt = $pdo->prepare('DELETE FROM orders WHERE id = :id');
+            $stmt->execute([':id' => $id]);
+            $success = 'הזמנה נמחקה.';
+        }
+    } elseif ($action === 'duplicate') {
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id > 0) {
+            $stmt = $pdo->prepare(
+                'SELECT equipment_id, borrower_name, borrower_contact, start_date, end_date, notes
+                 FROM orders
+                 WHERE id = :id'
+            );
+            $stmt->execute([':id' => $id]);
+            $orderToCopy = $stmt->fetch();
+            if ($orderToCopy) {
+                $stmtInsert = $pdo->prepare(
+                    'INSERT INTO orders
+                     (equipment_id, borrower_name, borrower_contact, start_date, end_date, status, notes, created_at)
+                     VALUES
+                     (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :status, :notes, :created_at)'
+                );
+                $stmtInsert->execute([
+                    ':equipment_id'     => (int)$orderToCopy['equipment_id'],
+                    ':borrower_name'    => $orderToCopy['borrower_name'],
+                    ':borrower_contact' => $orderToCopy['borrower_contact'],
+                    ':start_date'       => $orderToCopy['start_date'],
+                    ':end_date'         => $orderToCopy['end_date'],
+                    ':status'           => 'pending',
+                    ':notes'            => $orderToCopy['notes'],
+                    ':created_at'       => date('Y-m-d H:i:s'),
+                ]);
+                $success = 'הזמנה שוכפלה בהצלחה.';
+            }
         }
     }
 }
 
-// Load equipment options
+// ציוד לבחירה בטופס
 $equipmentStmt = $pdo->query(
     "SELECT id, name, code
      FROM equipment
@@ -77,23 +158,61 @@ $equipmentStmt = $pdo->query(
 );
 $equipmentOptions = $equipmentStmt->fetchAll();
 
-// Load orders list
-$ordersStmt = $pdo->query(
-    'SELECT o.id,
-            o.borrower_name,
-            o.borrower_contact,
-            o.start_date,
-            o.end_date,
-            o.status,
-            o.notes,
-            o.created_at,
-            o.updated_at,
-            e.name AS equipment_name,
-            e.code AS equipment_code
-     FROM orders o
-     JOIN equipment e ON e.id = o.equipment_id
-     ORDER BY o.created_at DESC, o.id DESC'
-);
+// טאבים וסינון
+$today     = date('Y-m-d');
+$tab       = $_GET['tab'] ?? 'today';
+$validTabs = ['today', 'pending', 'future', 'active', 'history'];
+
+if (!in_array($tab, $validTabs, true)) {
+    $tab = 'today';
+}
+
+// טעינת הזמנות לפי טאב
+$baseSql = 'SELECT o.id,
+                   o.borrower_name,
+                   o.borrower_contact,
+                   o.start_date,
+                   o.end_date,
+                   o.status,
+                   o.notes,
+                   o.created_at,
+                   o.updated_at,
+                   e.name AS equipment_name,
+                   e.code AS equipment_code
+            FROM orders o
+            JOIN equipment e ON e.id = o.equipment_id';
+
+$where  = '';
+$params = [];
+
+switch ($tab) {
+    case 'pending':
+        $where = " WHERE o.status = 'pending'";
+        break;
+    case 'future':
+        $where = " WHERE o.status = 'approved' AND DATE(o.start_date) > :today";
+        $params[':today'] = $today;
+        break;
+    case 'active':
+        $where = " WHERE o.status = 'approved'
+                   AND DATE(o.start_date) <= :today
+                   AND DATE(o.end_date)   >= :today";
+        $params[':today'] = $today;
+        break;
+    case 'history':
+        $where = " WHERE o.status IN ('returned', 'rejected')";
+        break;
+    case 'today':
+    default:
+        $where = " WHERE DATE(o.start_date) <= :today
+                   AND DATE(o.end_date)   >= :today";
+        $params[':today'] = $today;
+        break;
+}
+
+$ordersSql  = $baseSql . $where . ' ORDER BY o.created_at DESC, o.id DESC';
+$ordersStmt = $pdo->prepare($ordersSql);
+$ordersStmt->execute($params);
 $orders = $ordersStmt->fetchAll();
 
 $me = current_user();
@@ -278,9 +397,35 @@ $me = current_user();
         .row-actions {
             display: flex;
             gap: 0.3rem;
+            flex-wrap: wrap;
         }
         .row-actions form {
             margin: 0;
+        }
+        .tabs {
+            display: inline-flex;
+            border-radius: 999px;
+            background: #e5e7eb;
+            padding: 0.15rem;
+            margin-bottom: 1rem;
+        }
+        .tabs a {
+            padding: 0.3rem 0.9rem;
+            border-radius: 999px;
+            font-size: 0.82rem;
+            text-decoration: none;
+            color: #374151;
+        }
+        .tabs a.active {
+            background: #111827;
+            color: #f9fafb;
+            font-weight: 600;
+        }
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
         }
         footer {
             background: #111827;
@@ -307,68 +452,129 @@ $me = current_user();
     </div>
 </header>
 <main>
-    <div class="card">
-        <h2>יצירת הזמנת ציוד חדשה</h2>
-
-        <?php if ($error !== ''): ?>
-            <div class="flash error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
-        <?php elseif ($success !== ''): ?>
-            <div class="flash success"><?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?></div>
-        <?php endif; ?>
-
-        <form method="post" action="admin_orders.php">
-            <input type="hidden" name="action" value="create">
-
-            <div class="grid">
-                <div>
-                    <label for="equipment_id">ציוד</label>
-                    <select id="equipment_id" name="equipment_id" required>
-                        <option value="">בחר ציוד...</option>
-                        <?php foreach ($equipmentOptions as $item): ?>
-                            <option value="<?= (int)$item['id'] ?>">
-                                <?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>
-                                (<?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?>)
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-
-                    <label for="borrower_name">שם שואל</label>
-                    <input type="text" id="borrower_name" name="borrower_name" required>
-
-                    <label for="borrower_contact">פרטי יצירת קשר (טלפון / מייל)</label>
-                    <input type="text" id="borrower_contact" name="borrower_contact">
-                </div>
-                <div>
-                    <label for="start_date">תאריך התחלה</label>
-                    <input type="date" id="start_date" name="start_date" required>
-
-                    <label for="end_date">תאריך סיום</label>
-                    <input type="date" id="end_date" name="end_date" required>
-
-                    <label for="notes">הערות</label>
-                    <textarea id="notes" name="notes" placeholder="שעות איסוף / החזרה, שימוש מיוחד וכו׳"></textarea>
-                </div>
-            </div>
-
-            <button type="submit" class="btn">שמירת הזמנה</button>
-        </form>
+    <div class="toolbar">
+        <div></div>
+        <a href="admin_orders.php?mode=new" class="btn">הזמנה חדשה</a>
     </div>
 
+    <?php if ($error !== ''): ?>
+        <div class="card">
+            <div class="flash error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
+        </div>
+    <?php elseif ($success !== ''): ?>
+        <div class="card">
+            <div class="flash success"><?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?></div>
+        </div>
+    <?php endif; ?>
+
+    <?php
+    $mode     = $_GET['mode'] ?? null;
+    $showForm = $mode === 'new' || $editingOrder !== null;
+    ?>
+
+    <?php if ($showForm): ?>
+        <div class="card" id="new-order">
+            <h2><?= $editingOrder ? 'עריכת הזמנה' : 'הזמנה חדשה' ?></h2>
+
+            <form method="post" action="admin_orders.php<?= $editingOrder ? '?edit_id=' . (int)$editingOrder['id'] : '' ?>">
+                <input type="hidden" name="action" value="<?= $editingOrder ? 'update' : 'create' ?>">
+                <input type="hidden" name="id" value="<?= $editingOrder ? (int)$editingOrder['id'] : 0 ?>">
+
+                <div class="grid">
+                    <div>
+                        <label for="equipment_id">ציוד</label>
+                        <select id="equipment_id" name="equipment_id" required>
+                            <option value="">בחר ציוד...</option>
+                            <?php foreach ($equipmentOptions as $item): ?>
+                                <option value="<?= (int)$item['id'] ?>"
+                                    <?= $editingOrder && (int)$editingOrder['equipment_id'] === (int)$item['id'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>
+                                    (<?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?>)
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+
+                        <label for="borrower_name">שם שואל</label>
+                        <input
+                            type="text"
+                            id="borrower_name"
+                            name="borrower_name"
+                            required
+                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_name'], ENT_QUOTES, 'UTF-8') : '' ?>"
+                        >
+
+                        <label for="borrower_contact">פרטי יצירת קשר (טלפון / מייל / חברה)</label>
+                        <input
+                            type="text"
+                            id="borrower_contact"
+                            name="borrower_contact"
+                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_contact'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>"
+                        >
+                    </div>
+                    <div>
+                        <label for="start_date">תאריך התחלה</label>
+                        <input
+                            type="date"
+                            id="start_date"
+                            name="start_date"
+                            required
+                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['start_date'], ENT_QUOTES, 'UTF-8') : '' ?>"
+                        >
+
+                        <label for="end_date">תאריך סיום</label>
+                        <input
+                            type="date"
+                            id="end_date"
+                            name="end_date"
+                            required
+                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['end_date'], ENT_QUOTES, 'UTF-8') : '' ?>"
+                        >
+
+                        <label for="notes">הערות</label>
+                        <textarea
+                            id="notes"
+                            name="notes"
+                            placeholder="שעות איסוף / החזרה, שימוש מיוחד וכו׳"
+                        ><?= $editingOrder ? htmlspecialchars($editingOrder['notes'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn">
+                    <?= $editingOrder ? 'שמירת שינויים' : 'שמירת הזמנה' ?>
+                </button>
+                <?php if ($editingOrder): ?>
+                    <a href="admin_orders.php" class="btn secondary">ביטול</a>
+                <?php endif; ?>
+            </form>
+        </div>
+    <?php endif; ?>
+
     <div class="card">
-        <h2>רשימת הזמנות</h2>
+        <div class="toolbar">
+            <h2>רשימת הזמנות</h2>
+            <div class="tabs">
+                <a href="admin_orders.php?tab=today"   class="<?= $tab === 'today'   ? 'active' : '' ?>">היום</a>
+                <a href="admin_orders.php?tab=pending" class="<?= $tab === 'pending' ? 'active' : '' ?>">ממתין</a>
+                <a href="admin_orders.php?tab=future"  class="<?= $tab === 'future'  ? 'active' : '' ?>">עתידי</a>
+                <a href="admin_orders.php?tab=active"  class="<?= $tab === 'active'  ? 'active' : '' ?>">בהשאלה</a>
+                <a href="admin_orders.php?tab=history" class="<?= $tab === 'history' ? 'active' : '' ?>">היסטוריה</a>
+            </div>
+        </div>
         <?php if (count($orders) === 0): ?>
-            <p class="muted-small">עדיין לא נוצרו הזמנות במערכת.</p>
+            <p class="muted-small">עדיין לא נוצרו הזמנות במערכת לטאב זה.</p>
         <?php else: ?>
             <table>
                 <thead>
                 <tr>
                     <th>#</th>
-                    <th>ציוד</th>
-                    <th>שואל</th>
-                    <th>תאריכים</th>
+                    <th>שם המזמין</th>
+                    <th>שם הפריט</th>
                     <th>סטטוס</th>
+                    <th>תאריך השאלה</th>
+                    <th>תאריך</th>
+                    <th>החברה</th>
+                    <th>טופס השאלה</th>
                     <th>הערות</th>
-                    <th>נוצר ב־</th>
                     <th>פעולות</th>
                 </tr>
                 </thead>
@@ -377,10 +583,6 @@ $me = current_user();
                     <tr>
                         <td><?= (int)$order['id'] ?></td>
                         <td>
-                            <?= htmlspecialchars($order['equipment_name'], ENT_QUOTES, 'UTF-8') ?><br>
-                            <span class="muted-small"><?= htmlspecialchars($order['equipment_code'], ENT_QUOTES, 'UTF-8') ?></span>
-                        </td>
-                        <td>
                             <?= htmlspecialchars($order['borrower_name'], ENT_QUOTES, 'UTF-8') ?><br>
                             <?php if ($order['borrower_contact'] !== null && $order['borrower_contact'] !== ''): ?>
                                 <span class="muted-small">
@@ -388,10 +590,11 @@ $me = current_user();
                                 </span>
                             <?php endif; ?>
                         </td>
-                        <td class="muted-small">
-                            <?= htmlspecialchars($order['start_date'], ENT_QUOTES, 'UTF-8') ?>
-                            -
-                            <?= htmlspecialchars($order['end_date'], ENT_QUOTES, 'UTF-8') ?>
+                        <td>
+                            <?= htmlspecialchars($order['equipment_name'], ENT_QUOTES, 'UTF-8') ?><br>
+                            <span class="muted-small">
+                                <?= htmlspecialchars($order['equipment_code'], ENT_QUOTES, 'UTF-8') ?>
+                            </span>
                         </td>
                         <td>
                             <?php
@@ -411,21 +614,42 @@ $me = current_user();
                             <span class="badge <?= $statusClass ?>"><?= $statusLabel ?></span>
                         </td>
                         <td class="muted-small">
-                            <?= htmlspecialchars($order['notes'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                            <?= htmlspecialchars($order['start_date'], ENT_QUOTES, 'UTF-8') ?>
                         </td>
                         <td class="muted-small">
-                            <?= htmlspecialchars($order['created_at'], ENT_QUOTES, 'UTF-8') ?><br>
-                            <?php if (!empty($order['updated_at'])): ?>
-                                עודכן: <?= htmlspecialchars($order['updated_at'], ENT_QUOTES, 'UTF-8') ?>
-                            <?php endif; ?>
+                            <?= htmlspecialchars($order['end_date'], ENT_QUOTES, 'UTF-8') ?>
+                        </td>
+                        <td class="muted-small">
+                            <?= htmlspecialchars($order['borrower_contact'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                        </td>
+                        <td class="muted-small">
+                            -
+                        </td>
+                        <td class="muted-small">
+                            <?= htmlspecialchars($order['notes'] ?? '', ENT_QUOTES, 'UTF-8') ?>
                         </td>
                         <td>
                             <div class="row-actions">
+                                <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="btn small secondary">עריכה</a>
+
+                                <form method="post" action="admin_orders.php"
+                                      onsubmit="return confirm('למחוק את ההזמנה הזו?');">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                    <button type="submit" class="btn small">מחיקה</button>
+                                </form>
+
+                                <form method="post" action="admin_orders.php">
+                                    <input type="hidden" name="action" value="duplicate">
+                                    <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                    <button type="submit" class="btn small neutral">שכפול</button>
+                                </form>
+
                                 <form method="post" action="admin_orders.php">
                                     <input type="hidden" name="action" value="update_status">
                                     <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
                                     <select name="status" class="muted-small">
-                                        <option value="pending" <?= $order['status'] === 'pending' ? 'selected' : '' ?>>ממתין</option>
+                                        <option value="pending"  <?= $order['status'] === 'pending'  ? 'selected' : '' ?>>ממתין</option>
                                         <option value="approved" <?= $order['status'] === 'approved' ? 'selected' : '' ?>>מאושר</option>
                                         <option value="rejected" <?= $order['status'] === 'rejected' ? 'selected' : '' ?>>נדחה</option>
                                         <option value="returned" <?= $order['status'] === 'returned' ? 'selected' : '' ?>>הוחזר</option>
@@ -446,4 +670,3 @@ $me = current_user();
 </footer>
 </body>
 </html>
-
