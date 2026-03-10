@@ -282,6 +282,14 @@ $me = current_user();
         .row-actions form {
             margin: 0;
         }
+        footer {
+            background: #111827;
+            color: #9ca3af;
+            text-align: center;
+            padding: 0.75rem 1rem;
+            font-size: 0.8rem;
+            border-top: 1px solid #1f2937;
+        }
     </style>
 </head>
 <body>
@@ -291,11 +299,6 @@ $me = current_user();
         <div class="muted">פלטפורמה לניהול השאלת ציוד</div>
         <div class="nav-links">
             <a href="admin.php">ניהול מערכת</a>
-            <a href="admin_design.php">עיצוב ממשק</a>
-            <a href="admin_times.php">ניהול זמנים</a>
-            <a href="admin_users.php">ניהול משתמשים</a>
-            <a href="admin_equipment.php">ניהול ציוד</a>
-            <a href="admin_orders.php" class="active">ניהול הזמנות</a>
         </div>
     </div>
     <div class="user-info">
@@ -438,6 +441,9 @@ $me = current_user();
         <?php endif; ?>
     </div>
 </main>
+<footer>
+    © 2026 CentricApp LTD
+</footer>
 </body>
 </html>
 

@@ -81,6 +81,14 @@ $me = current_user();
             font-size: 0.85rem;
             color: #6b7280;
         }
+        footer {
+            background: #111827;
+            color: #9ca3af;
+            text-align: center;
+            padding: 0.75rem 1rem;
+            font-size: 0.8rem;
+            border-top: 1px solid #1f2937;
+        }
     </style>
 </head>
 <body>
@@ -90,11 +98,6 @@ $me = current_user();
         <div class="muted">פלטפורמה לניהול השאלת ציוד</div>
         <div class="nav-links">
             <a href="admin.php">ניהול מערכת</a>
-            <a href="admin_design.php" class="active">עיצוב ממשק</a>
-            <a href="admin_times.php">ניהול זמנים</a>
-            <a href="admin_users.php">ניהול משתמשים</a>
-            <a href="admin_equipment.php">ניהול ציוד</a>
-            <a href="admin_orders.php">ניהול הזמנות</a>
         </div>
     </div>
     <div class="user-info">
@@ -114,5 +117,8 @@ $me = current_user();
         </p>
     </div>
 </main>
+<footer>
+    © 2026 CentricApp LTD
+</footer>
 </body>
 </html>

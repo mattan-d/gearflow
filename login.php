@@ -127,6 +127,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-radius: 4px;
             font-size: 0.8rem;
         }
+        .login-footer {
+            margin-top: 1rem;
+            font-size: 0.75rem;
+            color: #9ca3af;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -150,6 +156,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <p class="hint">
         התחברות ראשונית: <code>admin / admin</code>
+    </p>
+    <p class="login-footer">
+        © 2026 CentricApp LTD
     </p>
 </div>
 </body>

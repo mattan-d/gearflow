@@ -234,6 +234,14 @@ $users = $usersStmt->fetchAll();
             font-weight: 600;
             text-decoration: underline;
         }
+        footer {
+            background: #111827;
+            color: #9ca3af;
+            text-align: center;
+            padding: 0.75rem 1rem;
+            font-size: 0.8rem;
+            border-top: 1px solid #1f2937;
+        }
     </style>
 </head>
 <?php $me = current_user(); ?>
@@ -244,11 +252,6 @@ $users = $usersStmt->fetchAll();
         <div class="muted">פלטפורמה לניהול השאלת ציוד</div>
         <div class="nav-links">
             <a href="admin.php">ניהול מערכת</a>
-            <a href="admin_design.php">עיצוב ממשק</a>
-            <a href="admin_times.php">ניהול זמנים</a>
-            <a href="admin_users.php" class="active">ניהול משתמשים</a>
-            <a href="admin_equipment.php">ניהול ציוד</a>
-            <a href="admin_orders.php">ניהול הזמנות</a>
         </div>
     </div>
     <div class="user-info">
@@ -347,6 +350,9 @@ $users = $usersStmt->fetchAll();
         </table>
     </div>
 </main>
+<footer>
+    © 2026 CentricApp LTD
+</footer>
 </body>
 </html>
 
