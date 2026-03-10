@@ -10,6 +10,17 @@
 // NOTE: This is hardcoded on purpose, keep in sync with the provider webhook configuration.
 $secret = '$CA#Secret';
 
+$logFile = __DIR__ . '/webhook.log';
+
+function log_message($message)
+{
+    global $logFile;
+    $date = date('Y-m-d H:i:s');
+    $ip   = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    $line = "[$date] [IP:$ip] $message" . PHP_EOL;
+    file_put_contents($logFile, $line, FILE_APPEND | LOCK_EX);
+}
+
 function respond($statusCode, $message)
 {
     http_response_code($statusCode);
@@ -18,8 +29,12 @@ function respond($statusCode, $message)
     exit;
 }
 
+// Log incoming webhook
+log_message('Incoming webhook: method=' . ($_SERVER['REQUEST_METHOD'] ?? 'UNKNOWN'));
+
 // Only allow POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    log_message('Rejected: method not allowed');
     respond(405, 'Method Not Allowed');
 }
 
@@ -33,9 +48,11 @@ if ($secret !== '') {
         $theirSig = substr($signatureHeader, 7);
         $ourSig   = hash_hmac('sha256', $payload, $secret);
         if (!hash_equals($ourSig, $theirSig)) {
+            log_message('Signature mismatch');
             respond(401, 'Invalid signature');
         }
     } else {
+        log_message('Missing signature header');
         respond(400, 'Missing signature header');
     }
 }
@@ -50,8 +67,11 @@ $exitCode = 0;
 exec($cmd, $output, $exitCode);
 
 if ($exitCode !== 0) {
+    log_message('git pull failed: ' . implode(' | ', $output));
     respond(500, "git pull failed:\n" . implode("\n", $output));
 }
+
+log_message('git pull succeeded: ' . implode(' | ', $output));
 
 respond(200, "git pull succeeded:\n" . implode("\n", $output));
 
