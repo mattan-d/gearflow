@@ -670,13 +670,7 @@ $me = current_user();
             </table>
         <?php endif; ?>
     </div>
-</main>
-<footer>
-    © 2026 CentricApp LTD
-</footer>
-</body>
-</html>
-<script>
+    <script>
     (function () {
         const startInput = document.getElementById('start_date');
         const endInput = document.getElementById('end_date');
@@ -746,4 +740,10 @@ $me = current_user();
         // Initial state on load
         updateEquipmentState();
     })();
-</script>
+    </script>
+</main>
+<footer>
+    © 2026 CentricApp LTD
+</footer>
+</body>
+</html>
