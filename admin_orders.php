@@ -675,6 +675,38 @@ $me = current_user();
             font-size: 0.8rem;
             border-top: 1px solid #1f2937;
         }
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15,23,42,0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+        .modal-card {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 25px 60px rgba(15,23,42,0.45);
+            max-width: 1000px;
+            width: 95%;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 1.5rem 1.5rem 1.25rem;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .modal-close {
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 1.1rem;
+            line-height: 1;
+        }
         .suggestions {
             border: 1px solid #d1d5db;
             border-radius: 8px;
@@ -723,7 +755,7 @@ $me = current_user();
 <main>
     <div class="toolbar">
         <div></div>
-        <a href="admin_orders.php?mode=new" class="btn">הזמנה חדשה</a>
+        <button type="button" class="btn" id="open_order_modal_btn">הזמנה חדשה</button>
     </div>
 
     <?php if ($error !== ''): ?>
@@ -738,12 +770,15 @@ $me = current_user();
 
     <?php
     $mode     = $_GET['mode'] ?? null;
-    $showForm = $mode === 'new' || $editingOrder !== null;
+    $showForm = $mode === 'new' || $editingOrder !== null || $error !== '' || $success !== '';
     ?>
 
-    <?php if ($showForm): ?>
-        <div class="card" id="new-order">
-            <h2><?= $editingOrder ? 'עריכת הזמנה' : 'הזמנה חדשה' ?></h2>
+    <div class="modal-backdrop" id="order_modal" style="display: <?= $showForm ? 'flex' : 'none' ?>;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2><?= $editingOrder ? 'עריכת הזמנה' : 'הזמנה חדשה' ?></h2>
+                <button type="button" class="modal-close" id="order_modal_close" aria-label="סגירת חלון">✕</button>
+            </div>
 
             <form method="post" action="admin_orders.php<?= $editingOrder ? '?edit_id=' . (int)$editingOrder['id'] : '' ?>">
                 <input type="hidden" name="action" value="<?= $editingOrder ? 'update' : 'create' ?>">
@@ -892,10 +927,12 @@ $me = current_user();
                 </button>
                 <?php if ($editingOrder): ?>
                     <a href="admin_orders.php" class="btn secondary">ביטול</a>
+                <?php else: ?>
+                    <button type="button" class="btn secondary" id="order_modal_cancel">ביטול</button>
                 <?php endif; ?>
             </form>
         </div>
-    <?php endif; ?>
+    </div>
 
     <div class="card">
         <div class="toolbar">
@@ -1051,6 +1088,10 @@ $me = current_user();
     const calGrid = document.getElementById('cal_grid');
     const toggle = document.getElementById('date_picker_toggle');
     const panel = document.getElementById('date_picker_panel');
+    const orderModal = document.getElementById('order_modal');
+    const openOrderModalBtn = document.getElementById('open_order_modal_btn');
+    const orderModalClose = document.getElementById('order_modal_close');
+    const orderModalCancel = document.getElementById('order_modal_cancel');
 
     if (!startInput || !endInput || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel || !toggle || !panel) {
         return;
@@ -1404,6 +1445,33 @@ $me = current_user();
     modeEndBtn.addEventListener('click', function () {
         setMode('end');
     });
+
+    // פתיחת/סגירת מודאל הזמנה חדשה / עריכה
+    function openOrderModal() {
+        if (orderModal) {
+            orderModal.style.display = 'flex';
+        }
+    }
+    function closeOrderModal() {
+        if (orderModal) {
+            orderModal.style.display = 'none';
+        }
+    }
+    if (openOrderModalBtn && orderModal) {
+        openOrderModalBtn.addEventListener('click', function () {
+            openOrderModal();
+        });
+    }
+    if (orderModalClose) {
+        orderModalClose.addEventListener('click', function () {
+            closeOrderModal();
+        });
+    }
+    if (orderModalCancel) {
+        orderModalCancel.addEventListener('click', function () {
+            closeOrderModal();
+        });
+    }
 
     // אתחול
     setMode('start');
