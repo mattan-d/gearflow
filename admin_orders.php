@@ -802,13 +802,8 @@ $me = current_user();
                     <!-- עמודת ציוד בלבד (שמאל ב-RTL) -->
                     <div>
                         <?php if ($editingOrder): ?>
-                            <!-- במצב עריכה שומרים על בחירה בודדת כמו קודם -->
-                            <div class="current-equipment-display" style="margin-bottom: 0.5rem; padding: 0.5rem 0.6rem; background: #f0fdf4; border-radius: 8px; border: 1px solid #bbf7d0;">
-                                <span class="muted-small" style="display: block; margin-bottom: 0.2rem;">פריט ציוד בהזמנה:</span>
-                                <strong><?= htmlspecialchars($editingOrder['equipment_name'] ?? '', ENT_QUOTES, 'UTF-8') ?></strong>
-                                <span class="muted-small">(<?= htmlspecialchars($editingOrder['equipment_code'] ?? '', ENT_QUOTES, 'UTF-8') ?>)</span>
-                            </div>
-                            <label for="equipment_id">שינוי ציוד</label>
+                            <!-- במצב עריכה: בחירה בודדת מציוד -->
+                            <label for="equipment_id">ציוד</label>
                             <select id="equipment_id" name="equipment_id">
                                 <option value="">בחר ציוד...</option>
                                 <?php foreach ($equipmentOptions as $item): ?>
