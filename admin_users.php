@@ -557,9 +557,7 @@ if (isset($_GET['edit_id'])) {
                             <form method="post" action="admin_users.php">
                                 <input type="hidden" name="action" value="toggle_active">
                                 <input type="hidden" name="id" value="<?= (int)$user['id'] ?>">
-                                <button type="submit" class="btn small secondary">
-                                    <?= (int)$user['is_active'] === 1 ? 'השבת' : 'הפעל' ?>
-                                </button>
+                                <button type="submit" class="icon-btn" title="<?= (int)$user['is_active'] === 1 ? 'השבת' : 'הפעל' ?>"><?= (int)$user['is_active'] === 1 ? '⏸️' : '▶️' ?></button>
                             </form>
                             <form method="post" action="admin_users.php" onsubmit="return confirm('למחוק את המשתמש הזה?');">
                                 <input type="hidden" name="action" value="delete">
