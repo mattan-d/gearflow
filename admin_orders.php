@@ -607,7 +607,7 @@ $me = current_user();
                 <input type="hidden" name="id" value="<?= $editingOrder ? (int)$editingOrder['id'] : 0 ?>">
 
                 <div class="grid">
-                    <!-- עמודת תאריכים (בצד ימין ב-RTL) -->
+                    <!-- עמודת תאריכים + שם שואל + הערות (בצד ימין ב-RTL) -->
                     <div>
                         <!-- שדות נסתרים לתאריכים בפורמט YYYY-MM-DD לצורך שליחה לשרת -->
                         <input type="hidden" id="start_date" name="start_date"
@@ -622,33 +622,54 @@ $me = current_user();
                                 <span>פתח לוח שנה</span>
                             </div>
                             <div class="date-picker-panel" id="date_picker_panel" style="display: none;">
-                            <div class="date-mode-toggle">
-                                <button type="button" id="mode_start" class="date-mode-btn active">השאלה</button>
-                                <button type="button" id="mode_end" class="date-mode-btn">החזרה</button>
-                            </div>
-                            <div class="date-selected">
-                                <div>תאריך השאלה: <span id="selected_start_label">-</span></div>
-                                <div>תאריך החזרה: <span id="selected_end_label">-</span></div>
-                            </div>
-                            <div class="date-calendar">
-                                <div class="date-calendar-header">
-                                    <button type="button" id="cal_prev">&lt;</button>
-                                    <div id="cal_month_label"></div>
-                                    <button type="button" id="cal_next">&gt;</button>
+                                <div class="date-mode-toggle">
+                                    <button type="button" id="mode_start" class="date-mode-btn active">השאלה</button>
+                                    <button type="button" id="mode_end" class="date-mode-btn">החזרה</button>
                                 </div>
-                                <div class="date-calendar-weekdays">
-                                    <span>א</span><span>ב</span><span>ג</span><span>ד</span><span>ה</span><span>ו</span><span>ש</span>
+                                <div class="date-selected">
+                                    <div>תאריך השאלה: <span id="selected_start_label">-</span></div>
+                                    <div>תאריך החזרה: <span id="selected_end_label">-</span></div>
                                 </div>
-                                <div class="date-calendar-grid" id="cal_grid"></div>
-                            </div>
-                            <div class="muted-small" style="margin-top: 0.5rem;">
-                                ימים שעברו וימי שישי/שבת מסומנים כלא זמינים.
-                            </div>
+                                <div class="date-calendar">
+                                    <div class="date-calendar-header">
+                                        <button type="button" id="cal_prev">&lt;</button>
+                                        <div id="cal_month_label"></div>
+                                        <button type="button" id="cal_next">&gt;</button>
+                                    </div>
+                                    <div class="date-calendar-weekdays">
+                                        <span>א</span><span>ב</span><span>ג</span><span>ד</span><span>ה</span><span>ו</span><span>ש</span>
+                                    </div>
+                                    <div class="date-calendar-grid" id="cal_grid"></div>
+                                </div>
+                                <div class="muted-small" style="margin-top: 0.5rem;">
+                                    ימים שעברו וימי שישי/שבת מסומנים כלא זמינים.
+                                </div>
                             </div>
                         </div>
+
+                        <label for="borrower_name">שם שואל</label>
+                        <input
+                            type="text"
+                            id="borrower_name"
+                            name="borrower_name"
+                            required
+                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_name'], ENT_QUOTES, 'UTF-8') : '' ?>"
+                        >
+
+                        <label for="notes">הערות</label>
+                        <textarea
+                            id="notes"
+                            name="notes"
+                            placeholder="שעות איסוף / החזרה, שימוש מיוחד וכו׳"
+                        ><?= $editingOrder ? htmlspecialchars($editingOrder['notes'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
+
+                        <button type="button" class="btn secondary"
+                                onclick="window.open('agreement.php<?= $editingOrder ? '?order_id=' . (int)$editingOrder['id'] : '' ?>', 'agreement', 'width=900,height=700')">
+                            הסכם השאלה
+                        </button>
                     </div>
 
-                    <!-- עמודת פרטי שואל וציוד (שמאל ב-RTL) -->
+                    <!-- עמודת ציוד בלבד (שמאל ב-RTL) -->
                     <div>
                         <label for="equipment_id">ציוד</label>
                         <select id="equipment_id" name="equipment_id" <?= $editingOrder ? '' : 'disabled' ?>>
@@ -661,39 +682,11 @@ $me = current_user();
                                 </option>
                             <?php endforeach; ?>
                         </select>
-
-                        <label for="borrower_name">שם שואל</label>
-                        <input
-                            type="text"
-                            id="borrower_name"
-                            name="borrower_name"
-                            required
-                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_name'], ENT_QUOTES, 'UTF-8') : '' ?>"
-                        >
-
-                        <label for="borrower_contact">פרטי יצירת קשר (טלפון / מייל / חברה)</label>
-                        <input
-                            type="text"
-                            id="borrower_contact"
-                            name="borrower_contact"
-                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_contact'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>"
-                        >
-
-                        <label for="notes">הערות</label>
-                        <textarea
-                            id="notes"
-                            name="notes"
-                            placeholder="שעות איסוף / החזרה, שימוש מיוחד וכו׳"
-                        ><?= $editingOrder ? htmlspecialchars($editingOrder['notes'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
                     </div>
                 </div>
 
-                <button type="submit" class="btn">
-                    <?= $editingOrder ? 'שמירת שינויים' : 'שמירת הזמנה' ?>
-                </button>
-                <button type="button" class="btn secondary"
-                        onclick="window.open('agreement.php<?= $editingOrder ? '?order_id=' . (int)$editingOrder['id'] : '' ?>', 'agreement', 'width=900,height=700')">
-                    הסכם השאלה
+                <button type="submit" class="btn" id="submit_order_btn" <?= $editingOrder ? '' : 'disabled' ?>>
+                    <?= $editingOrder ? 'שמירת שינויים' : 'הזמנה' ?>
                 </button>
                 <?php if ($editingOrder): ?>
                     <a href="admin_orders.php" class="btn secondary">ביטול</a>
@@ -825,6 +818,7 @@ $me = current_user();
     const startInput = document.getElementById('start_date');
     const endInput = document.getElementById('end_date');
     const equipmentSelect = document.getElementById('equipment_id');
+    const submitBtn = document.getElementById('submit_order_btn');
     const modeStartBtn = document.getElementById('mode_start');
     const modeEndBtn = document.getElementById('mode_end');
     const startLabel = document.getElementById('selected_start_label');
@@ -884,6 +878,11 @@ $me = current_user();
         const hasStart = !!startInput.value;
         const hasEnd = !!endInput.value;
         equipmentSelect.disabled = !(hasStart && hasEnd);
+
+        const hasEquip = !!equipmentSelect.value;
+        if (submitBtn) {
+            submitBtn.disabled = !(hasStart && hasEnd && hasEquip);
+        }
     }
 
     function updateLabels() {
@@ -995,6 +994,11 @@ $me = current_user();
             }, 1000);
         }
     }
+
+    // שינוי ציוד
+    equipmentSelect.addEventListener('change', function () {
+        updateEquipmentState();
+    });
 
     // חיבור אירועים למעבר חודשים
     calPrev.addEventListener('click', function () {
