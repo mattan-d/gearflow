@@ -14,24 +14,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'create') {
-        $username = trim($_POST['username'] ?? '');
-        $password = $_POST['password'] ?? '';
-        $role     = $_POST['role'] ?? 'student';
+        $username   = trim($_POST['username'] ?? '');
+        $password   = $_POST['password'] ?? '';
+        $role       = $_POST['role'] ?? 'student';
+        $firstName  = trim($_POST['first_name'] ?? '');
+        $lastName   = trim($_POST['last_name'] ?? '');
+        $warehouse  = trim($_POST['warehouse'] ?? '');
 
         if ($username === '' || $password === '') {
             $error = 'יש למלא שם משתמש וסיסמה.';
         } else {
             try {
                 $stmt = $pdo->prepare(
-                    'INSERT INTO users (username, password_hash, role, is_active, created_at)
-                     VALUES (:username, :password_hash, :role, :is_active, :created_at)'
+                    'INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, created_at)
+                     VALUES (:username, :password_hash, :role, :is_active, :first_name, :last_name, :warehouse, :created_at)'
                 );
                 $stmt->execute([
                     ':username'      => $username,
                     ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
                     ':role'          => $role,
                     ':is_active'     => 1,
-                    ':created_at'    => date('Y-m-d H:i:s'),
+                    ':first_name'    => $firstName,
+                    ':last_name'     => $lastName,
+                    ':warehouse'     => $warehouse,
+                    ':created_at'   => date('Y-m-d H:i:s'),
                 ]);
                 $success = 'המשתמש נוצר בהצלחה.';
             } catch (PDOException $e) {
@@ -74,10 +80,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     } elseif ($action === 'update') {
-        $id       = (int)($_POST['id'] ?? 0);
-        $username = trim($_POST['username'] ?? '');
-        $password = $_POST['password'] ?? '';
-        $role     = $_POST['role'] ?? 'student';
+        $id         = (int)($_POST['id'] ?? 0);
+        $username   = trim($_POST['username'] ?? '');
+        $password   = $_POST['password'] ?? '';
+        $role       = $_POST['role'] ?? 'student';
+        $firstName  = trim($_POST['first_name'] ?? '');
+        $lastName   = trim($_POST['last_name'] ?? '');
+        $warehouse  = trim($_POST['warehouse'] ?? '');
 
         if ($id <= 0 || $username === '') {
             $error = 'יש לבחור משתמש ולמלא שם משתמש.';
@@ -88,26 +97,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'UPDATE users
                          SET username = :username,
                              password_hash = :password_hash,
-                             role = :role
+                             role = :role,
+                             first_name = :first_name,
+                             last_name = :last_name,
+                             warehouse = :warehouse
                          WHERE id = :id'
                     );
                     $stmt->execute([
                         ':username'      => $username,
                         ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
                         ':role'          => $role,
+                        ':first_name'    => $firstName,
+                        ':last_name'     => $lastName,
+                        ':warehouse'     => $warehouse,
                         ':id'            => $id,
                     ]);
                 } else {
                     $stmt = $pdo->prepare(
                         'UPDATE users
                          SET username = :username,
-                             role = :role
+                             role = :role,
+                             first_name = :first_name,
+                             last_name = :last_name,
+                             warehouse = :warehouse
                          WHERE id = :id'
                     );
                     $stmt->execute([
-                        ':username' => $username,
-                        ':role'     => $role,
-                        ':id'       => $id,
+                        ':username'   => $username,
+                        ':role'       => $role,
+                        ':first_name' => $firstName,
+                        ':last_name'  => $lastName,
+                        ':warehouse'  => $warehouse,
+                        ':id'         => $id,
                     ]);
                 }
                 $success = 'פרטי המשתמש עודכנו בהצלחה.';
@@ -130,7 +151,7 @@ $editingUser = null;
 if (isset($_GET['edit_id'])) {
     $editId = (int)$_GET['edit_id'];
     if ($editId > 0) {
-        $stmt = $pdo->prepare('SELECT id, username, role FROM users WHERE id = :id');
+        $stmt = $pdo->prepare('SELECT id, username, role, first_name, last_name, warehouse FROM users WHERE id = :id');
         $stmt->execute([':id' => $editId]);
         $editingUser = $stmt->fetch() ?: null;
     }
@@ -440,6 +461,14 @@ if (isset($_GET['edit_id'])) {
                 <input type="hidden" name="id" id="user_id" value="<?= $editingUser ? (int)$editingUser['id'] : 0 ?>">
                 <div class="grid">
                     <div>
+                        <label for="modal_first_name">שם פרטי</label>
+                        <input type="text" id="modal_first_name" name="first_name"
+                               value="<?= $editingUser ? htmlspecialchars($editingUser['first_name'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
+
+                        <label for="modal_last_name">שם משפחה</label>
+                        <input type="text" id="modal_last_name" name="last_name"
+                               value="<?= $editingUser ? htmlspecialchars($editingUser['last_name'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
+
                         <label for="modal_username">שם משתמש</label>
                         <input type="text" id="modal_username" name="username" required
                                value="<?= $editingUser ? htmlspecialchars($editingUser['username'], ENT_QUOTES, 'UTF-8') : '' ?>">
@@ -455,6 +484,15 @@ if (isset($_GET['edit_id'])) {
                             <option value="warehouse_manager" <?= $currentRole === 'warehouse_manager' ? 'selected' : '' ?>>מנהל מחסן</option>
                             <option value="admin" <?= $currentRole === 'admin' ? 'selected' : '' ?>>אדמין</option>
                         </select>
+
+                        <label for="modal_warehouse">מחסן</label>
+                        <?php $currentWarehouse = trim((string)($editingUser['warehouse'] ?? '')); ?>
+                        <select id="modal_warehouse" name="warehouse">
+                            <option value="">ללא מחסן</option>
+                            <option value="מחסן א" <?= $currentWarehouse === 'מחסן א' ? 'selected' : '' ?>>מחסן א</option>
+                            <option value="מחסן ב" <?= $currentWarehouse === 'מחסן ב' ? 'selected' : '' ?>>מחסן ב</option>
+                        </select>
+
                         <p class="muted">
                             משתמשים עתידיים ישמשו להזמנת ציוד, אישור הזמנות ועוד.
                         </p>
@@ -548,14 +586,20 @@ document.addEventListener('DOMContentLoaded', function () {
     var usernameInput = document.getElementById('modal_username');
     var passwordInput = document.getElementById('modal_password');
     var roleSelect = document.getElementById('modal_role');
+    var firstNameInput = document.getElementById('modal_first_name');
+    var lastNameInput = document.getElementById('modal_last_name');
+    var warehouseSelect = document.getElementById('modal_warehouse');
 
     function openForCreate() {
         if (!modal) return;
         if (actionInput) actionInput.value = 'create';
         if (idInput) idInput.value = '0';
+        if (firstNameInput) firstNameInput.value = '';
+        if (lastNameInput) lastNameInput.value = '';
         if (usernameInput) usernameInput.value = '';
         if (passwordInput) passwordInput.value = '';
         if (roleSelect) roleSelect.value = 'student';
+        if (warehouseSelect) warehouseSelect.value = '';
         modal.style.display = 'flex';
         if (usernameInput) {
             setTimeout(function () { usernameInput.focus(); }, 50);

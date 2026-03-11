@@ -85,6 +85,23 @@ function initialize_database(PDO $pdo): void
         // אם המיגרציה נכשלת לא נכשיל את הטעינה כולה – רק לא נוסיף את העמודה
     }
 
+    // מיגרציה: הוספת עמודות שם פרטי, שם משפחה, מחסן לטבלת users
+    try {
+        $userCols = $pdo->query("PRAGMA table_info(users)")->fetchAll(PDO::FETCH_ASSOC);
+        $names = array_column($userCols, 'name');
+        if (!in_array('first_name', $names, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN first_name TEXT");
+        }
+        if (!in_array('last_name', $names, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN last_name TEXT");
+        }
+        if (!in_array('warehouse', $names, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN warehouse TEXT");
+        }
+    } catch (PDOException $e) {
+        // דילוג בשקט אם העמודות כבר קיימות
+    }
+
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
