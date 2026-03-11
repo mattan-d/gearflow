@@ -206,7 +206,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Reload list after changes
 $stmt = $pdo->query(
-    'SELECT id, name, code, description, category, location, quantity_total, quantity_available, status, created_at, updated_at
+    'SELECT id, name, code, description, category, location, quantity_total, quantity_available, status, picture, created_at, updated_at
      FROM equipment
      ORDER BY category ASC, name ASC'
 );
@@ -575,6 +575,11 @@ $me = current_user();
 
                     <label for="description">תיאור</label>
                     <textarea id="description" name="description"><?= $editingEquipment ? htmlspecialchars($editingEquipment['description'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
+
+                    <label for="picture">קישור לתמונת ציוד (URL)</label>
+                    <input type="text" id="picture" name="picture"
+                           placeholder="https://example.com/path/to/image.jpg"
+                           value="<?= $editingEquipment ? htmlspecialchars($editingEquipment['picture'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
                 </div>
                 <div>
                     <label for="category">קטגוריה</label>
