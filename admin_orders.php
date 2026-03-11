@@ -905,7 +905,9 @@ $me = current_user();
         const year = viewDate.getFullYear();
         const month = viewDate.getMonth();
         const firstOfMonth = new Date(year, month, 1);
-        const firstDay = (firstOfMonth.getDay() + 6) % 7; // make Sunday last
+        // getDay(): 0=ראשון, 1=שני, 2=שלישי, 3=רביעי, 4=חמישי, 5=שישי, 6=שבת
+        // כאן אנחנו מיישרים ישירות לפי getDay, כך שהעמודה "א" היא יום ראשון
+        const firstDay = firstOfMonth.getDay();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
 
         calMonthLabel.textContent = year + '-' + pad(month + 1);
