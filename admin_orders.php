@@ -347,7 +347,7 @@ $me = current_user();
         }
         .grid {
             display: grid;
-            grid-template-columns: 2fr 1.2fr;
+            grid-template-columns: 1.2fr 2fr; /* אזור תאריכים צר יותר, אזור ציוד רחב יותר */
             gap: 1.5rem;
         }
         table {
@@ -939,14 +939,18 @@ $me = current_user();
                 });
             }
 
-            // range highlighting
-            if (startDate && endDate && !disabled) {
+            // סימון טווח ותאריכים נבחרים
+            if (startDate && !disabled) {
                 if (cellDate.getTime() === startDate.getTime()) {
                     cell.classList.add('selected-start');
                 }
+            }
+            if (endDate && !disabled) {
                 if (cellDate.getTime() === endDate.getTime()) {
                     cell.classList.add('selected-end');
                 }
+            }
+            if (startDate && endDate && !disabled) {
                 if (cellDate > startDate && cellDate < endDate) {
                     cell.classList.add('in-range');
                 }
@@ -986,7 +990,9 @@ $me = current_user();
         const hasStart = !!startInput.value;
         const hasEnd = !!endInput.value;
         if (hasStart && hasEnd) {
-            panel.style.display = 'none';
+            setTimeout(function () {
+                panel.style.display = 'none';
+            }, 1000);
         }
     }
 
