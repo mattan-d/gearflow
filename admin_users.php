@@ -62,6 +62,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $error = 'יש לבחור משתמש ולהזין סיסמה חדשה.';
         }
+    } elseif ($action === 'delete') {
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id > 0) {
+            try {
+                $stmt = $pdo->prepare('DELETE FROM users WHERE id = :id');
+                $stmt->execute([':id' => $id]);
+                $success = 'המשתמש נמחק.';
+            } catch (PDOException $e) {
+                $error = 'לא ניתן למחוק את המשתמש.';
+            }
+        }
     }
 }
 
@@ -218,9 +229,22 @@ $users = $usersStmt->fetchAll();
         .row-actions {
             display: flex;
             gap: 0.3rem;
+            align-items: center;
         }
         .row-actions form {
             margin: 0;
+        }
+        .icon-btn {
+            border: none;
+            background: transparent;
+            padding: 0.15rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
         .muted {
             color: #6b7280;
@@ -376,6 +400,9 @@ $users = $usersStmt->fetchAll();
                     <td class="muted"><?= htmlspecialchars($user['created_at'], ENT_QUOTES, 'UTF-8') ?></td>
                     <td>
                         <div class="row-actions">
+                            <!-- אייקון עריכת משתמש (כיום: הפעלה/השבתה + איפוס סיסמה) -->
+                            <span class="icon-btn" title="עריכת משתמש">✏️</span>
+
                             <form method="post" action="admin_users.php">
                                 <input type="hidden" name="action" value="toggle_active">
                                 <input type="hidden" name="id" value="<?= (int)$user['id'] ?>">
@@ -388,6 +415,11 @@ $users = $usersStmt->fetchAll();
                                 <input type="hidden" name="id" value="<?= (int)$user['id'] ?>">
                                 <input type="password" name="new_password" placeholder="סיסמה חדשה" style="width: 130px;">
                                 <button type="submit" class="btn small">איפוס</button>
+                            </form>
+                            <form method="post" action="admin_users.php" onsubmit="return confirm('למחוק את המשתמש הזה?');">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="id" value="<?= (int)$user['id'] ?>">
+                                <button type="submit" class="icon-btn" title="מחיקת משתמש">🗑️</button>
                             </form>
                         </div>
                     </td>
