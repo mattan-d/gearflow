@@ -483,7 +483,7 @@ $me = current_user();
                 <div class="grid">
                     <div>
                         <label for="equipment_id">ציוד</label>
-                        <select id="equipment_id" name="equipment_id" required>
+                        <select id="equipment_id" name="equipment_id" required <?= $editingOrder ? '' : 'disabled' ?>>
                             <option value="">בחר ציוד...</option>
                             <?php foreach ($equipmentOptions as $item): ?>
                                 <option value="<?= (int)$item['id'] ?>"
@@ -676,3 +676,74 @@ $me = current_user();
 </footer>
 </body>
 </html>
+<script>
+    (function () {
+        const startInput = document.getElementById('start_date');
+        const endInput = document.getElementById('end_date');
+        const equipmentSelect = document.getElementById('equipment_id');
+
+        if (!startInput || !endInput || !equipmentSelect) {
+            return;
+        }
+
+        function parseDate(value) {
+            if (!value) return null;
+            const parts = value.split('-');
+            if (parts.length !== 3) return null;
+            const year = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const day = parseInt(parts[2], 10);
+            const d = new Date(year, month, day);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        function isDisabledDay(date) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // Past days
+            if (date < today) {
+                return true;
+            }
+
+            // Friday (5) and Saturday (6)
+            const day = date.getDay();
+            if (day === 5 || day === 6) {
+                return true;
+            }
+
+            return false;
+        }
+
+        function validateDateInput(input) {
+            const value = input.value;
+            const date = parseDate(value);
+            if (!date) {
+                return;
+            }
+            if (isDisabledDay(date)) {
+                alert('לא ניתן לבחור תאריך זה להשאלה (עבר או שישי/שבת).');
+                input.value = '';
+            }
+        }
+
+        function updateEquipmentState() {
+            const hasStart = !!startInput.value;
+            const hasEnd = !!endInput.value;
+            equipmentSelect.disabled = !(hasStart && hasEnd);
+        }
+
+        startInput.addEventListener('change', function () {
+            validateDateInput(startInput);
+            updateEquipmentState();
+        });
+
+        endInput.addEventListener('change', function () {
+            validateDateInput(endInput);
+            updateEquipmentState();
+        });
+
+        // Initial state on load
+        updateEquipmentState();
+    })();
+</script>
