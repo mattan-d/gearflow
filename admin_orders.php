@@ -731,24 +731,32 @@ $me = current_user();
     <div>
         <h1>ניהול הזמנות</h1>
         <div class="muted">פלטפורמה לניהול השאלת ציוד</div>
+        <?php
+        $role = $me['role'] ?? 'student';
+        ?>
         <nav class="main-nav">
             <div class="main-nav-primary">
-                <div class="main-nav-item-wrapper">
-                    <a href="admin.php">ניהול מערכת</a>
-                    <div class="main-nav-sub">
-                        <a href="admin_users.php">ניהול משתמשים</a>
-                        <a href="#">ניהול מסמכים</a>
-                        <a href="admin_design.php">עיצוב ממשק</a>
-                        <a href="admin_times.php">ניהול זמנים</a>
+                <?php if ($role === 'admin' || $role === 'warehouse_manager'): ?>
+                    <div class="main-nav-item-wrapper">
+                        <a href="admin.php">ניהול מערכת</a>
+                        <div class="main-nav-sub">
+                            <a href="admin_users.php">ניהול משתמשים</a>
+                            <a href="#">ניהול מסמכים</a>
+                            <a href="admin_design.php">עיצוב ממשק</a>
+                            <a href="admin_times.php">ניהול זמנים</a>
+                        </div>
                     </div>
-                </div>
-                <a href="admin_orders.php">ניהול הזמנות</a>
-                <a href="admin_equipment.php">ניהול ציוד</a>
+                    <a href="admin_orders.php">ניהול הזמנות</a>
+                    <a href="admin_equipment.php">ניהול ציוד</a>
+                <?php else: ?>
+                    <a href="admin_orders.php">ניהול הזמנות</a>
+                <?php endif; ?>
             </div>
         </nav>
     </div>
     <div class="user-info">
-        מחובר כ־<?= htmlspecialchars($me['username'] ?? '', ENT_QUOTES, 'UTF-8') ?> (אדמין)
+        מחובר כ־<?= htmlspecialchars($me['username'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+        (<?= $role === 'admin' ? 'אדמין' : ($role === 'warehouse_manager' ? 'מנהל מחסן' : 'סטודנט') ?>)
         <a href="logout.php">התנתק</a>
     </div>
 </header>
