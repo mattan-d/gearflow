@@ -34,14 +34,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'create' || $action === 'update') {
         $id              = (int)($_POST['id'] ?? 0);
-        $equipmentId     = (int)($_POST['equipment_id'] ?? 0);
         $borrowerName    = trim($_POST['borrower_name'] ?? '');
         $borrowerContact = trim($_POST['borrower_contact'] ?? '');
         $startDate       = trim($_POST['start_date'] ?? '');
         $endDate         = trim($_POST['end_date'] ?? '');
         $notes           = trim($_POST['notes'] ?? '');
 
-        if ($equipmentId <= 0 || $borrowerName === '' || $startDate === '' || $endDate === '') {
+        // איסוף מזהי ציוד – מרובים במצב יצירה, יחיד במצב עדכון
+        $equipmentIds = [];
+        if ($action === 'create') {
+            $rawEquipmentIds = $_POST['equipment_ids'] ?? [];
+            if (!is_array($rawEquipmentIds)) {
+                $rawEquipmentIds = [$rawEquipmentIds];
+            }
+            foreach ($rawEquipmentIds as $rawId) {
+                $eid = (int)$rawId;
+                if ($eid > 0 && !in_array($eid, $equipmentIds, true)) {
+                    $equipmentIds[] = $eid;
+                }
+            }
+        } else { // update
+            $singleEquipmentId = (int)($_POST['equipment_id'] ?? 0);
+            if ($singleEquipmentId > 0) {
+                $equipmentIds[] = $singleEquipmentId;
+            }
+        }
+
+        if (count($equipmentIds) === 0 || $borrowerName === '' || $startDate === '' || $endDate === '') {
             $error = 'יש למלא ציוד, שם שואל, ותאריכי התחלה וסיום.';
         } else {
             try {
@@ -52,18 +71,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                          VALUES
                          (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :status, :notes, :created_at)'
                     );
-                    $stmt->execute([
-                        ':equipment_id'     => $equipmentId,
-                        ':borrower_name'    => $borrowerName,
-                        ':borrower_contact' => $borrowerContact,
-                        ':start_date'       => $startDate,
-                        ':end_date'         => $endDate,
-                        ':status'           => 'pending',
-                        ':notes'            => $notes,
-                        ':created_at'       => date('Y-m-d H:i:s'),
-                    ]);
-                    $success = 'הזמנה נוצרה בהצלחה.';
+                    $createdCount = 0;
+                    foreach ($equipmentIds as $equipmentId) {
+                        $stmt->execute([
+                            ':equipment_id'     => $equipmentId,
+                            ':borrower_name'    => $borrowerName,
+                            ':borrower_contact' => $borrowerContact,
+                            ':start_date'       => $startDate,
+                            ':end_date'         => $endDate,
+                            ':status'           => 'pending',
+                            ':notes'            => $notes,
+                            ':created_at'       => date('Y-m-d H:i:s'),
+                        ]);
+                        $createdCount++;
+                    }
+                    $success = $createdCount > 1
+                        ? "נוצרו {$createdCount} הזמנות בהצלחה."
+                        : 'הזמנה נוצרה בהצלחה.';
                 } elseif ($action === 'update' && $id > 0) {
+                    $equipmentId = $equipmentIds[0];
                     $stmt = $pdo->prepare(
                         'UPDATE orders
                          SET equipment_id     = :equipment_id,
@@ -151,12 +177,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ציוד לבחירה בטופס
 $equipmentStmt = $pdo->query(
-    "SELECT id, name, code
+    "SELECT id, name, code, category
      FROM equipment
      WHERE status = 'active'
      ORDER BY name ASC"
 );
 $equipmentOptions = $equipmentStmt->fetchAll();
+
+// קטגוריות ייחודיות לצורך סינון
+$equipmentCategories = [];
+foreach ($equipmentOptions as $item) {
+    $cat = trim((string)($item['category'] ?? ''));
+    if ($cat === '') {
+        $cat = 'ללא קטגוריה';
+    }
+    if (!in_array($cat, $equipmentCategories, true)) {
+        $equipmentCategories[] = $cat;
+    }
+}
+sort($equipmentCategories, SORT_NATURAL | SORT_FLAG_CASE);
 
 // טאבים וסינון
 $today     = date('Y-m-d');
@@ -658,7 +697,10 @@ $me = current_user();
                         <input type="hidden" id="end_date" name="end_date"
                                value="<?= $editingOrder ? htmlspecialchars($editingOrder['end_date'], ENT_QUOTES, 'UTF-8') : '' ?>">
 
-                        <label>בחירת תאריכים</label>
+                        <label>
+                            בחירת תאריכים
+                            <span id="date_range_label" class="muted-small">-</span>
+                        </label>
                         <div class="date-picker">
                             <div class="date-picker-toggle" id="date_picker_toggle">
                                 <span class="date-picker-toggle-icon">📅</span>
@@ -714,17 +756,66 @@ $me = current_user();
 
                     <!-- עמודת ציוד בלבד (שמאל ב-RTL) -->
                     <div>
-                        <label for="equipment_id">ציוד</label>
-                        <select id="equipment_id" name="equipment_id" <?= $editingOrder ? '' : 'disabled' ?>>
-                            <option value="">בחר ציוד...</option>
-                            <?php foreach ($equipmentOptions as $item): ?>
-                                <option value="<?= (int)$item['id'] ?>"
-                                    <?= $editingOrder && (int)$editingOrder['equipment_id'] === (int)$item['id'] ? 'selected' : '' ?>>
-                                    <?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>
-                                    (<?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?>)
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
+                        <?php if ($editingOrder): ?>
+                            <!-- במצב עריכה שומרים על בחירה בודדת כמו קודם -->
+                            <label for="equipment_id">ציוד</label>
+                            <select id="equipment_id" name="equipment_id">
+                                <option value="">בחר ציוד...</option>
+                                <?php foreach ($equipmentOptions as $item): ?>
+                                    <option value="<?= (int)$item['id'] ?>"
+                                        <?= (int)$editingOrder['equipment_id'] === (int)$item['id'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>
+                                        (<?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?>)
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        <?php else: ?>
+                            <!-- במצב יצירה: בחירה מרובה מתוך טבלת ציוד לפי קטגוריות -->
+                            <label for="equipment_category_filter">קטגוריית ציוד</label>
+                            <select id="equipment_category_filter">
+                                <option value="all">כל הקטגוריות</option>
+                                <?php foreach ($equipmentCategories as $cat): ?>
+                                    <option value="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>">
+                                        <?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+
+                            <table>
+                                <thead>
+                                <tr>
+                                    <th style="width:40px;">בחר</th>
+                                    <th>שם הציוד</th>
+                                    <th>קוד</th>
+                                    <th>קטגוריה</th>
+                                </tr>
+                                </thead>
+                                <tbody id="equipment_table_body">
+                                <?php foreach ($equipmentOptions as $item): ?>
+                                    <?php
+                                    $cat = trim((string)($item['category'] ?? ''));
+                                    if ($cat === '') {
+                                        $cat = 'ללא קטגוריה';
+                                    }
+                                    ?>
+                                    <tr data-category="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>">
+                                        <td>
+                                            <input type="checkbox"
+                                                   name="equipment_ids[]"
+                                                   value="<?= (int)$item['id'] ?>">
+                                        </td>
+                                        <td><?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td class="muted-small"><?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td class="muted-small"><?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                            <button type="button" class="btn secondary" id="add_equipment_btn" style="margin-top:0.5rem;">
+                                הוסף
+                            </button>
+                            <div class="muted-small" id="selected_equipment_summary" style="margin-top:0.3rem;"></div>
+                        <?php endif; ?>
                     </div>
                 </div>
 
@@ -860,7 +951,12 @@ $me = current_user();
 (function () {
     const startInput = document.getElementById('start_date');
     const endInput = document.getElementById('end_date');
-    const equipmentSelect = document.getElementById('equipment_id');
+    const equipmentSelect = document.getElementById('equipment_id'); // קיים רק במצב עריכה
+    const equipmentCheckboxes = Array.from(document.querySelectorAll('input[name="equipment_ids[]"]')); // מצב יצירה
+    const categoryFilter = document.getElementById('equipment_category_filter');
+    const equipmentTableBody = document.getElementById('equipment_table_body');
+    const addEquipmentBtn = document.getElementById('add_equipment_btn');
+    const selectedEquipmentSummary = document.getElementById('selected_equipment_summary');
     const submitBtn = document.getElementById('submit_order_btn');
     const modeStartBtn = document.getElementById('mode_start');
     const modeEndBtn = document.getElementById('mode_end');
@@ -873,7 +969,7 @@ $me = current_user();
     const toggle = document.getElementById('date_picker_toggle');
     const panel = document.getElementById('date_picker_panel');
 
-    if (!startInput || !endInput || !equipmentSelect || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel || !toggle || !panel) {
+    if (!startInput || !endInput || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel || !toggle || !panel) {
         return;
     }
 
@@ -914,12 +1010,38 @@ $me = current_user();
         return day === 5 || day === 6;
     }
 
+    function anyEquipmentChecked() {
+        return equipmentCheckboxes.some(function (cb) { return cb.checked; });
+    }
+
+    function updateSelectedEquipmentSummary() {
+        if (!selectedEquipmentSummary) return;
+        const count = equipmentCheckboxes.filter(function (cb) { return cb.checked; }).length;
+        if (count === 0) {
+            selectedEquipmentSummary.textContent = '';
+        } else {
+            selectedEquipmentSummary.textContent = 'נבחרו ' + count + ' פריטי ציוד להזמנה.';
+        }
+    }
+
     function updateEquipmentState() {
         const hasStart = !!startInput.value;
         const hasEnd = !!endInput.value;
-        equipmentSelect.disabled = !(hasStart && hasEnd);
 
-        const hasEquip = !!equipmentSelect.value;
+        // מצב עריכה – select בודד
+        if (equipmentSelect) {
+            equipmentSelect.disabled = !(hasStart && hasEnd);
+        }
+
+        // מצב יצירה – צ׳קבוקסים מרובים
+        equipmentCheckboxes.forEach(function (cb) {
+            cb.disabled = !(hasStart && hasEnd);
+        });
+
+        const hasEquipSelect = equipmentSelect ? !!equipmentSelect.value : false;
+        const hasEquipCheckbox = anyEquipmentChecked();
+        const hasEquip = hasEquipSelect || hasEquipCheckbox;
+
         if (submitBtn) {
             submitBtn.disabled = !(hasStart && hasEnd && hasEquip);
         }
@@ -928,6 +1050,17 @@ $me = current_user();
     function updateLabels() {
         startLabel.textContent = startInput.value || '-';
         endLabel.textContent = endInput.value || '-';
+
+        const rangeLabel = document.getElementById('date_range_label');
+        if (rangeLabel) {
+            if (startInput.value && endInput.value) {
+                rangeLabel.textContent = ' (' + startInput.value + ' עד ' + endInput.value + ')';
+            } else if (startInput.value) {
+                rangeLabel.textContent = ' (' + startInput.value + ' - )';
+            } else {
+                rangeLabel.textContent = '-';
+            }
+        }
     }
 
     function setMode(newMode) {
@@ -1038,9 +1171,41 @@ $me = current_user();
     }
 
     // שינוי ציוד
-    equipmentSelect.addEventListener('change', function () {
-        updateEquipmentState();
+    if (equipmentSelect) {
+        equipmentSelect.addEventListener('change', function () {
+            updateEquipmentState();
+        });
+    }
+    equipmentCheckboxes.forEach(function (cb) {
+        cb.addEventListener('change', function () {
+            updateEquipmentState();
+            updateSelectedEquipmentSummary();
+        });
     });
+
+    // סינון טבלת הציוד לפי קטגוריה
+    if (categoryFilter && equipmentTableBody) {
+        categoryFilter.addEventListener('change', function () {
+            const value = categoryFilter.value;
+            const rows = equipmentTableBody.querySelectorAll('tr');
+            rows.forEach(function (row) {
+                const cat = row.getAttribute('data-category');
+                row.style.display = (value === 'all' || value === cat) ? '' : 'none';
+            });
+        });
+    }
+
+    // כפתור "הוסף" – רק מאשר שהבחירה בוצעה, לא מגיש את הטופס
+    if (addEquipmentBtn) {
+        addEquipmentBtn.addEventListener('click', function () {
+            if (!anyEquipmentChecked()) {
+                alert('יש לבחור לפחות פריט ציוד אחד.');
+                return;
+            }
+            updateEquipmentState();
+            updateSelectedEquipmentSummary();
+        });
+    }
 
     // חיבור אירועים למעבר חודשים
     calPrev.addEventListener('click', function () {
@@ -1070,6 +1235,7 @@ $me = current_user();
     setMode('start');
     updateLabels();
     updateEquipmentState();
+    updateSelectedEquipmentSummary();
     renderCalendar();
 })();
 </script>
