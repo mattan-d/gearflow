@@ -583,14 +583,26 @@ $me = current_user();
                 </div>
                 <div>
                     <label for="category">קטגוריה</label>
-                    <input type="text" id="category" name="category"
-                           placeholder="מצלמות, עדשות, תאורה, אודיו..."
-                           value="<?= $editingEquipment ? htmlspecialchars($editingEquipment['category'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
+                    <?php
+                    $currentCategory = trim((string)($editingEquipment['category'] ?? ''));
+                    ?>
+                    <select id="category" name="category">
+                        <option value="">בחר קטגוריה...</option>
+                        <option value="מצלמה"   <?= $currentCategory === 'מצלמה'   ? 'selected' : '' ?>>מצלמה</option>
+                        <option value="מיקרופון" <?= $currentCategory === 'מיקרופון' ? 'selected' : '' ?>>מיקרופון</option>
+                        <option value="חצובה"   <?= $currentCategory === 'חצובה'   ? 'selected' : '' ?>>חצובה</option>
+                        <option value="תאורה"   <?= $currentCategory === 'תאורה'   ? 'selected' : '' ?>>תאורה</option>
+                    </select>
 
-                    <label for="location">מיקום במחסן</label>
-                    <input type="text" id="location" name="location"
-                           placeholder="מדף A3, ארון מצלמות..."
-                           value="<?= $editingEquipment ? htmlspecialchars($editingEquipment['location'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
+                    <label for="location">מחסן</label>
+                    <?php
+                    $currentLocation = trim((string)($editingEquipment['location'] ?? ''));
+                    ?>
+                    <select id="location" name="location">
+                        <option value="">בחר מחסן...</option>
+                        <option value="מחסן א" <?= $currentLocation === 'מחסן א' ? 'selected' : '' ?>>מחסן א</option>
+                        <option value="מחסן ב" <?= $currentLocation === 'מחסן ב' ? 'selected' : '' ?>>מחסן ב</option>
+                    </select>
 
                     <label for="quantity_total">כמות סה״כ</label>
                     <input type="number" id="quantity_total" name="quantity_total" min="0"
