@@ -73,11 +73,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'לא ניתן למחוק את המשתמש.';
             }
         }
+    } elseif ($action === 'update') {
+        $id       = (int)($_POST['id'] ?? 0);
+        $username = trim($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
+        $role     = $_POST['role'] ?? 'student';
+
+        if ($id <= 0 || $username === '') {
+            $error = 'יש לבחור משתמש ולמלא שם משתמש.';
+        } else {
+            try {
+                if ($password !== '') {
+                    $stmt = $pdo->prepare(
+                        'UPDATE users
+                         SET username = :username,
+                             password_hash = :password_hash,
+                             role = :role
+                         WHERE id = :id'
+                    );
+                    $stmt->execute([
+                        ':username'      => $username,
+                        ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                        ':role'          => $role,
+                        ':id'            => $id,
+                    ]);
+                } else {
+                    $stmt = $pdo->prepare(
+                        'UPDATE users
+                         SET username = :username,
+                             role = :role
+                         WHERE id = :id'
+                    );
+                    $stmt->execute([
+                        ':username' => $username,
+                        ':role'     => $role,
+                        ':id'       => $id,
+                    ]);
+                }
+                $success = 'פרטי המשתמש עודכנו בהצלחה.';
+            } catch (PDOException $e) {
+                if (str_contains($e->getMessage(), 'UNIQUE')) {
+                    $error = 'שם המשתמש כבר קיים.';
+                } else {
+                    $error = 'שגיאה בעדכון המשתמש.';
+                }
+            }
+        }
     }
 }
 
 $usersStmt = $pdo->query('SELECT id, username, role, is_active, created_at FROM users ORDER BY id ASC');
 $users = $usersStmt->fetchAll();
+
+// משתמש לעריכה בחלון קופץ
+$editingUser = null;
+if (isset($_GET['edit_id'])) {
+    $editId = (int)$_GET['edit_id'];
+    if ($editId > 0) {
+        $stmt = $pdo->prepare('SELECT id, username, role FROM users WHERE id = :id');
+        $stmt->execute([':id' => $editId]);
+        $editingUser = $stmt->fetch() ?: null;
+    }
+}
 
 ?>
 <!DOCTYPE html>
@@ -290,6 +347,38 @@ $users = $usersStmt->fetchAll();
         .main-nav-item-wrapper:hover .main-nav-sub {
             display: block;
         }
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15,23,42,0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+        .modal-card {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 25px 60px rgba(15,23,42,0.45);
+            max-width: 650px;
+            width: 95%;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 1.5rem 1.5rem 1.25rem;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .modal-close {
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 1.1rem;
+            line-height: 1;
+        }
         footer {
             background: #111827;
             color: #9ca3af;
@@ -328,39 +417,55 @@ $users = $usersStmt->fetchAll();
     </div>
 </header>
 <main>
-    <div class="card">
-        <h2>יצירת משתמש חדש</h2>
+    <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
+        <button type="button" class="btn" id="open_user_modal_btn">משתמש חדש</button>
+    </div>
 
-        <?php if ($error !== ''): ?>
-            <div class="flash error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
-        <?php elseif ($success !== ''): ?>
-            <div class="flash success"><?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?></div>
-        <?php endif; ?>
-
-        <form method="post" action="admin_users.php">
-            <input type="hidden" name="action" value="create">
-            <div class="grid">
-                <div>
-                    <label for="username">שם משתמש</label>
-                    <input type="text" id="username" name="username" required>
-
-                    <label for="password">סיסמה</label>
-                    <input type="password" id="password" name="password" required>
-                </div>
-                <div>
-                    <label for="role">תפקיד</label>
-                    <select id="role" name="role">
-                        <option value="student">סטודנט</option>
-                        <option value="warehouse_manager">מנהל מחסן</option>
-                        <option value="admin">אדמין</option>
-                    </select>
-                    <p class="muted">
-                        משתמשים עתידיים ישמשו להזמנת ציוד, אישור הזמנות ועוד.
-                    </p>
-                </div>
+    <?php $showUserModal = $editingUser !== null; ?>
+    <div class="modal-backdrop" id="user_modal" style="display: <?= $showUserModal ? 'flex' : 'none' ?>;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2><?= $editingUser ? 'עריכת משתמש' : 'משתמש חדש' ?></h2>
+                <button type="button" class="modal-close" id="user_modal_close" aria-label="סגירת חלון">✕</button>
             </div>
-            <button type="submit" class="btn">שמירת משתמש</button>
-        </form>
+
+            <?php if ($error !== ''): ?>
+                <div class="flash error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
+            <?php elseif ($success !== ''): ?>
+                <div class="flash success"><?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?></div>
+            <?php endif; ?>
+
+            <form method="post" action="admin_users.php<?= $editingUser ? '?edit_id=' . (int)$editingUser['id'] : '' ?>">
+                <input type="hidden" name="action" id="user_form_action" value="<?= $editingUser ? 'update' : 'create' ?>">
+                <input type="hidden" name="id" id="user_id" value="<?= $editingUser ? (int)$editingUser['id'] : 0 ?>">
+                <div class="grid">
+                    <div>
+                        <label for="modal_username">שם משתמש</label>
+                        <input type="text" id="modal_username" name="username" required
+                               value="<?= $editingUser ? htmlspecialchars($editingUser['username'], ENT_QUOTES, 'UTF-8') : '' ?>">
+
+                        <label for="modal_password">סיסמה<?= $editingUser ? ' (השאר ריק כדי לא לשנות)' : '' ?></label>
+                        <input type="password" id="modal_password" name="password" <?= $editingUser ? '' : 'required' ?>>
+                    </div>
+                    <div>
+                        <label for="modal_role">תפקיד</label>
+                        <?php $currentRole = $editingUser['role'] ?? 'student'; ?>
+                        <select id="modal_role" name="role">
+                            <option value="student" <?= $currentRole === 'student' ? 'selected' : '' ?>>סטודנט</option>
+                            <option value="warehouse_manager" <?= $currentRole === 'warehouse_manager' ? 'selected' : '' ?>>מנהל מחסן</option>
+                            <option value="admin" <?= $currentRole === 'admin' ? 'selected' : '' ?>>אדמין</option>
+                        </select>
+                        <p class="muted">
+                            משתמשים עתידיים ישמשו להזמנת ציוד, אישור הזמנות ועוד.
+                        </p>
+                    </div>
+                </div>
+                <button type="submit" class="btn"><?= $editingUser ? 'שמירת שינויים' : 'שמירת משתמש' ?></button>
+                <?php if (!$editingUser): ?>
+                    <button type="button" class="btn secondary" id="user_modal_cancel">ביטול</button>
+                <?php endif; ?>
+            </form>
+        </div>
     </div>
 
     <div class="card">
@@ -400,8 +505,8 @@ $users = $usersStmt->fetchAll();
                     <td class="muted"><?= htmlspecialchars($user['created_at'], ENT_QUOTES, 'UTF-8') ?></td>
                     <td>
                         <div class="row-actions">
-                            <!-- אייקון עריכת משתמש (כיום: הפעלה/השבתה + איפוס סיסמה) -->
-                            <span class="icon-btn" title="עריכת משתמש">✏️</span>
+                            <!-- אייקון עריכת משתמש -->
+                            <a href="admin_users.php?edit_id=<?= (int)$user['id'] ?>" class="icon-btn" title="עריכת משתמש">✏️</a>
 
                             <form method="post" action="admin_users.php">
                                 <input type="hidden" name="action" value="toggle_active">
@@ -432,6 +537,53 @@ $users = $usersStmt->fetchAll();
 <footer>
     © 2026 CentricApp LTD
 </footer>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var openBtn = document.getElementById('open_user_modal_btn');
+    var modal = document.getElementById('user_modal');
+    var closeBtn = document.getElementById('user_modal_close');
+    var cancelBtn = document.getElementById('user_modal_cancel');
+    var actionInput = document.getElementById('user_form_action');
+    var idInput = document.getElementById('user_id');
+    var usernameInput = document.getElementById('modal_username');
+    var passwordInput = document.getElementById('modal_password');
+    var roleSelect = document.getElementById('modal_role');
+
+    function openForCreate() {
+        if (!modal) return;
+        if (actionInput) actionInput.value = 'create';
+        if (idInput) idInput.value = '0';
+        if (usernameInput) usernameInput.value = '';
+        if (passwordInput) passwordInput.value = '';
+        if (roleSelect) roleSelect.value = 'student';
+        modal.style.display = 'flex';
+        if (usernameInput) {
+            setTimeout(function () { usernameInput.focus(); }, 50);
+        }
+    }
+
+    function closeModal() {
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
+
+    if (openBtn && modal) {
+        openBtn.addEventListener('click', function () {
+            openForCreate();
+        });
+    }
+    if (closeBtn) {
+        closeBtn.addEventListener('click', function () {
+            closeModal();
+        });
+    }
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function () {
+            closeModal();
+        });
+    }
+});
+</script>
 </body>
 </html>
-
