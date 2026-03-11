@@ -623,7 +623,9 @@ $me = current_user();
                             <?= htmlspecialchars($order['borrower_contact'] ?? '', ENT_QUOTES, 'UTF-8') ?>
                         </td>
                         <td class="muted-small">
-                            -
+                            <a href="agreement.php?order_id=<?= (int)$order['id'] ?>" target="_blank">
+                                הסכם השאלה
+                            </a>
                         </td>
                         <td class="muted-small">
                             <?= htmlspecialchars($order['notes'] ?? '', ENT_QUOTES, 'UTF-8') ?>
