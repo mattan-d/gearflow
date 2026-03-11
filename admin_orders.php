@@ -486,26 +486,25 @@ $me = current_user();
             display: inline-flex;
             border-radius: 999px;
             background: #e5e7eb;
-            padding: 0.15rem;
+            padding: 0.2rem;
             margin-bottom: 1rem;
         }
         .tabs a {
-            padding: 0.3rem 0.9rem;
+            padding: 0.35rem 1.1rem;
             border-radius: 999px;
             font-size: 0.82rem;
             text-decoration: none;
             color: #374151;
+            transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
         }
         .tabs a.active {
             background: #111827;
             color: #f9fafb;
             font-weight: 600;
+            box-shadow: 0 4px 10px rgba(15,23,42,0.25);
         }
         .toolbar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
+            margin-bottom: 0.5rem;
         }
         .date-picker {
             background: #f9fafb;
@@ -866,13 +865,13 @@ $me = current_user();
     <div class="card">
         <div class="toolbar">
             <h2>רשימת הזמנות</h2>
-            <div class="tabs">
-                <a href="admin_orders.php?tab=today"   class="<?= $tab === 'today'   ? 'active' : '' ?>">היום</a>
-                <a href="admin_orders.php?tab=pending" class="<?= $tab === 'pending' ? 'active' : '' ?>">ממתין</a>
-                <a href="admin_orders.php?tab=future"  class="<?= $tab === 'future'  ? 'active' : '' ?>">עתידי</a>
-                <a href="admin_orders.php?tab=active"  class="<?= $tab === 'active'  ? 'active' : '' ?>">בהשאלה</a>
-                <a href="admin_orders.php?tab=history" class="<?= $tab === 'history' ? 'active' : '' ?>">היסטוריה</a>
-            </div>
+        </div>
+        <div class="tabs">
+            <a href="admin_orders.php?tab=today"   class="<?= $tab === 'today'   ? 'active' : '' ?>">היום</a>
+            <a href="admin_orders.php?tab=pending" class="<?= $tab === 'pending' ? 'active' : '' ?>">ממתין</a>
+            <a href="admin_orders.php?tab=future"  class="<?= $tab === 'future'  ? 'active' : '' ?>">עתידי</a>
+            <a href="admin_orders.php?tab=active"  class="<?= $tab === 'active'  ? 'active' : '' ?>">בהשאלה</a>
+            <a href="admin_orders.php?tab=history" class="<?= $tab === 'history' ? 'active' : '' ?>">היסטוריה</a>
         </div>
         <?php if (count($orders) === 0): ?>
             <p class="muted-small">עדיין לא נוצרו הזמנות במערכת לטאב זה.</p>
