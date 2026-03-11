@@ -67,6 +67,24 @@ function initialize_database(PDO $pdo): void
         )
     ");
 
+    // מיגרציה אוטומטית: הוספת עמודת picture אם אינה קיימת (לטובת שרתים ישנים)
+    try {
+        $columnsStmt = $pdo->query("PRAGMA table_info(equipment)");
+        $columns     = $columnsStmt->fetchAll(PDO::FETCH_ASSOC);
+        $hasPicture  = false;
+        foreach ($columns as $col) {
+            if (($col['name'] ?? '') === 'picture') {
+                $hasPicture = true;
+                break;
+            }
+        }
+        if (!$hasPicture) {
+            $pdo->exec("ALTER TABLE equipment ADD COLUMN picture TEXT");
+        }
+    } catch (PDOException $e) {
+        // אם המיגרציה נכשלת לא נכשיל את הטעינה כולה – רק לא נוסיף את העמודה
+    }
+
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS orders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
