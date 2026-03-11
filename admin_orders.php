@@ -427,6 +427,104 @@ $me = current_user();
             align-items: center;
             margin-bottom: 1rem;
         }
+        .date-picker {
+            background: #f9fafb;
+            border-radius: 10px;
+            padding: 0.75rem 0.9rem;
+            border: 1px solid #e5e7eb;
+            font-size: 0.85rem;
+        }
+        .date-mode-toggle {
+            display: inline-flex;
+            border-radius: 999px;
+            background: #e5e7eb;
+            padding: 0.1rem;
+            margin-bottom: 0.6rem;
+        }
+        .date-mode-btn {
+            border: none;
+            background: transparent;
+            padding: 0.25rem 0.8rem;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            color: #374151;
+        }
+        .date-mode-btn.active {
+            background: #111827;
+            color: #f9fafb;
+            font-weight: 600;
+        }
+        .date-selected {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .date-selected span {
+            font-weight: 600;
+        }
+        .date-calendar {
+            border-radius: 8px;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            padding: 0.5rem;
+        }
+        .date-calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.4rem;
+            font-size: 0.85rem;
+        }
+        .date-calendar-header button {
+            border: none;
+            background: #e5e7eb;
+            border-radius: 999px;
+            width: 22px;
+            height: 22px;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+        .date-calendar-weekdays,
+        .date-calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            text-align: center;
+            font-size: 0.75rem;
+        }
+        .date-calendar-weekdays span {
+            font-weight: 600;
+            color: #6b7280;
+            padding: 0.15rem 0;
+        }
+        .date-day {
+            padding: 0.25rem 0;
+            margin: 1px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .date-day.empty {
+            cursor: default;
+        }
+        .date-day.disabled {
+            color: #d1d5db;
+            background: #f3f4f6;
+            cursor: not-allowed;
+        }
+        .date-day.selectable:hover {
+            background: #e5e7eb;
+        }
+        .date-day.in-range {
+            background: #dbeafe;
+            color: #1e3a8a;
+        }
+        .date-day.selected-start,
+        .date-day.selected-end {
+            background: #111827;
+            color: #f9fafb;
+            font-weight: 600;
+        }
         footer {
             background: #111827;
             color: #9ca3af;
@@ -481,6 +579,42 @@ $me = current_user();
                 <input type="hidden" name="id" value="<?= $editingOrder ? (int)$editingOrder['id'] : 0 ?>">
 
                 <div class="grid">
+                    <!-- עמודת תאריכים (בצד ימין ב-RTL) -->
+                    <div>
+                        <!-- שדות נסתרים לתאריכים בפורמט YYYY-MM-DD לצורך שליחה לשרת -->
+                        <input type="hidden" id="start_date" name="start_date"
+                               value="<?= $editingOrder ? htmlspecialchars($editingOrder['start_date'], ENT_QUOTES, 'UTF-8') : '' ?>">
+                        <input type="hidden" id="end_date" name="end_date"
+                               value="<?= $editingOrder ? htmlspecialchars($editingOrder['end_date'], ENT_QUOTES, 'UTF-8') : '' ?>">
+
+                        <label>בחירת תאריכים</label>
+                        <div class="date-picker">
+                            <div class="date-mode-toggle">
+                                <button type="button" id="mode_start" class="date-mode-btn active">השאלה</button>
+                                <button type="button" id="mode_end" class="date-mode-btn">החזרה</button>
+                            </div>
+                            <div class="date-selected">
+                                <div>תאריך השאלה: <span id="selected_start_label">-</span></div>
+                                <div>תאריך החזרה: <span id="selected_end_label">-</span></div>
+                            </div>
+                            <div class="date-calendar">
+                                <div class="date-calendar-header">
+                                    <button type="button" id="cal_prev">&lt;</button>
+                                    <div id="cal_month_label"></div>
+                                    <button type="button" id="cal_next">&gt;</button>
+                                </div>
+                                <div class="date-calendar-weekdays">
+                                    <span>א</span><span>ב</span><span>ג</span><span>ד</span><span>ה</span><span>ו</span><span>ש</span>
+                                </div>
+                                <div class="date-calendar-grid" id="cal_grid"></div>
+                            </div>
+                            <div class="muted-small" style="margin-top: 0.5rem;">
+                                ימים שעברו וימי שישי/שבת מסומנים כלא זמינים.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- עמודת פרטי שואל וציוד (שמאל ב-RTL) -->
                     <div>
                         <label for="equipment_id">ציוד</label>
                         <select id="equipment_id" name="equipment_id" <?= $editingOrder ? '' : 'disabled' ?>>
@@ -509,25 +643,6 @@ $me = current_user();
                             id="borrower_contact"
                             name="borrower_contact"
                             value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_contact'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>"
-                        >
-                    </div>
-                    <div>
-                        <label for="start_date">תאריך התחלה</label>
-                        <input
-                            type="date"
-                            id="start_date"
-                            name="start_date"
-                            required
-                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['start_date'], ENT_QUOTES, 'UTF-8') : '' ?>"
-                        >
-
-                        <label for="end_date">תאריך סיום</label>
-                        <input
-                            type="date"
-                            id="end_date"
-                            name="end_date"
-                            required
-                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['end_date'], ENT_QUOTES, 'UTF-8') : '' ?>"
                         >
 
                         <label for="notes">הערות</label>
@@ -676,9 +791,28 @@ $me = current_user();
     const startInput = document.getElementById('start_date');
     const endInput = document.getElementById('end_date');
     const equipmentSelect = document.getElementById('equipment_id');
+    const modeStartBtn = document.getElementById('mode_start');
+    const modeEndBtn = document.getElementById('mode_end');
+    const startLabel = document.getElementById('selected_start_label');
+    const endLabel = document.getElementById('selected_end_label');
+    const calMonthLabel = document.getElementById('cal_month_label');
+    const calPrev = document.getElementById('cal_prev');
+    const calNext = document.getElementById('cal_next');
+    const calGrid = document.getElementById('cal_grid');
 
-    if (!startInput || !endInput || !equipmentSelect) {
+    if (!startInput || !endInput || !equipmentSelect || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel) {
         return;
+    }
+
+    let mode = 'start'; // 'start' or 'end'
+    let viewDate = new Date();
+
+    function pad(n) {
+        return n < 10 ? '0' + n : '' + n;
+    }
+
+    function toIso(d) {
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
     }
 
     function parseDate(value) {
@@ -710,36 +844,133 @@ $me = current_user();
         return false;
     }
 
-    function validateDateInput(input) {
-        const value = input.value;
-        const date = parseDate(value);
-        if (!date) {
-            return;
-        }
-        if (isDisabledDay(date)) {
-            alert('לא ניתן לבחור תאריך זה להשאלה (עבר או שישי/שבת).');
-            input.value = '';
-        }
-    }
-
     function updateEquipmentState() {
         const hasStart = !!startInput.value;
         const hasEnd = !!endInput.value;
         equipmentSelect.disabled = !(hasStart && hasEnd);
     }
 
-    startInput.addEventListener('change', function () {
-        validateDateInput(startInput);
+    function updateLabels() {
+        startLabel.textContent = startInput.value || '-';
+        endLabel.textContent = endInput.value || '-';
+    }
+
+    function setMode(newMode) {
+        mode = newMode;
+        if (mode === 'start') {
+            modeStartBtn.classList.add('active');
+            modeEndBtn.classList.remove('active');
+        } else {
+            modeEndBtn.classList.add('active');
+            modeStartBtn.classList.remove('active');
+        }
+    }
+
+    function renderCalendar() {
+        const year = viewDate.getFullYear();
+        const month = viewDate.getMonth();
+        const firstOfMonth = new Date(year, month, 1);
+        const firstDay = (firstOfMonth.getDay() + 6) % 7; // make Sunday last
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        calMonthLabel.textContent = year + '-' + pad(month + 1);
+        calGrid.innerHTML = '';
+
+        const startDate = parseDate(startInput.value);
+        const endDate = parseDate(endInput.value);
+
+        // leading empty cells
+        for (let i = 0; i < firstDay; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'date-day empty';
+            calGrid.appendChild(cell);
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const cellDate = new Date(year, month, day);
+            const iso = toIso(cellDate);
+            const cell = document.createElement('div');
+            cell.textContent = day.toString();
+            cell.dataset.date = iso;
+
+            const disabled = isDisabledDay(cellDate);
+            if (disabled) {
+                cell.className = 'date-day disabled';
+            } else {
+                cell.className = 'date-day selectable';
+                cell.addEventListener('click', function () {
+                    selectDate(cellDate);
+                });
+            }
+
+            // range highlighting
+            if (startDate && endDate && !disabled) {
+                if (cellDate.getTime() === startDate.getTime()) {
+                    cell.classList.add('selected-start');
+                }
+                if (cellDate.getTime() === endDate.getTime()) {
+                    cell.classList.add('selected-end');
+                }
+                if (cellDate > startDate && cellDate < endDate) {
+                    cell.classList.add('in-range');
+                }
+            }
+
+            calGrid.appendChild(cell);
+        }
+    }
+
+    function selectDate(date) {
+        if (mode === 'start') {
+            startInput.value = toIso(date);
+            // אם תאריך הסיום לפני תאריך ההתחלה – ננקה אותו
+            const end = parseDate(endInput.value);
+            if (end && end < date) {
+                endInput.value = '';
+            }
+        } else {
+            const start = parseDate(startInput.value);
+            if (!start) {
+                // אם אין תאריך התחלה עדיין – נגדיר קודם אותו
+                startInput.value = toIso(date);
+            } else {
+                if (date < start) {
+                    // אם בוחר תאריך החזרה לפני ההתחלה – נחליף
+                    endInput.value = toIso(start);
+                    startInput.value = toIso(date);
+                } else {
+                    endInput.value = toIso(date);
+                }
+            }
+        }
+        updateLabels();
         updateEquipmentState();
+        renderCalendar();
+    }
+
+    // חיבור אירועים למעבר חודשים
+    calPrev.addEventListener('click', function () {
+        viewDate.setMonth(viewDate.getMonth() - 1);
+        renderCalendar();
+    });
+    calNext.addEventListener('click', function () {
+        viewDate.setMonth(viewDate.getMonth() + 1);
+        renderCalendar();
     });
 
-    endInput.addEventListener('change', function () {
-        validateDateInput(endInput);
-        updateEquipmentState();
+    // כפתורי מצב
+    modeStartBtn.addEventListener('click', function () {
+        setMode('start');
+    });
+    modeEndBtn.addEventListener('click', function () {
+        setMode('end');
     });
 
-    // Initial state on load
+    // אתחול
+    setMode('start');
+    updateLabels();
     updateEquipmentState();
+    renderCalendar();
 })();
 </script>
 <footer>
