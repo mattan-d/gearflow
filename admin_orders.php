@@ -542,6 +542,10 @@ $me = current_user();
                 <button type="submit" class="btn">
                     <?= $editingOrder ? 'שמירת שינויים' : 'שמירת הזמנה' ?>
                 </button>
+                <button type="button" class="btn secondary"
+                        onclick="window.open('agreement.php<?= $editingOrder ? '?order_id=' . (int)$editingOrder['id'] : '' ?>', 'agreement', 'width=900,height=700')">
+                    הסכם השאלה
+                </button>
                 <?php if ($editingOrder): ?>
                     <a href="admin_orders.php" class="btn secondary">ביטול</a>
                 <?php endif; ?>
