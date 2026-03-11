@@ -483,7 +483,7 @@ $me = current_user();
                 <div class="grid">
                     <div>
                         <label for="equipment_id">ציוד</label>
-                        <select id="equipment_id" name="equipment_id" required <?= $editingOrder ? '' : 'disabled' ?>>
+                        <select id="equipment_id" name="equipment_id" <?= $editingOrder ? '' : 'disabled' ?>>
                             <option value="">בחר ציוד...</option>
                             <?php foreach ($equipmentOptions as $item): ?>
                                 <option value="<?= (int)$item['id'] ?>"
