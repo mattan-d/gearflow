@@ -662,6 +662,28 @@ $me = current_user();
 <footer>
     © 2026 CentricApp LTD
 </footer>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var addBtn = document.getElementById('toggle_add_equipment_btn');
+    var importBtn = document.getElementById('toggle_import_equipment_btn');
+    var formCard = document.getElementById('equipment_form_card');
+    var importCard = document.getElementById('equipment_import_card');
+
+    if (addBtn && formCard) {
+        addBtn.addEventListener('click', function () {
+            var isVisible = formCard.style.display !== 'none';
+            formCard.style.display = isVisible ? 'none' : 'block';
+        });
+    }
+
+    if (importBtn && importCard) {
+        importBtn.addEventListener('click', function () {
+            var isVisible = importCard.style.display !== 'none';
+            importCard.style.display = isVisible ? 'none' : 'block';
+        });
+    }
+});
+</script>
 </body>
 </html>
 
