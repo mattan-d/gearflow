@@ -98,6 +98,12 @@ function initialize_database(PDO $pdo): void
         if (!in_array('warehouse', $names, true)) {
             $pdo->exec("ALTER TABLE users ADD COLUMN warehouse TEXT");
         }
+        if (!in_array('reset_token', $names, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN reset_token TEXT");
+        }
+        if (!in_array('reset_token_expires_at', $names, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN reset_token_expires_at TEXT");
+        }
     } catch (PDOException $e) {
         // דילוג בשקט אם העמודות כבר קיימות
     }

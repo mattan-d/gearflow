@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 
-$error = '';
+$error   = '';
+$success = (isset($_GET['reset']) && $_GET['reset'] === 'ok') ? 'הסיסמה עודכנה. אפשר להתחבר עם הסיסמה החדשה.' : '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
@@ -18,8 +19,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([':username' => $username]);
         $user = $stmt->fetch();
 
-        if (!$user || (int)$user['is_active'] !== 1 || !password_verify($password, $user['password_hash'])) {
-            $error = 'שם המשתמש או הסיסמה שגויים, או שהחשבון לא פעיל.';
+        if (!$user) {
+            $error = 'המשתמש אינו קיים.';
+        } elseif ((int)$user['is_active'] !== 1) {
+            $error = 'החשבון לא פעיל. פנה למנהל המערכת.';
+        } elseif (!password_verify($password, $user['password_hash'])) {
+            $error = 'הסיסמה אינה נכונה.';
         } else {
             $_SESSION['user_id']  = $user['id'];
             $_SESSION['username'] = $user['username'];
@@ -114,6 +119,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             padding: 0.6rem 0.75rem;
             font-size: 0.85rem;
             margin-bottom: 0.75rem;
+        }
+        .success {
+            background: #f0fdf4;
+            color: #166534;
+            border-radius: 8px;
+            padding: 0.6rem 0.75rem;
+            font-size: 0.85rem;
+            margin-bottom: 0.75rem;
+        }
+        .reset-link {
+            display: block;
+            text-align: center;
+            margin-top: 0.75rem;
+            font-size: 0.9rem;
+            color: #4f46e5;
+            text-decoration: none;
+        }
+        .reset-link:hover {
+            text-decoration: underline;
         }
         .hint {
             margin-top: 0.75rem;
