@@ -105,6 +105,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([':id' => $id]);
             $success = 'הציוד נמחק.';
         }
+    } elseif ($action === 'import') {
+        if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
+            $error = 'קובץ CSV לא הועלה בהצלחה.';
+        } else {
+            $tmpPath = $_FILES['csv_file']['tmp_name'];
+            $handle = fopen($tmpPath, 'r');
+            if ($handle === false) {
+                $error = 'לא ניתן לקרוא את קובץ ה-CSV.';
+            } else {
+                // נניח שורה ראשונה היא כותרות
+                $pdo->beginTransaction();
+                try {
+                    $insert = $pdo->prepare(
+                        'INSERT INTO equipment
+                         (name, code, description, category, location, quantity_total, quantity_available, status, created_at)
+                         VALUES
+                         (:name, :code, :description, :category, :location, :quantity_total, :quantity_available, :status, :created_at)'
+                    );
+                    $rowIndex = 0;
+                    while (($row = fgetcsv($handle)) !== false) {
+                        $rowIndex++;
+                        if ($rowIndex === 1) {
+                            // דלג על כותרת
+                            continue;
+                        }
+                        if (count($row) < 6) {
+                            continue;
+                        }
+                        [$name, $code, $description, $category, $location, $status] = $row;
+                        $name = trim((string)$name);
+                        $code = trim((string)$code);
+                        if ($name === '' || $code === '') {
+                            continue;
+                        }
+                        $insert->execute([
+                            ':name'               => $name,
+                            ':code'               => $code,
+                            ':description'        => trim((string)$description),
+                            ':category'           => trim((string)$category),
+                            ':location'           => trim((string)$location),
+                            ':quantity_total'     => 1,
+                            ':quantity_available' => 1,
+                            ':status'             => trim((string)$status) !== '' ? trim((string)$status) : 'active',
+                            ':created_at'         => date('Y-m-d H:i:s'),
+                        ]);
+                    }
+                    fclose($handle);
+                    $pdo->commit();
+                    $success = 'רשימת הציוד יובאה בהצלחה.';
+                } catch (Throwable $e) {
+                    fclose($handle);
+                    $pdo->rollBack();
+                    $error = 'אירעה שגיאה בעת יבוא הקובץ.';
+                }
+            }
+        }
     }
 }
 
@@ -115,6 +171,30 @@ $stmt = $pdo->query(
      ORDER BY category ASC, name ASC'
 );
 $equipmentList = $stmt->fetchAll();
+
+// יצוא רשימת ציוד ל-CSV
+if (isset($_GET['export']) && $_GET['export'] === '1') {
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="equipment-' . date('Ymd-His') . '.csv"');
+    $out = fopen('php://output', 'w');
+    fputcsv($out, ['name', 'code', 'description', 'category', 'location', 'status', 'quantity_total', 'quantity_available', 'created_at', 'updated_at']);
+    foreach ($equipmentList as $row) {
+        fputcsv($out, [
+            $row['name'] ?? '',
+            $row['code'] ?? '',
+            $row['description'] ?? '',
+            $row['category'] ?? '',
+            $row['location'] ?? '',
+            $row['status'] ?? '',
+            $row['quantity_total'] ?? 0,
+            $row['quantity_available'] ?? 0,
+            $row['created_at'] ?? '',
+            $row['updated_at'] ?? '',
+        ]);
+    }
+    fclose($out);
+    exit;
+}
 
 $me = current_user();
 
@@ -284,6 +364,16 @@ $me = current_user();
             background: #ecfdf3;
             color: #166534;
         }
+        .toolbar-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .toolbar-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -408,7 +498,19 @@ $me = current_user();
     </div>
 </header>
 <main>
-    <div class="card">
+    <div class="toolbar-top">
+        <div class="toolbar-buttons">
+            <button type="button" class="btn" id="toggle_add_equipment_btn">הוספת פריט ציוד</button>
+            <button type="button" class="btn secondary" id="toggle_import_equipment_btn">יבוא רשימת ציוד</button>
+            <a href="admin_equipment.php?export=1" class="btn neutral">יצוא רשימת ציוד</a>
+        </div>
+    </div>
+
+    <?php
+    $showFormCard = $editingEquipment !== null || $error !== '';
+    ?>
+
+    <div class="card" id="equipment_form_card" style="display: <?= $showFormCard ? 'block' : 'none' ?>;">
         <h2><?= $editingEquipment ? 'עריכת ציוד' : 'הוספת ציוד חדש' ?></h2>
 
         <?php if ($error !== ''): ?>
@@ -471,6 +573,20 @@ $me = current_user();
             <?php if ($editingEquipment): ?>
                 <a href="admin_equipment.php" class="btn secondary">ביטול עריכה</a>
             <?php endif; ?>
+        </form>
+    </div>
+
+    <div class="card" id="equipment_import_card" style="display: none;">
+        <h2>יבוא רשימת ציוד (CSV)</h2>
+        <p class="muted-small">
+            יש לבחור קובץ CSV המכיל לפחות עמודות: שם ציוד, מספר סידורי, תיאור, קטגוריה, מיקום, סטטוס.
+            השורה הראשונה תיחשב ככותרת.
+        </p>
+        <form method="post" action="admin_equipment.php" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="import">
+            <label for="csv_file">קובץ CSV</label>
+            <input type="file" id="csv_file" name="csv_file" accept=".csv" required>
+            <button type="submit" class="btn">יבוא</button>
         </form>
     </div>
 
