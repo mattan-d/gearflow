@@ -689,7 +689,7 @@ $me = current_user();
                 <input type="hidden" name="id" value="<?= $editingOrder ? (int)$editingOrder['id'] : 0 ?>">
 
                 <div class="grid">
-                    <!-- עמודת תאריכים + שם שואל + הערות (בצד ימין ב-RTL) -->
+                    <!-- עמודת תאריכים + רשימת ציוד שנבחר + שם שואל + הערות (בצד ימין ב-RTL) -->
                     <div>
                         <!-- שדות נסתרים לתאריכים בפורמט YYYY-MM-DD לצורך שליחה לשרת -->
                         <input type="hidden" id="start_date" name="start_date"
@@ -731,6 +731,9 @@ $me = current_user();
                                 </div>
                             </div>
                         </div>
+
+                        <!-- רשימת פריטי הציוד שנבחרו (מתעדכנת אחרי לחיצה על "הוסף") -->
+                        <div id="selected_equipment_list" style="margin: 0.5rem 0;"></div>
 
                         <label for="borrower_name">שם שואל</label>
                         <input
@@ -817,7 +820,6 @@ $me = current_user();
                                 הוסף
                             </button>
                             <div class="muted-small" id="selected_equipment_summary" style="margin-top:0.3rem;"></div>
-                            <div id="selected_equipment_list" style="margin-top:0.5rem;"></div>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -1225,8 +1227,8 @@ $me = current_user();
     }
     equipmentCheckboxes.forEach(function (cb) {
         cb.addEventListener('change', function () {
+            // רק מעדכנים את מצב הכפתור; הרשימה המוצגת מתעדכנת אחרי לחיצה על "הוסף"
             updateEquipmentState();
-            updateSelectedEquipmentSummary();
         });
     });
 
@@ -1242,7 +1244,7 @@ $me = current_user();
         });
     }
 
-    // כפתור "הוסף" – רק מאשר שהבחירה בוצעה, לא מגיש את הטופס
+    // כפתור "הוסף" – מעדכן את רשימת הפריטים שנבחרו בטופס (מעל שם השואל), לא מגיש את הטופס
     if (addEquipmentBtn) {
         addEquipmentBtn.addEventListener('click', function () {
             if (!anyEquipmentChecked()) {
