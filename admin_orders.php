@@ -433,6 +433,34 @@ $me = current_user();
             padding: 0.75rem 0.9rem;
             border: 1px solid #e5e7eb;
             font-size: 0.85rem;
+            position: relative;
+        }
+        .date-picker-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            cursor: pointer;
+            font-size: 0.85rem;
+            color: #374151;
+            margin-bottom: 0.6rem;
+        }
+        .date-picker-toggle-icon {
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            border: 1px solid #9ca3af;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            background: #f3f4f6;
+        }
+        .date-picker-panel {
+            border-radius: 10px;
+            border: 1px solid #e5e7eb;
+            background: #ffffff;
+            padding: 0.6rem 0.7rem 0.7rem;
+            margin-top: 0.4rem;
         }
         .date-mode-toggle {
             display: inline-flex;
@@ -513,7 +541,7 @@ $me = current_user();
             cursor: not-allowed;
         }
         .date-day.selectable:hover {
-            background: #e5e7eb;
+            background: rgba(15, 23, 42, 0.08);
         }
         .date-day.in-range {
             background: #dbeafe;
@@ -589,6 +617,11 @@ $me = current_user();
 
                         <label>בחירת תאריכים</label>
                         <div class="date-picker">
+                            <div class="date-picker-toggle" id="date_picker_toggle">
+                                <span class="date-picker-toggle-icon">📅</span>
+                                <span>פתח לוח שנה</span>
+                            </div>
+                            <div class="date-picker-panel" id="date_picker_panel" style="display: none;">
                             <div class="date-mode-toggle">
                                 <button type="button" id="mode_start" class="date-mode-btn active">השאלה</button>
                                 <button type="button" id="mode_end" class="date-mode-btn">החזרה</button>
@@ -610,6 +643,7 @@ $me = current_user();
                             </div>
                             <div class="muted-small" style="margin-top: 0.5rem;">
                                 ימים שעברו וימי שישי/שבת מסומנים כלא זמינים.
+                            </div>
                             </div>
                         </div>
                     </div>
@@ -799,8 +833,10 @@ $me = current_user();
     const calPrev = document.getElementById('cal_prev');
     const calNext = document.getElementById('cal_next');
     const calGrid = document.getElementById('cal_grid');
+    const toggle = document.getElementById('date_picker_toggle');
+    const panel = document.getElementById('date_picker_panel');
 
-    if (!startInput || !endInput || !equipmentSelect || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel) {
+    if (!startInput || !endInput || !equipmentSelect || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel || !toggle || !panel) {
         return;
     }
 
@@ -946,6 +982,12 @@ $me = current_user();
         updateLabels();
         updateEquipmentState();
         renderCalendar();
+
+        const hasStart = !!startInput.value;
+        const hasEnd = !!endInput.value;
+        if (hasStart && hasEnd) {
+            panel.style.display = 'none';
+        }
     }
 
     // חיבור אירועים למעבר חודשים
@@ -956,6 +998,12 @@ $me = current_user();
     calNext.addEventListener('click', function () {
         viewDate.setMonth(viewDate.getMonth() + 1);
         renderCalendar();
+    });
+
+    // כפתור פתיחת/סגירת לוח השנה
+    toggle.addEventListener('click', function () {
+        const isVisible = panel.style.display === 'block';
+        panel.style.display = isVisible ? 'none' : 'block';
     });
 
     // כפתורי מצב
