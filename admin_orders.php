@@ -802,7 +802,9 @@ $me = current_user();
                                         <td>
                                             <input type="checkbox"
                                                    name="equipment_ids[]"
-                                                   value="<?= (int)$item['id'] ?>">
+                                                   value="<?= (int)$item['id'] ?>"
+                                                   data-name="<?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>"
+                                                   data-code="<?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?>">
                                         </td>
                                         <td><?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td class="muted-small"><?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?></td>
@@ -815,6 +817,7 @@ $me = current_user();
                                 הוסף
                             </button>
                             <div class="muted-small" id="selected_equipment_summary" style="margin-top:0.3rem;"></div>
+                            <div id="selected_equipment_list" style="margin-top:0.5rem;"></div>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -957,6 +960,7 @@ $me = current_user();
     const equipmentTableBody = document.getElementById('equipment_table_body');
     const addEquipmentBtn = document.getElementById('add_equipment_btn');
     const selectedEquipmentSummary = document.getElementById('selected_equipment_summary');
+    const selectedEquipmentList = document.getElementById('selected_equipment_list');
     const submitBtn = document.getElementById('submit_order_btn');
     const modeStartBtn = document.getElementById('mode_start');
     const modeEndBtn = document.getElementById('mode_end');
@@ -1015,35 +1019,78 @@ $me = current_user();
     }
 
     function updateSelectedEquipmentSummary() {
-        if (!selectedEquipmentSummary) return;
-        const count = equipmentCheckboxes.filter(function (cb) { return cb.checked; }).length;
-        if (count === 0) {
-            selectedEquipmentSummary.textContent = '';
-        } else {
-            selectedEquipmentSummary.textContent = 'נבחרו ' + count + ' פריטי ציוד להזמנה.';
+        const checked = equipmentCheckboxes.filter(function (cb) { return cb.checked; });
+
+        if (selectedEquipmentSummary) {
+            const count = checked.length;
+            if (count === 0) {
+                selectedEquipmentSummary.textContent = '';
+            } else {
+                selectedEquipmentSummary.textContent = 'נבחרו ' + count + ' פריטי ציוד להזמנה.';
+            }
+        }
+
+        if (selectedEquipmentList) {
+            selectedEquipmentList.innerHTML = '';
+            checked.forEach(function (cb) {
+                const name = cb.getAttribute('data-name') || '';
+                const code = cb.getAttribute('data-code') || '';
+                const row = document.createElement('div');
+                row.style.display = 'flex';
+                row.style.alignItems = 'center';
+                row.style.justifyContent = 'space-between';
+                row.style.marginBottom = '4px';
+
+                const label = document.createElement('span');
+                label.textContent = name + (code ? ' (' + code + ')' : '');
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.textContent = '🗑️';
+                removeBtn.style.border = 'none';
+                removeBtn.style.background = 'transparent';
+                removeBtn.style.cursor = 'pointer';
+                removeBtn.style.fontSize = '0.85rem';
+                removeBtn.addEventListener('click', function () {
+                    cb.checked = false;
+                    updateEquipmentState();
+                    updateSelectedEquipmentSummary();
+                });
+
+                row.appendChild(label);
+                row.appendChild(removeBtn);
+                selectedEquipmentList.appendChild(row);
+            });
         }
     }
 
     function updateEquipmentState() {
         const hasStart = !!startInput.value;
         const hasEnd = !!endInput.value;
+        const datesReady = hasStart && hasEnd;
 
         // מצב עריכה – select בודד
         if (equipmentSelect) {
-            equipmentSelect.disabled = !(hasStart && hasEnd);
+            equipmentSelect.disabled = !datesReady;
         }
 
-        // מצב יצירה – צ׳קבוקסים מרובים
+        // מצב יצירה – צ׳קבוקסים מרובים + הצגת/הסתרת טבלה
         equipmentCheckboxes.forEach(function (cb) {
-            cb.disabled = !(hasStart && hasEnd);
+            cb.disabled = !datesReady;
         });
+        if (equipmentTableBody) {
+            const rows = equipmentTableBody.querySelectorAll('tr');
+            rows.forEach(function (row) {
+                row.style.display = datesReady ? '' : 'none';
+            });
+        }
 
         const hasEquipSelect = equipmentSelect ? !!equipmentSelect.value : false;
         const hasEquipCheckbox = anyEquipmentChecked();
         const hasEquip = hasEquipSelect || hasEquipCheckbox;
 
         if (submitBtn) {
-            submitBtn.disabled = !(hasStart && hasEnd && hasEquip);
+            submitBtn.disabled = !(datesReady && hasEquip);
         }
     }
 
