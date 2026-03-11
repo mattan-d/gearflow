@@ -110,9 +110,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Reload list after changes
 $stmt = $pdo->query(
-    'SELECT id, name, code, category, location, quantity_total, quantity_available, status, created_at, updated_at
+    'SELECT id, name, code, description, category, location, quantity_total, quantity_available, status, created_at, updated_at
      FROM equipment
-     ORDER BY name ASC'
+     ORDER BY category ASC, name ASC'
 );
 $equipmentList = $stmt->fetchAll();
 
@@ -185,6 +185,12 @@ $me = current_user();
             margin-top: 0;
             margin-bottom: 1rem;
             font-size: 1.2rem;
+            color: #111827;
+        }
+        .category-title {
+            margin: 1.2rem 0 0.6rem;
+            font-size: 1rem;
+            font-weight: 600;
             color: #111827;
         }
         label {
@@ -393,64 +399,67 @@ $me = current_user();
         <?php if (count($equipmentList) === 0): ?>
             <p class="muted-small">עדיין לא הוגדר ציוד במערכת.</p>
         <?php else: ?>
-            <table>
-                <thead>
-                <tr>
-                    <th>שם</th>
-                    <th>קוד</th>
-                    <th>קטגוריה</th>
-                    <th>מיקום</th>
-                    <th>כמות</th>
-                    <th>סטטוס</th>
-                    <th>תאריכים</th>
-                    <th>פעולות</th>
-                </tr>
-                </thead>
-                <tbody>
-                <?php foreach ($equipmentList as $item): ?>
+            <?php
+            $groupedByCategory = [];
+            foreach ($equipmentList as $item) {
+                $cat = trim((string)($item['category'] ?? 'אחר'));
+                if ($cat === '') {
+                    $cat = 'אחר';
+                }
+                $groupedByCategory[$cat][] = $item;
+            }
+            ?>
+            <?php foreach ($groupedByCategory as $categoryName => $items): ?>
+                <div class="category-title">
+                    קטגוריה: <?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?>
+                </div>
+                <table>
+                    <thead>
                     <tr>
-                        <td><?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?></td>
-                        <td><?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?></td>
-                        <td><?= htmlspecialchars($item['category'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
-                        <td><?= htmlspecialchars($item['location'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
-                        <td>
-                            <?= (int)$item['quantity_available'] ?> / <?= (int)$item['quantity_total'] ?>
-                            <div class="muted-small">זמינה / סה״כ</div>
-                        </td>
-                        <td>
-                            <?php
-                            $statusClass = 'status-active';
-                            $statusLabel = 'פעיל';
-                            if ($item['status'] === 'out_of_service') {
-                                $statusClass = 'status-out';
-                                $statusLabel = 'לא כשיר';
-                            } elseif ($item['status'] === 'disabled') {
-                                $statusClass = 'status-disabled';
-                                $statusLabel = 'מושבת';
-                            }
-                            ?>
-                            <span class="badge <?= $statusClass ?>"><?= $statusLabel ?></span>
-                        </td>
-                        <td class="muted-small">
-                            נוצר: <?= htmlspecialchars($item['created_at'], ENT_QUOTES, 'UTF-8') ?><br>
-                            <?php if (!empty($item['updated_at'])): ?>
-                                עודכן: <?= htmlspecialchars($item['updated_at'], ENT_QUOTES, 'UTF-8') ?>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <div class="row-actions">
-                                <a href="admin_equipment.php?edit_id=<?= (int)$item['id'] ?>" class="btn small secondary">עריכה</a>
-                                <form method="post" action="admin_equipment.php" onsubmit="return confirm('למחוק את הפריט הזה?');">
-                                    <input type="hidden" name="action" value="delete">
-                                    <input type="hidden" name="id" value="<?= (int)$item['id'] ?>">
-                                    <button type="submit" class="btn small danger">מחיקה</button>
-                                </form>
-                            </div>
-                        </td>
+                        <th>שם הציוד</th>
+                        <th>מספר סידורי</th>
+                        <th>סטטוס</th>
+                        <th>הערות</th>
+                        <th>פעולות</th>
                     </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($items as $item): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?></td>
+                            <td>
+                                <?php
+                                $statusClass = 'status-active';
+                                $statusLabel = 'תקין';
+                                if ($item['status'] === 'out_of_service') {
+                                    $statusClass = 'status-out';
+                                    $statusLabel = 'לא כשיר';
+                                } elseif ($item['status'] === 'disabled') {
+                                    $statusClass = 'status-disabled';
+                                    $statusLabel = 'מושבת';
+                                }
+                                ?>
+                                <span class="badge <?= $statusClass ?>"><?= $statusLabel ?></span>
+                            </td>
+                            <td class="muted-small">
+                                <?= htmlspecialchars($item['description'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                            </td>
+                            <td>
+                                <div class="row-actions">
+                                    <a href="admin_equipment.php?edit_id=<?= (int)$item['id'] ?>" class="btn small secondary">עריכה</a>
+                                    <form method="post" action="admin_equipment.php" onsubmit="return confirm('למחוק את הפריט הזה?');">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="id" value="<?= (int)$item['id'] ?>">
+                                        <button type="submit" class="btn small danger">מחיקה</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php endforeach; ?>
         <?php endif; ?>
     </div>
 </main>
