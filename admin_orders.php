@@ -254,6 +254,16 @@ $ordersStmt = $pdo->prepare($ordersSql);
 $ordersStmt->execute($params);
 $orders = $ordersStmt->fetchAll();
 
+// רשימת סטודנטים (משתתפים) לשדה החיפוש של "שם שואל"
+$studentsStmt = $pdo->prepare(
+    "SELECT username
+     FROM users
+     WHERE role = 'student' AND is_active = 1
+     ORDER BY username ASC"
+);
+$studentsStmt->execute();
+$studentUsernames = $studentsStmt->fetchAll(PDO::FETCH_COLUMN);
+
 $me = current_user();
 
 ?>
@@ -631,6 +641,23 @@ $me = current_user();
             font-size: 0.8rem;
             border-top: 1px solid #1f2937;
         }
+        .suggestions {
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: #ffffff;
+            max-height: 160px;
+            overflow-y: auto;
+            margin-top: 0.2rem;
+            font-size: 0.85rem;
+            box-shadow: 0 4px 10px rgba(15,23,42,0.08);
+        }
+        .suggestion-item {
+            padding: 0.3rem 0.5rem;
+            cursor: pointer;
+        }
+        .suggestion-item:hover {
+            background: #f3f4f6;
+        }
     </style>
 </head>
 <body>
@@ -735,14 +762,20 @@ $me = current_user();
                         <!-- רשימת פריטי הציוד שנבחרו (מתעדכנת אחרי לחיצה על "הוסף") -->
                         <div id="selected_equipment_list" style="margin: 0.5rem 0;"></div>
 
-                        <label for="borrower_name">שם שואל</label>
+                        <label for="borrower_search">שם שואל</label>
                         <input
                             type="text"
-                            id="borrower_name"
-                            name="borrower_name"
-                            required
+                            id="borrower_search"
+                            autocomplete="off"
                             value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_name'], ENT_QUOTES, 'UTF-8') : '' ?>"
                         >
+                        <input
+                            type="hidden"
+                            id="borrower_name"
+                            name="borrower_name"
+                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_name'], ENT_QUOTES, 'UTF-8') : '' ?>"
+                        >
+                        <div id="borrower_suggestions" class="suggestions"></div>
 
                         <label for="notes">הערות</label>
                         <textarea
@@ -954,6 +987,8 @@ $me = current_user();
 </main>
 <script>
 (function () {
+    const students = <?= json_encode($studentUsernames, JSON_UNESCAPED_UNICODE) ?>;
+
     const startInput = document.getElementById('start_date');
     const endInput = document.getElementById('end_date');
     const equipmentSelect = document.getElementById('equipment_id'); // קיים רק במצב עריכה
@@ -964,6 +999,9 @@ $me = current_user();
     const selectedEquipmentSummary = document.getElementById('selected_equipment_summary');
     const selectedEquipmentList = document.getElementById('selected_equipment_list');
     const submitBtn = document.getElementById('submit_order_btn');
+    const borrowerSearch = document.getElementById('borrower_search');
+    const borrowerHidden = document.getElementById('borrower_name');
+    const borrowerSuggestions = document.getElementById('borrower_suggestions');
     const modeStartBtn = document.getElementById('mode_start');
     const modeEndBtn = document.getElementById('mode_end');
     const startLabel = document.getElementById('selected_start_label');
@@ -1253,6 +1291,44 @@ $me = current_user();
             }
             updateEquipmentState();
             updateSelectedEquipmentSummary();
+        });
+    }
+
+    // חיפוש "שם שואל" לפי רשימת הסטודנטים
+    if (borrowerSearch && borrowerHidden && borrowerSuggestions && Array.isArray(students)) {
+        borrowerSearch.addEventListener('input', function () {
+            const q = borrowerSearch.value.trim();
+
+            // ברירת מחדל – מה שמוקלד נכנס לשדה הנסתר
+            borrowerHidden.value = q;
+
+            borrowerSuggestions.innerHTML = '';
+            if (!q) {
+                return;
+            }
+
+            const qLower = q.toLowerCase();
+            const matches = students.filter(function (name) {
+                return name.toLowerCase().startsWith(qLower);
+            }).slice(0, 20);
+
+            matches.forEach(function (name) {
+                const item = document.createElement('div');
+                item.className = 'suggestion-item';
+                item.textContent = name;
+                item.addEventListener('click', function () {
+                    borrowerSearch.value = name;
+                    borrowerHidden.value = name;
+                    borrowerSuggestions.innerHTML = '';
+                });
+                borrowerSuggestions.appendChild(item);
+            });
+        });
+
+        borrowerSearch.addEventListener('blur', function () {
+            setTimeout(function () {
+                borrowerSuggestions.innerHTML = '';
+            }, 150);
         });
     }
 
