@@ -431,6 +431,18 @@ $me = current_user();
             background: #f3f4f6;
             color: #111827;
         }
+        .icon-btn {
+            border: none;
+            background: transparent;
+            padding: 0.2rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
         #submit_order_btn {
             margin-top: 10px;
         }
@@ -973,7 +985,7 @@ $me = current_user();
                         </td>
                         <td>
                             <div class="row-actions">
-                                <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="btn small secondary" title="עריכה">
+                                <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="icon-btn" title="עריכה">
                                     ✏️
                                 </a>
 
@@ -981,13 +993,13 @@ $me = current_user();
                                       onsubmit="return confirm('למחוק את ההזמנה הזו?');">
                                     <input type="hidden" name="action" value="delete">
                                     <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                    <button type="submit" class="btn small" title="מחיקה">🗑️</button>
+                                    <button type="submit" class="icon-btn" title="מחיקה">🗑️</button>
                                 </form>
 
                                 <form method="post" action="admin_orders.php">
                                     <input type="hidden" name="action" value="duplicate">
                                     <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                    <button type="submit" class="btn small neutral" title="שכפול">⧉</button>
+                                    <button type="submit" class="icon-btn" title="שכפול">⧉</button>
                                 </form>
 
                                 <form method="post" action="admin_orders.php">

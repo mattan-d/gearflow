@@ -385,6 +385,18 @@ $me = current_user();
             padding: 0.3rem 0.7rem;
             font-size: 0.8rem;
         }
+        .icon-btn {
+            border: none;
+            background: transparent;
+            padding: 0.2rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
         .grid {
             display: grid;
             grid-template-columns: 2fr 1.2fr;
@@ -460,6 +472,38 @@ $me = current_user();
         }
         .row-actions form {
             margin: 0;
+        }
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15,23,42,0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+        .modal-card {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 25px 60px rgba(15,23,42,0.45);
+            max-width: 900px;
+            width: 95%;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 1.5rem 1.5rem 1.25rem;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .modal-close {
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 1.1rem;
+            line-height: 1;
         }
         .main-nav {
             margin-top: 0.5rem;
@@ -550,87 +594,86 @@ $me = current_user();
     $showFormCard = $editingEquipment !== null || $error !== '';
     ?>
 
-    <div class="card" id="equipment_form_card" style="display: <?= $showFormCard ? 'block' : 'none' ?>;">
-        <h2><?= $editingEquipment ? 'עריכת ציוד' : 'הוספת ציוד חדש' ?></h2>
-
-        <?php if ($error !== ''): ?>
-            <div class="flash error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
-        <?php elseif ($success !== ''): ?>
-            <div class="flash success"><?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?></div>
-        <?php endif; ?>
-
-        <form method="post" action="admin_equipment.php<?= $editingEquipment ? '?edit_id=' . (int)$editingEquipment['id'] : '' ?>">
-            <input type="hidden" name="action" value="save">
-            <input type="hidden" name="id" value="<?= $editingEquipment ? (int)$editingEquipment['id'] : 0 ?>">
-
-            <div class="grid">
-                <div>
-                    <label for="name">שם ציוד</label>
-                    <input type="text" id="name" name="name" required
-                           value="<?= $editingEquipment ? htmlspecialchars($editingEquipment['name'], ENT_QUOTES, 'UTF-8') : '' ?>">
-
-                    <label for="code">קוד זיהוי / ברקוד</label>
-                    <input type="text" id="code" name="code" required
-                           value="<?= $editingEquipment ? htmlspecialchars($editingEquipment['code'], ENT_QUOTES, 'UTF-8') : '' ?>">
-
-                    <label for="description">תיאור</label>
-                    <textarea id="description" name="description"><?= $editingEquipment ? htmlspecialchars($editingEquipment['description'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
-
-                    <label for="picture">קישור לתמונת ציוד (URL)</label>
-                    <input type="text" id="picture" name="picture"
-                           placeholder="https://example.com/path/to/image.jpg"
-                           value="<?= $editingEquipment ? htmlspecialchars($editingEquipment['picture'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
-                </div>
-                <div>
-                    <label for="category">קטגוריה</label>
-                    <?php
-                    $currentCategory = trim((string)($editingEquipment['category'] ?? ''));
-                    ?>
-                    <select id="category" name="category">
-                        <option value="">בחר קטגוריה...</option>
-                        <option value="מצלמה"   <?= $currentCategory === 'מצלמה'   ? 'selected' : '' ?>>מצלמה</option>
-                        <option value="מיקרופון" <?= $currentCategory === 'מיקרופון' ? 'selected' : '' ?>>מיקרופון</option>
-                        <option value="חצובה"   <?= $currentCategory === 'חצובה'   ? 'selected' : '' ?>>חצובה</option>
-                        <option value="תאורה"   <?= $currentCategory === 'תאורה'   ? 'selected' : '' ?>>תאורה</option>
-                    </select>
-
-                    <label for="location">מחסן</label>
-                    <?php
-                    $currentLocation = trim((string)($editingEquipment['location'] ?? ''));
-                    ?>
-                    <select id="location" name="location">
-                        <option value="">בחר מחסן...</option>
-                        <option value="מחסן א" <?= $currentLocation === 'מחסן א' ? 'selected' : '' ?>>מחסן א</option>
-                        <option value="מחסן ב" <?= $currentLocation === 'מחסן ב' ? 'selected' : '' ?>>מחסן ב</option>
-                    </select>
-
-                    <label for="quantity_total">כמות סה״כ</label>
-                    <input type="number" id="quantity_total" name="quantity_total" min="0"
-                           value="<?= $editingEquipment ? (int)$editingEquipment['quantity_total'] : 0 ?>">
-
-                    <label for="quantity_available">כמות זמינה</label>
-                    <input type="number" id="quantity_available" name="quantity_available" min="0"
-                           value="<?= $editingEquipment ? (int)$editingEquipment['quantity_available'] : 0 ?>">
-
-                    <label for="status">סטטוס</label>
-                    <select id="status" name="status">
-                        <?php
-                        $statusValue = $editingEquipment['status'] ?? 'active';
-                        ?>
-                        <option value="active" <?= $statusValue === 'active' ? 'selected' : '' ?>>פעיל</option>
-                        <option value="out_of_service" <?= $statusValue === 'out_of_service' ? 'selected' : '' ?>>לא כשיר</option>
-                        <option value="disabled" <?= $statusValue === 'disabled' ? 'selected' : '' ?>>מושבת</option>
-                    </select>
-                </div>
+    <div class="modal-backdrop" id="equipment_modal" style="display: <?= $showFormCard ? 'flex' : 'none' ?>;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2><?= $editingEquipment ? 'עריכת ציוד' : 'הוספת ציוד חדש' ?></h2>
+                <button type="button" class="modal-close" id="equipment_modal_close" aria-label="סגירת חלון">✕</button>
             </div>
 
-            <button type="submit" class="btn">
-                <?= $editingEquipment ? 'שמירת שינויים' : 'הוספת ציוד' ?>
-            </button>
-            <?php if ($editingEquipment): ?>
-                <a href="admin_equipment.php" class="btn secondary">ביטול עריכה</a>
+            <?php if ($error !== ''): ?>
+                <div class="flash error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
+            <?php elseif ($success !== ''): ?>
+                <div class="flash success"><?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?></div>
             <?php endif; ?>
-        </form>
+
+            <form method="post" action="admin_equipment.php<?= $editingEquipment ? '?edit_id=' . (int)$editingEquipment['id'] : '' ?>">
+                <input type="hidden" name="action" value="save">
+                <input type="hidden" name="id" value="<?= $editingEquipment ? (int)$editingEquipment['id'] : 0 ?>">
+
+                <div class="grid">
+                    <div>
+                        <label for="name">שם ציוד</label>
+                        <input type="text" id="name" name="name" required
+                               value="<?= $editingEquipment ? htmlspecialchars($editingEquipment['name'], ENT_QUOTES, 'UTF-8') : '' ?>">
+
+                        <label for="code">קוד זיהוי / ברקוד</label>
+                        <input type="text" id="code" name="code" required
+                               value="<?= $editingEquipment ? htmlspecialchars($editingEquipment['code'], ENT_QUOTES, 'UTF-8') : '' ?>">
+
+                        <label for="description">תיאור</label>
+                        <textarea id="description" name="description"><?= $editingEquipment ? htmlspecialchars($editingEquipment['description'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
+
+                        <label for="picture">קישור לתמונת ציוד (URL)</label>
+                        <input type="text" id="picture" name="picture"
+                               placeholder="https://example.com/path/to/image.jpg"
+                               value="<?= $editingEquipment ? htmlspecialchars($editingEquipment['picture'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
+                    </div>
+                    <div>
+                        <label for="category">קטגוריה</label>
+                        <?php
+                        $currentCategory = trim((string)($editingEquipment['category'] ?? ''));
+                        ?>
+                        <select id="category" name="category">
+                            <option value="">בחר קטגוריה...</option>
+                            <option value="מצלמה"   <?= $currentCategory === 'מצלמה'   ? 'selected' : '' ?>>מצלמה</option>
+                            <option value="מיקרופון" <?= $currentCategory === 'מיקרופון' ? 'selected' : '' ?>>מיקרופון</option>
+                            <option value="חצובה"   <?= $currentCategory === 'חצובה'   ? 'selected' : '' ?>>חצובה</option>
+                            <option value="תאורה"   <?= $currentCategory === 'תאורה'   ? 'selected' : '' ?>>תאורה</option>
+                        </select>
+
+                        <label for="location">מחסן</label>
+                        <?php
+                        $currentLocation = trim((string)($editingEquipment['location'] ?? ''));
+                        ?>
+                        <select id="location" name="location">
+                            <option value="">בחר מחסן...</option>
+                            <option value="מחסן א" <?= $currentLocation === 'מחסן א' ? 'selected' : '' ?>>מחסן א</option>
+                            <option value="מחסן ב" <?= $currentLocation === 'מחסן ב' ? 'selected' : '' ?>>מחסן ב</option>
+                        </select>
+
+                        <label for="status">סטטוס</label>
+                        <select id="status" name="status">
+                            <?php
+                            $statusValue = $editingEquipment['status'] ?? 'active';
+                            ?>
+                            <option value="active" <?= $statusValue === 'active' ? 'selected' : '' ?>>פעיל</option>
+                            <option value="out_of_service" <?= $statusValue === 'out_of_service' ? 'selected' : '' ?>>לא כשיר</option>
+                            <option value="disabled" <?= $statusValue === 'disabled' ? 'selected' : '' ?>>מושבת</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn">
+                    <?= $editingEquipment ? 'שמירת שינויים' : 'הוספת ציוד' ?>
+                </button>
+                <?php if ($editingEquipment): ?>
+                    <a href="admin_equipment.php" class="btn secondary">ביטול עריכה</a>
+                <?php else: ?>
+                    <button type="button" class="btn secondary" id="equipment_modal_cancel">ביטול</button>
+                <?php endif; ?>
+            </form>
+        </div>
     </div>
 
     <div class="card" id="equipment_import_card" style="display: none;">
@@ -710,13 +753,13 @@ $me = current_user();
                             </td>
                             <td>
                                 <div class="row-actions">
-                                    <a href="admin_equipment.php?edit_id=<?= (int)$item['id'] ?>" class="btn small secondary" title="עריכה">
+                                    <a href="admin_equipment.php?edit_id=<?= (int)$item['id'] ?>" class="icon-btn" title="עריכה">
                                         ✏️
                                     </a>
                                     <form method="post" action="admin_equipment.php" onsubmit="return confirm('למחוק את הפריט הזה?');">
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="id" value="<?= (int)$item['id'] ?>">
-                                        <button type="submit" class="btn small danger" title="מחיקה">🗑️</button>
+                                        <button type="submit" class="icon-btn" title="מחיקה">🗑️</button>
                                     </form>
                                 </div>
                             </td>
@@ -735,13 +778,37 @@ $me = current_user();
 document.addEventListener('DOMContentLoaded', function () {
     var addBtn = document.getElementById('toggle_add_equipment_btn');
     var importBtn = document.getElementById('toggle_import_equipment_btn');
-    var formCard = document.getElementById('equipment_form_card');
+    var formModal = document.getElementById('equipment_modal');
+    var formClose = document.getElementById('equipment_modal_close');
+    var formCancel = document.getElementById('equipment_modal_cancel');
     var importCard = document.getElementById('equipment_import_card');
 
-    if (addBtn && formCard) {
+    function openEquipmentModal() {
+        if (formModal) {
+            formModal.style.display = 'flex';
+        }
+    }
+
+    function closeEquipmentModal() {
+        if (formModal) {
+            formModal.style.display = 'none';
+        }
+    }
+
+    if (addBtn && formModal) {
         addBtn.addEventListener('click', function () {
-            var isVisible = formCard.style.display !== 'none';
-            formCard.style.display = isVisible ? 'none' : 'block';
+            openEquipmentModal();
+        });
+    }
+
+    if (formClose) {
+        formClose.addEventListener('click', function () {
+            closeEquipmentModal();
+        });
+    }
+    if (formCancel) {
+        formCancel.addEventListener('click', function () {
+            closeEquipmentModal();
         });
     }
 
