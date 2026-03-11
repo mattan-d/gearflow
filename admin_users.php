@@ -61,19 +61,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([':id' => $id]);
             $success = 'סטטוס המשתמש עודכן.';
         }
-    } elseif ($action === 'reset_password') {
-        $id       = (int)($_POST['id'] ?? 0);
-        $password = $_POST['new_password'] ?? '';
-        if ($id > 0 && $password !== '') {
-            $stmt = $pdo->prepare('UPDATE users SET password_hash = :password_hash WHERE id = :id');
-            $stmt->execute([
-                ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
-                ':id'            => $id,
-            ]);
-            $success = 'הסיסמה אופסה בהצלחה.';
-        } else {
-            $error = 'יש לבחור משתמש ולהזין סיסמה חדשה.';
-        }
     } elseif ($action === 'delete') {
         $id = (int)($_POST['id'] ?? 0);
         if ($id > 0) {
@@ -88,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'update') {
         $id         = (int)($_POST['id'] ?? 0);
         $username   = trim($_POST['username'] ?? '');
-        $password   = $_POST['password'] ?? '';
+        $password   = (string)($_POST['new_password'] ?? '');
         $role       = $_POST['role'] ?? 'student';
         $firstName  = trim($_POST['first_name'] ?? '');
         $lastName   = trim($_POST['last_name'] ?? '');
@@ -151,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$usersStmt = $pdo->query('SELECT id, username, role, is_active, created_at FROM users ORDER BY id ASC');
+$usersStmt = $pdo->query('SELECT id, username, role, is_active, first_name, last_name, warehouse FROM users ORDER BY id ASC');
 $users = $usersStmt->fetchAll();
 
 // משתמש לעריכה בחלון קופץ
@@ -489,7 +476,11 @@ if (isset($_GET['edit_id'])) {
                                value="<?= $editingUser ? htmlspecialchars($editingUser['username'], ENT_QUOTES, 'UTF-8') : '' ?>">
 
                         <label for="modal_password">סיסמה<?= $editingUser ? ' (השאר ריק כדי לא לשנות)' : '' ?></label>
-                        <input type="password" id="modal_password" name="password" autocomplete="<?= $editingUser ? 'new-password' : 'off' ?>" <?= $editingUser ? '' : 'required' ?>>
+                        <?php if ($editingUser): ?>
+                        <input type="password" id="modal_password" name="new_password" autocomplete="new-password" placeholder="הזן סיסמה חדשה">
+                        <?php else: ?>
+                        <input type="password" id="modal_password" name="password" autocomplete="off" required>
+                        <?php endif; ?>
                     </div>
                     <div>
                         <label for="modal_role">תפקיד</label>
@@ -528,9 +519,11 @@ if (isset($_GET['edit_id'])) {
             <tr>
                 <th>#</th>
                 <th>שם משתמש</th>
+                <th>שם פרטי</th>
+                <th>שם משפחה</th>
+                <th>מחסן</th>
                 <th>תפקיד</th>
                 <th>סטטוס</th>
-                <th>נוצר ב־</th>
                 <th>פעולות</th>
             </tr>
             </thead>
@@ -539,6 +532,9 @@ if (isset($_GET['edit_id'])) {
                 <tr>
                     <td><?= (int)$user['id'] ?></td>
                     <td><?= htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><?= htmlspecialchars($user['first_name'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><?= htmlspecialchars($user['last_name'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><?= htmlspecialchars($user['warehouse'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
                     <td>
                         <?php if ($user['role'] === 'admin'): ?>
                             <span class="badge admin">אדמין</span>
@@ -555,24 +551,15 @@ if (isset($_GET['edit_id'])) {
                             <span class="badge inactive">לא פעיל</span>
                         <?php endif; ?>
                     </td>
-                    <td class="muted"><?= htmlspecialchars($user['created_at'], ENT_QUOTES, 'UTF-8') ?></td>
                     <td>
                         <div class="row-actions">
-                            <!-- אייקון עריכת משתמש -->
                             <a href="admin_users.php?edit_id=<?= (int)$user['id'] ?>" class="icon-btn" title="עריכת משתמש">✏️</a>
-
                             <form method="post" action="admin_users.php">
                                 <input type="hidden" name="action" value="toggle_active">
                                 <input type="hidden" name="id" value="<?= (int)$user['id'] ?>">
                                 <button type="submit" class="btn small secondary">
                                     <?= (int)$user['is_active'] === 1 ? 'השבת' : 'הפעל' ?>
                                 </button>
-                            </form>
-                            <form method="post" action="admin_users.php">
-                                <input type="hidden" name="action" value="reset_password">
-                                <input type="hidden" name="id" value="<?= (int)$user['id'] ?>">
-                                <input type="password" name="new_password" placeholder="סיסמה חדשה" style="width: 130px;">
-                                <button type="submit" class="btn small">איפוס</button>
                             </form>
                             <form method="post" action="admin_users.php" onsubmit="return confirm('למחוק את המשתמש הזה?');">
                                 <input type="hidden" name="action" value="delete">
