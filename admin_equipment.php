@@ -698,11 +698,13 @@ $me = current_user();
                             </td>
                             <td>
                                 <div class="row-actions">
-                                    <a href="admin_equipment.php?edit_id=<?= (int)$item['id'] ?>" class="btn small secondary">עריכה</a>
+                                    <a href="admin_equipment.php?edit_id=<?= (int)$item['id'] ?>" class="btn small secondary" title="עריכה">
+                                        ✏️
+                                    </a>
                                     <form method="post" action="admin_equipment.php" onsubmit="return confirm('למחוק את הפריט הזה?');">
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="id" value="<?= (int)$item['id'] ?>">
-                                        <button type="submit" class="btn small danger">מחיקה</button>
+                                        <button type="submit" class="btn small danger" title="מחיקה">🗑️</button>
                                     </form>
                                 </div>
                             </td>

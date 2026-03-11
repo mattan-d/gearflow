@@ -973,19 +973,21 @@ $me = current_user();
                         </td>
                         <td>
                             <div class="row-actions">
-                                <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="btn small secondary">עריכה</a>
+                                <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="btn small secondary" title="עריכה">
+                                    ✏️
+                                </a>
 
                                 <form method="post" action="admin_orders.php"
                                       onsubmit="return confirm('למחוק את ההזמנה הזו?');">
                                     <input type="hidden" name="action" value="delete">
                                     <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                    <button type="submit" class="btn small">מחיקה</button>
+                                    <button type="submit" class="btn small" title="מחיקה">🗑️</button>
                                 </form>
 
                                 <form method="post" action="admin_orders.php">
                                     <input type="hidden" name="action" value="duplicate">
                                     <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                    <button type="submit" class="btn small neutral">שכפול</button>
+                                    <button type="submit" class="btn small neutral" title="שכפול">⧉</button>
                                 </form>
 
                                 <form method="post" action="admin_orders.php">
