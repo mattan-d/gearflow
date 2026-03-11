@@ -121,50 +121,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($handle === false) {
                 $error = 'לא ניתן לקרוא את קובץ ה-CSV.';
             } else {
-                // נניח שורה ראשונה היא כותרות
-                $pdo->beginTransaction();
-                try {
-                    $insert = $pdo->prepare(
-                        'INSERT INTO equipment
-                         (name, code, description, category, location, quantity_total, quantity_available, status, created_at)
-                         VALUES
-                         (:name, :code, :description, :category, :location, :quantity_total, :quantity_available, :status, :created_at)'
-                    );
-                    $rowIndex = 0;
-                    while (($row = fgetcsv($handle)) !== false) {
-                        $rowIndex++;
-                        if ($rowIndex === 1) {
-                            // דלג על כותרת
-                            continue;
+                $header = fgetcsv($handle);
+                if ($header === false) {
+                    $error = 'קובץ CSV ריק.';
+                    fclose($handle);
+                } else {
+                    // מיפוי שם עמודה -> אינדקס כך שהסדר לא משנה
+                    $map = [];
+                    foreach ($header as $idx => $col) {
+                        $key = strtolower(trim((string)$col));
+                        if ($key !== '') {
+                            $map[$key] = $idx;
                         }
-                        if (count($row) < 6) {
-                            continue;
-                        }
-                        [$name, $code, $description, $category, $location, $status] = $row;
-                        $name = trim((string)$name);
-                        $code = trim((string)$code);
-                        if ($name === '' || $code === '') {
-                            continue;
-                        }
-                        $insert->execute([
-                            ':name'               => $name,
-                            ':code'               => $code,
-                            ':description'        => trim((string)$description),
-                            ':category'           => trim((string)$category),
-                            ':location'           => trim((string)$location),
-                            ':quantity_total'     => 1,
-                            ':quantity_available' => 1,
-                            ':status'             => trim((string)$status) !== '' ? trim((string)$status) : 'active',
-                            ':created_at'         => date('Y-m-d H:i:s'),
-                        ]);
                     }
-                    fclose($handle);
-                    $pdo->commit();
-                    $success = 'רשימת הציוד יובאה בהצלחה.';
-                } catch (Throwable $e) {
-                    fclose($handle);
-                    $pdo->rollBack();
-                    $error = 'אירעה שגיאה בעת יבוא הקובץ.';
+                    $pdo->beginTransaction();
+                    try {
+                        $insert = $pdo->prepare(
+                            'INSERT INTO equipment
+                             (name, code, description, category, location, quantity_total, quantity_available, status, created_at)
+                             VALUES
+                             (:name, :code, :description, :category, :location, :quantity_total, :quantity_available, :status, :created_at)'
+                        );
+                        while (($row = fgetcsv($handle)) !== false) {
+                            $get = function (string $key) use ($map, $row): string {
+                                if (!isset($map[$key])) {
+                                    return '';
+                                }
+                                $i = $map[$key];
+                                return isset($row[$i]) ? trim((string)$row[$i]) : '';
+                            };
+
+                            $name        = $get('name');
+                            $code        = $get('code');
+                            $description = $get('description');
+                            $category    = $get('category');
+                            $location    = $get('location');
+                            $status      = $get('status') ?: 'active';
+
+                            if ($name === '' || $code === '') {
+                                continue;
+                            }
+
+                            $insert->execute([
+                                ':name'               => $name,
+                                ':code'               => $code,
+                                ':description'        => $description,
+                                ':category'           => $category,
+                                ':location'           => $location,
+                                ':quantity_total'     => 1,
+                                ':quantity_available' => 1,
+                                ':status'             => $status,
+                                ':created_at'         => date('Y-m-d H:i:s'),
+                            ]);
+                        }
+                        fclose($handle);
+                        $pdo->commit();
+                        $success = 'רשימת הציוד יובאה בהצלחה.';
+                    } catch (Throwable $e) {
+                        fclose($handle);
+                        $pdo->rollBack();
+                        $error = 'אירעה שגיאה בעת יבוא הקובץ.';
+                    }
                 }
             }
         }
