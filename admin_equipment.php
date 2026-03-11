@@ -134,34 +134,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $map[$key] = $idx;
                         }
                     }
-                    $pdo->beginTransaction();
-                    try {
-                        $insert = $pdo->prepare(
-                            'INSERT INTO equipment
-                             (name, code, description, category, location, quantity_total, quantity_available, status, created_at)
-                             VALUES
-                             (:name, :code, :description, :category, :location, :quantity_total, :quantity_available, :status, :created_at)'
-                        );
-                        while (($row = fgetcsv($handle)) !== false) {
-                            $get = function (string $key) use ($map, $row): string {
-                                if (!isset($map[$key])) {
-                                    return '';
-                                }
-                                $i = $map[$key];
-                                return isset($row[$i]) ? trim((string)$row[$i]) : '';
-                            };
 
-                            $name        = $get('name');
-                            $code        = $get('code');
-                            $description = $get('description');
-                            $category    = $get('category');
-                            $location    = $get('location');
-                            $status      = $get('status') ?: 'active';
+                    $insert = $pdo->prepare(
+                        'INSERT INTO equipment
+                         (name, code, description, category, location, quantity_total, quantity_available, status, created_at)
+                         VALUES
+                         (:name, :code, :description, :category, :location, :quantity_total, :quantity_available, :status, :created_at)'
+                    );
 
-                            if ($name === '' || $code === '') {
-                                continue;
+                    $imported = 0;
+                    $skippedDuplicates = 0;
+
+                    while (($row = fgetcsv($handle)) !== false) {
+                        $get = function (string $key) use ($map, $row): string {
+                            if (!isset($map[$key])) {
+                                return '';
                             }
+                            $i = $map[$key];
+                            return isset($row[$i]) ? trim((string)$row[$i]) : '';
+                        };
 
+                        $name        = $get('name');
+                        $code        = $get('code');
+                        $description = $get('description');
+                        $category    = $get('category');
+                        $location    = $get('location');
+                        $status      = $get('status') ?: 'active';
+
+                        if ($name === '' || $code === '') {
+                            continue;
+                        }
+
+                        try {
                             $insert->execute([
                                 ':name'               => $name,
                                 ':code'               => $code,
@@ -173,14 +177,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ':status'             => $status,
                                 ':created_at'         => date('Y-m-d H:i:s'),
                             ]);
+                            $imported++;
+                        } catch (PDOException $e) {
+                            // If code already exists (UNIQUE constraint), skip this row silently
+                            if (str_contains($e->getMessage(), 'UNIQUE') && str_contains($e->getMessage(), 'code')) {
+                                $skippedDuplicates++;
+                                continue;
+                            }
+                            $error = 'אירעה שגיאה בעת יבוא הקובץ.';
+                            break;
                         }
-                        fclose($handle);
-                        $pdo->commit();
-                        $success = 'רשימת הציוד יובאה בהצלחה.';
-                    } catch (Throwable $e) {
-                        fclose($handle);
-                        $pdo->rollBack();
-                        $error = 'אירעה שגיאה בעת יבוא הקובץ.';
+                    }
+
+                    fclose($handle);
+
+                    if ($error === '') {
+                        if ($skippedDuplicates > 0) {
+                            $success = "היבוא הושלם. נוספו {$imported} פריטים, {$skippedDuplicates} קודים קיימים דולגו.";
+                        } else {
+                            $success = "היבוא הושלם. נוספו {$imported} פריטים.";
+                        }
                     }
                 }
             }
