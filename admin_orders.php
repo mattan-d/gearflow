@@ -760,15 +760,16 @@ $me = current_user();
                         </div>
 
                         <!-- רשימת פריטי הציוד שנבחרו (מתעדכנת אחרי לחיצה על "הוסף") -->
-                        <div id="selected_equipment_list" style="margin: 0.5rem 0;"></div>
-                        <?php if ($editingOrder): ?>
-                        <!-- במצב עריכה: פריט הציוד בהזמנה מעל שם השואל, עם אייקון מחיקה -->
-                        <div id="edit_selected_equipment_list" style="margin: 0.5rem 0;">
+                        <div id="selected_equipment_list" style="margin: 0.5rem 0;">
+                            <?php if ($editingOrder): ?>
                             <div class="selected-equipment-row" data-equipment-id="<?= (int)$editingOrder['equipment_id'] ?>" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
                                 <span><?= htmlspecialchars($editingOrder['equipment_name'] ?? '', ENT_QUOTES, 'UTF-8') ?><?= ($editingOrder['equipment_code'] ?? '') ? ' (' . htmlspecialchars($editingOrder['equipment_code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
-                                <button type="button" class="edit-equipment-trash" style="border: none; background: transparent; cursor: pointer; font-size: 0.85rem;" title="הסר ציוד">🗑️</button>
+                                <button type="button" class="equipment-list-trash" style="border: none; background: transparent; cursor: pointer; font-size: 0.85rem;" title="הסר ציוד">🗑️</button>
                             </div>
+                            <?php endif; ?>
                         </div>
+                        <?php if ($editingOrder): ?>
+                        <input type="hidden" name="equipment_id" id="equipment_id_hidden" value="<?= (int)$editingOrder['equipment_id'] ?>">
                         <?php endif; ?>
 
                         <label for="borrower_search">שם שואל</label>
@@ -799,70 +800,56 @@ $me = current_user();
                         </button>
                     </div>
 
-                    <!-- עמודת ציוד בלבד (שמאל ב-RTL) -->
+                    <!-- עמודת ציוד (זהה בהזמנה חדשה ובעריכה) -->
                     <div>
-                        <?php if ($editingOrder): ?>
-                            <!-- במצב עריכה: בחירה בודדת מציוד -->
-                            <label for="equipment_id">ציוד</label>
-                            <select id="equipment_id" name="equipment_id">
-                                <option value="">בחר ציוד...</option>
-                                <?php foreach ($equipmentOptions as $item): ?>
-                                    <option value="<?= (int)$item['id'] ?>"
-                                        <?= (int)$editingOrder['equipment_id'] === (int)$item['id'] ? 'selected' : '' ?>>
-                                        <?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>
-                                        (<?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?>)
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        <?php else: ?>
-                            <!-- במצב יצירה: בחירה מרובה מתוך טבלת ציוד לפי קטגוריות -->
-                            <label for="equipment_category_filter">קטגוריית ציוד</label>
-                            <select id="equipment_category_filter">
-                                <option value="all">כל הקטגוריות</option>
-                                <?php foreach ($equipmentCategories as $cat): ?>
-                                    <option value="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>">
-                                        <?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+                        <label for="equipment_category_filter">קטגוריית ציוד</label>
+                        <select id="equipment_category_filter">
+                            <option value="all">כל הקטגוריות</option>
+                            <?php foreach ($equipmentCategories as $cat): ?>
+                                <option value="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>">
+                                    <?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
 
-                            <table>
-                                <thead>
-                                <tr>
-                                    <th style="width:40px;">בחר</th>
-                                    <th>שם הציוד</th>
-                                    <th>קוד</th>
-                                    <th>קטגוריה</th>
+                        <table>
+                            <thead>
+                            <tr>
+                                <th style="width:40px;">בחר</th>
+                                <th>שם הציוד</th>
+                                <th>קוד</th>
+                                <th>קטגוריה</th>
+                            </tr>
+                            </thead>
+                            <tbody id="equipment_table_body">
+                            <?php foreach ($equipmentOptions as $item): ?>
+                                <?php
+                                $cat = trim((string)($item['category'] ?? ''));
+                                if ($cat === '') {
+                                    $cat = 'ללא קטגוריה';
+                                }
+                                $isChecked = $editingOrder && (int)$editingOrder['equipment_id'] === (int)$item['id'];
+                                ?>
+                                <tr data-category="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>">
+                                    <td>
+                                        <input type="checkbox"
+                                               name="equipment_ids[]"
+                                               value="<?= (int)$item['id'] ?>"
+                                               <?= $isChecked ? 'checked' : '' ?>
+                                               data-name="<?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>"
+                                               data-code="<?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?>">
+                                    </td>
+                                    <td><?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td class="muted-small"><?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td class="muted-small"><?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
-                                </thead>
-                                <tbody id="equipment_table_body">
-                                <?php foreach ($equipmentOptions as $item): ?>
-                                    <?php
-                                    $cat = trim((string)($item['category'] ?? ''));
-                                    if ($cat === '') {
-                                        $cat = 'ללא קטגוריה';
-                                    }
-                                    ?>
-                                    <tr data-category="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>">
-                                        <td>
-                                            <input type="checkbox"
-                                                   name="equipment_ids[]"
-                                                   value="<?= (int)$item['id'] ?>"
-                                                   data-name="<?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>"
-                                                   data-code="<?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?>">
-                                        </td>
-                                        <td><?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?></td>
-                                        <td class="muted-small"><?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?></td>
-                                        <td class="muted-small"><?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?></td>
-                                    </tr>
-                                <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                            <button type="button" class="btn secondary" id="add_equipment_btn" style="margin-top:0.5rem;">
-                                הוסף
-                            </button>
-                            <div class="muted-small" id="selected_equipment_summary" style="margin-top:0.3rem;"></div>
-                        <?php endif; ?>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                        <button type="button" class="btn secondary" id="add_equipment_btn" style="margin-top:0.5rem;">
+                            הוסף
+                        </button>
+                        <div class="muted-small" id="selected_equipment_summary" style="margin-top:0.3rem;"></div>
                     </div>
                 </div>
 
@@ -1000,8 +987,9 @@ $me = current_user();
 
     const startInput = document.getElementById('start_date');
     const endInput = document.getElementById('end_date');
-    const equipmentSelect = document.getElementById('equipment_id'); // קיים רק במצב עריכה
-    const equipmentCheckboxes = Array.from(document.querySelectorAll('input[name="equipment_ids[]"]')); // מצב יצירה
+    const equipmentSelect = document.getElementById('equipment_id'); // לא בשימוש – אזור ציוד מאוחד
+    const equipmentIdHidden = document.getElementById('equipment_id_hidden'); // במצב עריכה
+    const equipmentCheckboxes = Array.from(document.querySelectorAll('input[name="equipment_ids[]"]'));
     const categoryFilter = document.getElementById('equipment_category_filter');
     const equipmentTableBody = document.getElementById('equipment_table_body');
     const addEquipmentBtn = document.getElementById('add_equipment_btn');
@@ -1082,9 +1070,12 @@ $me = current_user();
         if (selectedEquipmentList) {
             selectedEquipmentList.innerHTML = '';
             checked.forEach(function (cb) {
+                const id = cb.value || '';
                 const name = cb.getAttribute('data-name') || '';
                 const code = cb.getAttribute('data-code') || '';
                 const row = document.createElement('div');
+                row.className = 'selected-equipment-row';
+                row.setAttribute('data-equipment-id', id);
                 row.style.display = 'flex';
                 row.style.alignItems = 'center';
                 row.style.justifyContent = 'space-between';
@@ -1095,21 +1086,22 @@ $me = current_user();
 
                 const removeBtn = document.createElement('button');
                 removeBtn.type = 'button';
+                removeBtn.className = 'equipment-list-trash';
                 removeBtn.textContent = '🗑️';
                 removeBtn.style.border = 'none';
                 removeBtn.style.background = 'transparent';
                 removeBtn.style.cursor = 'pointer';
                 removeBtn.style.fontSize = '0.85rem';
-                removeBtn.addEventListener('click', function () {
-                    cb.checked = false;
-                    updateEquipmentState();
-                    updateSelectedEquipmentSummary();
-                });
+                removeBtn.title = 'הסר ציוד';
 
                 row.appendChild(label);
                 row.appendChild(removeBtn);
                 selectedEquipmentList.appendChild(row);
             });
+            if (equipmentIdHidden) {
+                const firstRow = selectedEquipmentList.querySelector('.selected-equipment-row');
+                equipmentIdHidden.value = firstRow ? (firstRow.getAttribute('data-equipment-id') || '') : '';
+            }
         }
     }
 
@@ -1118,12 +1110,6 @@ $me = current_user();
         const hasEnd = !!endInput.value;
         const datesReady = hasStart && hasEnd;
 
-        // מצב עריכה – select בודד
-        if (equipmentSelect) {
-            equipmentSelect.disabled = !datesReady;
-        }
-
-        // מצב יצירה – צ׳קבוקסים מרובים + הצגת/הסתרת טבלה
         equipmentCheckboxes.forEach(function (cb) {
             cb.disabled = !datesReady;
         });
@@ -1134,9 +1120,9 @@ $me = current_user();
             });
         }
 
-        const hasEquipSelect = equipmentSelect ? !!equipmentSelect.value : false;
+        const hasEquipFromList = equipmentIdHidden ? !!equipmentIdHidden.value : false;
         const hasEquipCheckbox = anyEquipmentChecked();
-        const hasEquip = hasEquipSelect || hasEquipCheckbox;
+        const hasEquip = hasEquipFromList || hasEquipCheckbox;
 
         if (submitBtn) {
             submitBtn.disabled = !(datesReady && hasEquip);
@@ -1266,12 +1252,24 @@ $me = current_user();
         }
     }
 
-    // שינוי ציוד
-    if (equipmentSelect) {
-        equipmentSelect.addEventListener('change', function () {
+    // לחיצה על פח אשפה ברשימת הציוד (הזמנה חדשה ועריכה)
+    if (selectedEquipmentList) {
+        selectedEquipmentList.addEventListener('click', function (e) {
+            if (!e.target || !e.target.classList || !e.target.classList.contains('equipment-list-trash')) {
+                return;
+            }
+            const row = e.target.closest('.selected-equipment-row');
+            if (!row) return;
+            const id = row.getAttribute('data-equipment-id');
+            if (id) {
+                const cb = equipmentCheckboxes.find(function (input) { return input.value === id; });
+                if (cb) cb.checked = false;
+            }
+            updateSelectedEquipmentSummary();
             updateEquipmentState();
         });
     }
+
     equipmentCheckboxes.forEach(function (cb) {
         cb.addEventListener('change', function () {
             // רק מעדכנים את מצב הכפתור; הרשימה המוצגת מתעדכנת אחרי לחיצה על "הוסף"
