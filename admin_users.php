@@ -9,6 +9,10 @@ require_admin();
 $pdo = get_db();
 $error = '';
 $success = '';
+if (isset($_SESSION['admin_users_success'])) {
+    $success = $_SESSION['admin_users_success'];
+    unset($_SESSION['admin_users_success']);
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
@@ -39,7 +43,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':warehouse'     => $warehouse,
                     ':created_at'   => date('Y-m-d H:i:s'),
                 ]);
-                $success = 'המשתמש נוצר בהצלחה.';
+                $_SESSION['admin_users_success'] = 'המשתמש נוצר בהצלחה.';
+                header('Location: admin_users.php');
+                exit;
             } catch (PDOException $e) {
                 if (str_contains($e->getMessage(), 'UNIQUE')) {
                     $error = 'שם המשתמש כבר קיים.';
@@ -131,7 +137,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':id'         => $id,
                     ]);
                 }
-                $success = 'פרטי המשתמש עודכנו בהצלחה.';
+                $_SESSION['admin_users_success'] = 'פרטי המשתמש עודכנו בהצלחה.';
+                header('Location: admin_users.php');
+                exit;
             } catch (PDOException $e) {
                 if (str_contains($e->getMessage(), 'UNIQUE')) {
                     $error = 'שם המשתמש כבר קיים.';
@@ -438,6 +446,13 @@ if (isset($_GET['edit_id'])) {
     </div>
 </header>
 <main>
+    <?php if ($success !== ''): ?>
+        <div class="flash success" style="margin-bottom: 1rem;"><?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?></div>
+    <?php endif; ?>
+    <?php if ($error !== ''): ?>
+        <div class="flash error" style="margin-bottom: 1rem;"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
+    <?php endif; ?>
+
     <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
         <button type="button" class="btn" id="open_user_modal_btn">משתמש חדש</button>
     </div>
@@ -474,7 +489,7 @@ if (isset($_GET['edit_id'])) {
                                value="<?= $editingUser ? htmlspecialchars($editingUser['username'], ENT_QUOTES, 'UTF-8') : '' ?>">
 
                         <label for="modal_password">סיסמה<?= $editingUser ? ' (השאר ריק כדי לא לשנות)' : '' ?></label>
-                        <input type="password" id="modal_password" name="password" <?= $editingUser ? '' : 'required' ?>>
+                        <input type="password" id="modal_password" name="password" autocomplete="<?= $editingUser ? 'new-password' : 'off' ?>" <?= $editingUser ? '' : 'required' ?>>
                     </div>
                     <div>
                         <label for="modal_role">תפקיד</label>
