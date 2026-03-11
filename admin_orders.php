@@ -121,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id     = (int)($_POST['id'] ?? 0);
         $status = $_POST['status'] ?? 'pending';
 
-        if ($id > 0 && in_array($status, ['pending', 'approved', 'rejected', 'returned'], true)) {
+        if ($id > 0 && in_array($status, ['pending', 'approved', 'on_loan', 'rejected', 'returned'], true)) {
             $stmt = $pdo->prepare(
                 'UPDATE orders
                  SET status = :status,
@@ -200,7 +200,13 @@ sort($equipmentCategories, SORT_NATURAL | SORT_FLAG_CASE);
 // טאבים וסינון
 $today     = date('Y-m-d');
 $tab       = $_GET['tab'] ?? 'today';
-$validTabs = ['today', 'pending', 'future', 'active', 'history'];
+// today    – הזמנות שיום ההשאלה/ההחזרה שלהן הוא היום (מאושרות / בהשאלה)
+// pending  – הזמנות ממתינות לאישור אדמין
+// future   – הזמנות מאושרות לעתיד (לפני יום ההשאלה)
+// active   – בהשאלה (status = on_loan) ועדיין לא עבר מועד ההחזרה
+// not_returned – בהשאלה (status = on_loan) שעבר מועד ההחזרה
+// history  – הזמנות שהסתיימו (status = returned)
+$validTabs = ['today', 'pending', 'future', 'active', 'not_returned', 'history'];
 
 if (!in_array($tab, $validTabs, true)) {
     $tab = 'today';
@@ -226,24 +232,41 @@ $params = [];
 
 switch ($tab) {
     case 'pending':
+        // בקשות שממתינות לאישור אדמין
         $where = " WHERE o.status = 'pending'";
         break;
+
     case 'future':
-        $where = " WHERE o.status = 'approved' AND DATE(o.start_date) > :today";
-        $params[':today'] = $today;
-        break;
-    case 'active':
+        // בקשות מאושרות שהן לעתיד (לפני יום ההשאלה)
         $where = " WHERE o.status = 'approved'
-                   AND DATE(o.start_date) <= :today
-                   AND DATE(o.end_date)   >= :today";
+                   AND DATE(o.start_date) > :today";
         $params[':today'] = $today;
         break;
-    case 'history':
-        $where = " WHERE o.status IN ('returned', 'rejected')";
+
+    case 'active':
+        // בקשות שנמצאות כרגע בסטטוס 'בהשאלה' ועדיין לא עבר מועד ההחזרה
+        $where = " WHERE o.status = 'on_loan'
+                   AND DATE(o.end_date) >= :today";
+        $params[':today'] = $today;
         break;
+
+    case 'not_returned':
+        // בקשות שבסטטוס 'בהשאלה' אך עבר מועד ההחזרה – לא הוחזר
+        $where = " WHERE o.status = 'on_loan'
+                   AND DATE(o.end_date) < :today";
+        $params[':today'] = $today;
+        break;
+
+    case 'history':
+        // בקשות שהסתיימו – הוחזר (עבר)
+        $where = " WHERE o.status = 'returned'";
+        break;
+
     case 'today':
     default:
-        $where = " WHERE DATE(o.start_date) <= :today
+        // היום – כל בקשה מאושרת / בהשאלה שהיום נמצא בטווח ההשאלה
+        $where = " WHERE o.status IN ('approved', 'on_loan')
+                   AND DATE(o.start_date) <= :today
                    AND DATE(o.end_date)   >= :today";
         $params[':today'] = $today;
         break;
@@ -869,9 +892,10 @@ $me = current_user();
         <div class="tabs">
             <a href="admin_orders.php?tab=today"   class="<?= $tab === 'today'   ? 'active' : '' ?>">היום</a>
             <a href="admin_orders.php?tab=pending" class="<?= $tab === 'pending' ? 'active' : '' ?>">ממתין</a>
-            <a href="admin_orders.php?tab=future"  class="<?= $tab === 'future'  ? 'active' : '' ?>">עתידי</a>
-            <a href="admin_orders.php?tab=active"  class="<?= $tab === 'active'  ? 'active' : '' ?>">בהשאלה</a>
-            <a href="admin_orders.php?tab=history" class="<?= $tab === 'history' ? 'active' : '' ?>">היסטוריה</a>
+            <a href="admin_orders.php?tab=future"       class="<?= $tab === 'future'       ? 'active' : '' ?>">עתידי</a>
+            <a href="admin_orders.php?tab=active"       class="<?= $tab === 'active'       ? 'active' : '' ?>">בהשאלה</a>
+            <a href="admin_orders.php?tab=not_returned" class="<?= $tab === 'not_returned' ? 'active' : '' ?>">לא הוחזר</a>
+            <a href="admin_orders.php?tab=history"      class="<?= $tab === 'history'      ? 'active' : '' ?>">היסטוריה</a>
         </div>
         <?php if (count($orders) === 0): ?>
             <p class="muted-small">עדיין לא נוצרו הזמנות במערכת לטאב זה.</p>
@@ -913,15 +937,19 @@ $me = current_user();
                             <?php
                             $statusClass = 'status-pending';
                             $statusLabel = 'ממתין';
+
                             if ($order['status'] === 'approved') {
                                 $statusClass = 'status-approved';
                                 $statusLabel = 'מאושר';
+                            } elseif ($order['status'] === 'on_loan') {
+                                $statusClass = 'status-approved';
+                                $statusLabel = 'בהשאלה';
+                            } elseif ($order['status'] === 'returned') {
+                                $statusClass = 'status-returned';
+                                $statusLabel = 'עבר';
                             } elseif ($order['status'] === 'rejected') {
                                 $statusClass = 'status-rejected';
                                 $statusLabel = 'נדחה';
-                            } elseif ($order['status'] === 'returned') {
-                                $statusClass = 'status-returned';
-                                $statusLabel = 'הוחזר';
                             }
                             ?>
                             <span class="badge <?= $statusClass ?>"><?= $statusLabel ?></span>
@@ -964,10 +992,11 @@ $me = current_user();
                                     <input type="hidden" name="action" value="update_status">
                                     <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
                                     <select name="status" class="muted-small">
-                                        <option value="pending"  <?= $order['status'] === 'pending'  ? 'selected' : '' ?>>ממתין</option>
-                                        <option value="approved" <?= $order['status'] === 'approved' ? 'selected' : '' ?>>מאושר</option>
-                                        <option value="rejected" <?= $order['status'] === 'rejected' ? 'selected' : '' ?>>נדחה</option>
-                                        <option value="returned" <?= $order['status'] === 'returned' ? 'selected' : '' ?>>הוחזר</option>
+                                        <option value="pending"   <?= $order['status'] === 'pending'   ? 'selected' : '' ?>>ממתין</option>
+                                        <option value="approved"  <?= $order['status'] === 'approved'  ? 'selected' : '' ?>>מאושר</option>
+                                        <option value="on_loan"   <?= $order['status'] === 'on_loan'   ? 'selected' : '' ?>>בהשאלה</option>
+                                        <option value="returned"  <?= $order['status'] === 'returned'  ? 'selected' : '' ?>>עבר</option>
+                                        <option value="rejected"  <?= $order['status'] === 'rejected'  ? 'selected' : '' ?>>נדחה</option>
                                     </select>
                                     <button type="submit" class="btn small neutral">עדכון</button>
                                 </form>
