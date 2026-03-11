@@ -659,6 +659,7 @@ $me = current_user();
                     <tr>
                         <th>שם הציוד</th>
                         <th>מספר סידורי</th>
+                        <th>תמונה</th>
                         <th>סטטוס</th>
                         <th>הערות</th>
                         <th>פעולות</th>
@@ -669,6 +670,15 @@ $me = current_user();
                         <tr>
                             <td><?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?></td>
+                            <td>
+                                <?php if (!empty($item['picture'])): ?>
+                                    <img src="<?= htmlspecialchars($item['picture'], ENT_QUOTES, 'UTF-8') ?>"
+                                         alt="<?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>"
+                                         style="max-width: 60px; max-height: 60px; border-radius: 6px; object-fit: cover;">
+                                <?php else: ?>
+                                    <span class="muted-small">ללא תמונה</span>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <?php
                                 $statusClass = 'status-active';
