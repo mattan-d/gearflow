@@ -25,22 +25,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     if ($action === 'save') {
-        $id                 = isset($_POST['id']) ? (int)$_POST['id'] : 0;
-        $name               = trim($_POST['name'] ?? '');
-        $code               = trim($_POST['code'] ?? '');
-        $description        = trim($_POST['description'] ?? '');
-        $category           = trim($_POST['category'] ?? '');
-        $location           = trim($_POST['location'] ?? '');
-        $quantityTotal      = (int)($_POST['quantity_total'] ?? 0);
-        $quantityAvailable  = (int)($_POST['quantity_available'] ?? $quantityTotal);
-        $status             = $_POST['status'] ?? 'active';
+        $id           = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        $name         = trim($_POST['name'] ?? '');
+        $code         = trim($_POST['code'] ?? '');
+        $description  = trim($_POST['description'] ?? '');
+        $category     = trim($_POST['category'] ?? '');
+        $location     = trim($_POST['location'] ?? '');
+        $status       = $_POST['status'] ?? 'active';
+        $picture      = trim($_POST['picture'] ?? '');
+
+        // quantities are now internal only – keep previous values if editing, or default to 1
+        if ($id > 0 && $editingEquipment !== null) {
+            $quantityTotal     = (int)($editingEquipment['quantity_total'] ?? 1);
+            $quantityAvailable = (int)($editingEquipment['quantity_available'] ?? 1);
+        } else {
+            $quantityTotal     = 1;
+            $quantityAvailable = 1;
+        }
 
         if ($name === '' || $code === '') {
             $error = 'יש למלא שם ציוד וקוד זיהוי.';
-        } elseif ($quantityTotal < 0 || $quantityAvailable < 0) {
-            $error = 'כמות לא יכולה להיות שלילית.';
-        } elseif ($quantityAvailable > $quantityTotal) {
-            $error = 'כמות זמינה לא יכולה להיות גדולה מסך הכל.';
         } else {
             try {
                 if ($id > 0) {
@@ -54,28 +58,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                              quantity_total = :quantity_total,
                              quantity_available = :quantity_available,
                              status = :status,
+                             picture = :picture,
                              updated_at = :updated_at
                          WHERE id = :id'
                     );
                     $stmt->execute([
                         ':name'              => $name,
                         ':code'              => $code,
-                        ':description'       => $description,
-                        ':category'          => $category,
-                        ':location'          => $location,
-                        ':quantity_total'    => $quantityTotal,
-                        ':quantity_available'=> $quantityAvailable,
-                        ':status'            => $status,
-                        ':updated_at'        => date('Y-m-d H:i:s'),
-                        ':id'                => $id,
+                        ':description'        => $description,
+                        ':category'           => $category,
+                        ':location'           => $location,
+                        ':quantity_total'     => $quantityTotal,
+                        ':quantity_available' => $quantityAvailable,
+                        ':status'             => $status,
+                        ':picture'            => $picture,
+                        ':updated_at'         => date('Y-m-d H:i:s'),
+                        ':id'                 => $id,
                     ]);
                     $success = 'הציוד עודכן בהצלחה.';
                 } else {
                     $stmt = $pdo->prepare(
                         'INSERT INTO equipment
-                         (name, code, description, category, location, quantity_total, quantity_available, status, created_at)
+                         (name, code, description, category, location, quantity_total, quantity_available, status, picture, created_at)
                          VALUES
-                         (:name, :code, :description, :category, :location, :quantity_total, :quantity_available, :status, :created_at)'
+                         (:name, :code, :description, :category, :location, :quantity_total, :quantity_available, :status, :picture, :created_at)'
                     );
                     $stmt->execute([
                         ':name'               => $name,
@@ -86,6 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':quantity_total'     => $quantityTotal,
                         ':quantity_available' => $quantityAvailable,
                         ':status'             => $status,
+                        ':picture'            => $picture,
                         ':created_at'         => date('Y-m-d H:i:s'),
                     ]);
                     $success = 'הציוד נוסף בהצלחה.';
