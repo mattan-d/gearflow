@@ -761,6 +761,15 @@ $me = current_user();
 
                         <!-- רשימת פריטי הציוד שנבחרו (מתעדכנת אחרי לחיצה על "הוסף") -->
                         <div id="selected_equipment_list" style="margin: 0.5rem 0;"></div>
+                        <?php if ($editingOrder): ?>
+                        <!-- במצב עריכה: פריט הציוד בהזמנה מעל שם השואל, עם אייקון מחיקה -->
+                        <div id="edit_selected_equipment_list" style="margin: 0.5rem 0;">
+                            <div class="selected-equipment-row" data-equipment-id="<?= (int)$editingOrder['equipment_id'] ?>" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
+                                <span><?= htmlspecialchars($editingOrder['equipment_name'] ?? '', ENT_QUOTES, 'UTF-8') ?><?= ($editingOrder['equipment_code'] ?? '') ? ' (' . htmlspecialchars($editingOrder['equipment_code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
+                                <button type="button" class="edit-equipment-trash" style="border: none; background: transparent; cursor: pointer; font-size: 0.85rem;" title="הסר ציוד">🗑️</button>
+                            </div>
+                        </div>
+                        <?php endif; ?>
 
                         <label for="borrower_search">שם שואל</label>
                         <input
