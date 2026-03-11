@@ -26,3 +26,12 @@ function require_admin(): void
     }
 }
 
+function require_admin_or_warehouse(): void
+{
+    $user = current_user();
+    if ($user === null || !in_array($user['role'], ['admin', 'warehouse_manager'], true)) {
+        header('Location: login.php');
+        exit;
+    }
+}
+

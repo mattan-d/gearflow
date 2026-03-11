@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 
-require_admin();
+require_admin_or_warehouse();
 
 $pdo = get_db();
 $error = '';

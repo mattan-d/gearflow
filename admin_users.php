@@ -193,6 +193,10 @@ $users = $usersStmt->fetchAll();
             background: #ecfdf3;
             color: #166534;
         }
+        .badge.warehouse {
+            background: #e0f2fe;
+            color: #075985;
+        }
         .badge.inactive {
             background: #fef2f2;
             color: #b91c1c;
@@ -283,6 +287,7 @@ $users = $usersStmt->fetchAll();
                     <label for="role">תפקיד</label>
                     <select id="role" name="role">
                         <option value="student">סטודנט</option>
+                        <option value="warehouse_manager">מנהל מחסן</option>
                         <option value="admin">אדמין</option>
                     </select>
                     <p class="muted">
@@ -315,6 +320,8 @@ $users = $usersStmt->fetchAll();
                     <td>
                         <?php if ($user['role'] === 'admin'): ?>
                             <span class="badge admin">אדמין</span>
+                        <?php elseif ($user['role'] === 'warehouse_manager'): ?>
+                            <span class="badge warehouse">מנהל מחסן</span>
                         <?php else: ?>
                             <span class="badge student">סטודנט</span>
                         <?php endif; ?>
