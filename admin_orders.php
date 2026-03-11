@@ -331,6 +331,9 @@ $me = current_user();
             background: #f3f4f6;
             color: #111827;
         }
+        #submit_order_btn {
+            margin-top: 10px;
+        }
         .flash {
             padding: 0.6rem 0.8rem;
             border-radius: 8px;
@@ -685,7 +688,7 @@ $me = current_user();
                     </div>
                 </div>
 
-                <button type="submit" class="btn" id="submit_order_btn" <?= $editingOrder ? '' : 'disabled' ?>>
+                <button type="submit" class="btn" id="submit_order_btn" disabled>
                     <?= $editingOrder ? 'שמירת שינויים' : 'הזמנה' ?>
                 </button>
                 <?php if ($editingOrder): ?>
@@ -865,13 +868,10 @@ $me = current_user();
             return true;
         }
 
-        // Friday (5) and Saturday (6)
+        // ימי מנוחה: שישי (5) ושבת (6) בלבד
+        // getDay(): 0=ראשון, 1=שני, 2=שלישי, 3=רביעי, 4=חמישי, 5=שישי, 6=שבת
         const day = date.getDay();
-        if (day === 5 || day === 6) {
-            return true;
-        }
-
-        return false;
+        return day === 5 || day === 6;
     }
 
     function updateEquipmentState() {
