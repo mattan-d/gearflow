@@ -759,6 +759,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var firstNameInput = document.getElementById('modal_first_name');
     var lastNameInput = document.getElementById('modal_last_name');
     var warehouseSelect = document.getElementById('modal_warehouse');
+    var importFileInput = document.getElementById('import_file');
 
     function openForCreate() {
         if (!modal) return;
@@ -795,6 +796,15 @@ document.addEventListener('DOMContentLoaded', function () {
     if (cancelBtn) {
         cancelBtn.addEventListener('click', function () {
             closeModal();
+        });
+    }
+
+    // יבוא CSV – שליחת הטופס מיד לאחר בחירת קובץ
+    if (importFileInput && importFileInput.form) {
+        importFileInput.addEventListener('change', function () {
+            if (importFileInput.files && importFileInput.files.length > 0) {
+                importFileInput.form.submit();
+            }
         });
     }
 });
