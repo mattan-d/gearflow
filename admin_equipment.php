@@ -802,7 +802,13 @@ $me = current_user();
                     <tbody>
                     <?php foreach ($items as $item): ?>
                         <tr>
-                            <td><?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                            <td>
+                                <a href="admin_equipment_components.php?equipment_id=<?= (int)$item['id'] ?>"
+                                   class="muted-small"
+                                   title="הצגת רכיבי הפריט">
+                                    <?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>
+                                </a>
+                            </td>
                             <td><?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?></td>
                             <td>
                                 <?php if (!empty($item['picture'])): ?>

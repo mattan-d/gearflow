@@ -161,6 +161,18 @@ function initialize_database(PDO $pdo): void
         )
     ");
 
+    // טבלת רכיבי ציוד (Item components)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS equipment_components (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            equipment_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            quantity INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )
+    ");
+
     // Ensure default admin user exists: admin / admin
     $stmt = $pdo->prepare('SELECT COUNT(*) AS cnt FROM users WHERE username = :username');
     $stmt->execute([':username' => 'admin']);
