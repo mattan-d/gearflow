@@ -1337,6 +1337,12 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <?php
                         $showRecurringBlock = !$editingOrder && ($role === 'admin' || $role === 'warehouse_manager');
                         if ($showRecurringBlock): ?>
+                        <div class="recurring-toggle-row" style="margin-bottom: 0.35rem;">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="regular_toggle" checked autocomplete="off">
+                                <span>הזמנה רגילה</span>
+                            </label>
+                        </div>
                         <div class="recurring-toggle-row" style="margin-bottom: 0.75rem;">
                             <label class="toggle-label">
                                 <input type="checkbox" id="recurring_toggle" name="recurring_enabled" value="1" autocomplete="off">
@@ -1961,6 +1967,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
     let currentTimeTarget = null; // 'start' | 'end' | null
 
+    const regularToggle = document.getElementById('regular_toggle');
     const recurringToggle = document.getElementById('recurring_toggle');
     const recurringSection = document.getElementById('recurring_section');
     const normalDateSection = document.getElementById('normal_date_section');
@@ -2454,18 +2461,44 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     }
 
     // הזמנה מחזורית: טוגל, רדיו, לוחות שנה מיני
+    function syncOrderModeVisibility() {
+        const recurringOn = recurringToggle && recurringToggle.checked;
+        const regularOn = regularToggle && regularToggle.checked;
+
+        if (recurringSection && normalDateSection) {
+            if (recurringOn && !regularOn) {
+                recurringSection.style.display = 'block';
+                normalDateSection.style.display = 'none';
+            } else if (regularOn && !recurringOn) {
+                recurringSection.style.display = $showRecurringBlock ? 'none' : 'none';
+                normalDateSection.style.display = 'block';
+            } else {
+                // אף אחד לא מסומן – מציגים את שתי האפשרויות (כותרות) אבל מסתירים את התוכן עד בחירה
+                recurringSection.style.display = 'none';
+                normalDateSection.style.display = 'none';
+            }
+        }
+        updateEquipmentState();
+    }
+
     if (recurringToggle && recurringSection && normalDateSection) {
         recurringToggle.addEventListener('change', function () {
-            const on = recurringToggle.checked;
-            recurringSection.style.display = on ? 'block' : 'none';
-            normalDateSection.style.display = on ? 'none' : 'block';
-            if (!on) {
+            if (recurringToggle.checked && regularToggle) {
+                regularToggle.checked = false;
                 startInput.value = '';
                 endInput.value = '';
                 if (startTimeInput) startTimeInput.value = '';
                 if (endTimeInput) endTimeInput.value = '';
             }
-            updateEquipmentState();
+            syncOrderModeVisibility();
+        });
+    }
+    if (regularToggle && recurringSection && normalDateSection) {
+        regularToggle.addEventListener('change', function () {
+            if (regularToggle.checked && recurringToggle) {
+                recurringToggle.checked = false;
+            }
+            syncOrderModeVisibility();
         });
     }
     const recurringEndTypeRadios = document.querySelectorAll('input[name="recurring_end_type"]');
