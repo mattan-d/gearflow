@@ -166,15 +166,15 @@ $me = current_user();
                     <a href="admin_users.php">ניהול משתמשים</a>
                     <a href="admin_orders.php">ניהול הזמנות</a>
                     <a href="admin_equipment.php">ניהול ציוד</a>
-                    <div class="main-nav-item-wrapper">
-                        <a href="#">נהלים</a>
-                        <div class="main-nav-sub">
-                            <a href="warehouse_rules.php">נהלי מחסן</a>
-                        </div>
-                    </div>
                 <?php else: ?>
                     <a href="admin_orders.php">ניהול הזמנות</a>
                 <?php endif; ?>
+                <div class="main-nav-item-wrapper">
+                    <a href="#">נהלים</a>
+                    <div class="main-nav-sub">
+                        <a href="warehouse_rules.php">נהלי מחסן</a>
+                    </div>
+                </div>
             </div>
         </nav>
     </div>
