@@ -1339,7 +1339,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         if ($showRecurringBlock): ?>
                         <div class="recurring-toggle-row" id="regular_toggle_row" style="margin-bottom: 0.35rem;">
                             <label class="toggle-label">
-                                <input type="checkbox" id="regular_toggle" checked autocomplete="off">
+                                <input type="checkbox" id="regular_toggle" autocomplete="off">
                                 <span>הזמנה רגילה</span>
                             </label>
                         </div>
