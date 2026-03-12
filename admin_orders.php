@@ -1832,8 +1832,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             if (end && end < date) {
                 endInput.value = '';
             }
-            // אחרי בחירת תאריך התחלה נעבור אוטומטית למצב \"תאריך החזרה\"
-            setMode('end');
+            // לא עוברים אוטומטית למצב "תאריך החזרה" – נעבור רק אחרי בחירת שעת השאלה
         } else {
             const start = parseDate(startInput.value);
             if (!start) {
@@ -1884,9 +1883,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             btn.addEventListener('click', function () {
                 if (isStart && startTimeInput) {
                     startTimeInput.value = label;
+                    // לאחר בחירת שעת השאלה – נעבור אוטומטית למצב "תאריך החזרה"
+                    setMode('end');
                 } else if (!isStart && endTimeInput) {
                     endTimeInput.value = label;
                 }
+                updateLabels();
+                updateEquipmentState();
                 timeModalBackdrop.style.display = 'none';
             });
             timeOptionsContainer.appendChild(btn);
