@@ -43,6 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $startDate       = trim($_POST['start_date'] ?? '');
         $endDate         = trim($_POST['end_date'] ?? '');
         $notes           = trim($_POST['notes'] ?? '');
+        $approvalStatus  = $_POST['approval_status'] ?? null; // לשימוש באישור/דחייה ע\"י מנהל
+        $rejectionReason = trim($_POST['rejection_reason'] ?? '');
 
         // איסוף מזהי ציוד – מרובים במצב יצירה, יחיד במצב עדכון
         $equipmentIds = [];
@@ -80,6 +82,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 if ($action === 'create') {
+                    // הזמנה שנפתחת ע\"י סטודנט מתחילה כ\"ממתין\"; ע\"י אדמין/מנהל מחסן – מאושרת כברירת מחדל
+                    $initialStatus = ($role === 'student') ? 'pending' : 'approved';
                     $stmt = $pdo->prepare(
                         'INSERT INTO orders
                          (equipment_id, borrower_name, borrower_contact, start_date, end_date, status, notes, created_at)
@@ -94,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':borrower_contact' => $borrowerContact,
                             ':start_date'       => $startDate,
                             ':end_date'         => $endDate,
-                            ':status'           => 'pending',
+                            ':status'           => $initialStatus,
                             ':notes'            => $notes,
                             ':created_at'       => date('Y-m-d H:i:s'),
                         ]);
@@ -111,28 +115,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 } elseif ($action === 'update' && $id > 0) {
                     $equipmentId = $equipmentIds[0];
-                    $stmt = $pdo->prepare(
-                        'UPDATE orders
-                         SET equipment_id     = :equipment_id,
-                             borrower_name    = :borrower_name,
-                             borrower_contact = :borrower_contact,
-                             start_date       = :start_date,
-                             end_date         = :end_date,
-                             notes            = :notes,
-                             updated_at       = :updated_at
-                         WHERE id = :id'
-                    );
-                    $stmt->execute([
-                        ':equipment_id'     => $equipmentId,
-                        ':borrower_name'    => $borrowerName,
-                        ':borrower_contact' => $borrowerContact,
-                        ':start_date'       => $startDate,
-                        ':end_date'         => $endDate,
-                        ':notes'            => $notes,
-                        ':updated_at'       => date('Y-m-d H:i:s'),
-                        ':id'               => $id,
-                    ]);
+                    // אם מנהל בוחר \"נדחה\" – נוסיף סיבת דחייה להערות
+                    if ($approvalStatus === 'rejected' && $rejectionReason !== '') {
+                        if ($notes !== '') {
+                            $notes .= "\n";
+                        }
+                        $notes .= 'סיבה לדחייה: ' . $rejectionReason;
+                    }
+
+                    // נבנה שאילתת עדכון בהתאם לסטטוס (אם השתנה)
+                    if ($approvalStatus === 'approved' || $approvalStatus === 'rejected') {
+                        $newStatus = $approvalStatus === 'approved' ? 'approved' : 'rejected';
+                        $stmt = $pdo->prepare(
+                            'UPDATE orders
+                             SET equipment_id     = :equipment_id,
+                                 borrower_name    = :borrower_name,
+                                 borrower_contact = :borrower_contact,
+                                 start_date       = :start_date,
+                                 end_date         = :end_date,
+                                 status           = :status,
+                                 notes            = :notes,
+                                 updated_at       = :updated_at
+                             WHERE id = :id'
+                        );
+                        $stmt->execute([
+                            ':equipment_id'     => $equipmentId,
+                            ':borrower_name'    => $borrowerName,
+                            ':borrower_contact' => $borrowerContact,
+                            ':start_date'       => $startDate,
+                            ':end_date'         => $EndDate,
+                            ':status'           => $newStatus,
+                            ':notes'            => $notes,
+                            ':updated_at'       => date('Y-m-d H:i:s'),
+                            ':id'               => $id,
+                        ]);
+                    } else {
+                        $stmt = $pdo->prepare(
+                            'UPDATE orders
+                             SET equipment_id     = :equipment_id,
+                                 borrower_name    = :borrower_name,
+                                 borrower_contact = :borrower_contact,
+                                 start_date       = :start_date,
+                                 end_date         = :end_date,
+                                 notes            = :notes,
+                                 updated_at       = :updated_at
+                             WHERE id = :id'
+                        );
+                        $stmt->execute([
+                            ':equipment_id'     => $equipmentId,
+                            ':borrower_name'    => $borrowerName,
+                            ':borrower_contact' => $borrowerContact,
+                            ':start_date'       => $startDate,
+                            ':end_date'         => $endDate,
+                            ':notes'            => $notes,
+                            ':updated_at'       => date('Y-m-d H:i:s'),
+                            ':id'               => $id,
+                        ]);
+                    }
+
                     $success = 'הזמנה עודכנה בהצלחה.';
+
+                    // ניווט לאחר אישור/דחייה של הזמנה של סטודנט
+                    if ($approvalStatus === 'approved' || $approvalStatus === 'rejected') {
+                        $today = date('Y-m-d');
+                        $targetTab = 'pending';
+                        if ($approvalStatus === 'approved') {
+                            if ($startDate <= $today && $endDate >= $today) {
+                                $targetTab = 'today';
+                            } elseif ($startDate > $today) {
+                                $targetTab = 'future';
+                            }
+                        }
+                        header('Location: admin_orders.php?tab=' . $targetTab);
+                        exit;
+                    }
                 }
             } catch (PDOException $e) {
                 $error = 'שגיאה בשמירת ההזמנה.';
@@ -939,11 +995,22 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <?php endif; ?>
 
                         <label for="borrower_email">מייל</label>
+                        <?php
+                        $initialEmail = '';
+                        $initialPhone = '';
+                        if ($editingOrder) {
+                            $initialEmail = '';
+                            $initialPhone = '';
+                        } else {
+                            $initialEmail = (string)($me['email'] ?? '');
+                            $initialPhone = (string)($me['phone'] ?? '');
+                        }
+                        ?>
                         <input
                             type="text"
                             id="borrower_email"
                             autocomplete="off"
-                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_contact'] ?? '', ENT_QUOTES, 'UTF-8') : htmlspecialchars((string)($me['email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                            value="<?= htmlspecialchars($initialEmail, ENT_QUOTES, 'UTF-8') ?>"
                             <?= $isStudent ? 'readonly' : '' ?>
                         >
 
@@ -952,12 +1019,26 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             type="text"
                             id="borrower_phone"
                             autocomplete="off"
-                            value="<?= htmlspecialchars((string)($me['phone'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                            value="<?= htmlspecialchars($initialPhone, ENT_QUOTES, 'UTF-8') ?>"
                             <?= $isStudent ? 'readonly' : '' ?>
                         >
 
                         <input type="hidden" id="borrower_contact" name="borrower_contact"
                                value="<?= htmlspecialchars($editingOrder ? (string)($editingOrder['borrower_contact'] ?? '') : '', ENT_QUOTES, 'UTF-8') ?>">
+
+                        <?php if ($editingOrder && $role !== 'student' && $editingOrder['status'] === 'pending'): ?>
+                            <label for="approval_status">אישור</label>
+                            <select id="approval_status" name="approval_status">
+                                <option value="approved">מאושר</option>
+                                <option value="rejected">נדחה</option>
+                            </select>
+
+                            <div id="rejection_reason_wrapper" style="margin-top: 0.5rem; display: none;">
+                                <label for="rejection_reason">סיבה לדחיית הבקשה</label>
+                                <textarea id="rejection_reason" name="rejection_reason"
+                                          placeholder="פרט את הסיבה לדחיית הבקשה"></textarea>
+                            </div>
+                        <?php endif; ?>
 
                         <label for="notes">הערות</label>
                         <textarea
@@ -1025,8 +1106,18 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                     </div>
                 </div>
 
+                <?php
+                $submitLabel = 'הזמנה';
+                if ($editingOrder) {
+                    if ($role !== 'student' && $editingOrder['status'] === 'pending') {
+                        $submitLabel = 'שמירה';
+                    } else {
+                        $submitLabel = 'שמירת שינויים';
+                    }
+                }
+                ?>
                 <button type="submit" class="btn" id="submit_order_btn" disabled>
-                    <?= $editingOrder ? 'שמירת שינויים' : 'הזמנה' ?>
+                    <?= $submitLabel ?>
                 </button>
                 <?php if ($editingOrder): ?>
                     <a href="admin_orders.php" class="btn secondary">ביטול</a>
@@ -1187,6 +1278,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const borrowerSearch = document.getElementById('borrower_search');
     const borrowerHidden = document.getElementById('borrower_name');
     const borrowerSuggestions = document.getElementById('borrower_suggestions');
+    const approvalSelect = document.getElementById('approval_status');
+    const rejectionWrapper = document.getElementById('rejection_reason_wrapper');
     const modeStartBtn = document.getElementById('mode_start');
     const modeEndBtn = document.getElementById('mode_end');
     const startLabel = document.getElementById('selected_start_label');
@@ -1416,6 +1509,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             if (end && end < date) {
                 endInput.value = '';
             }
+            // אחרי בחירת תאריך התחלה נעבור אוטומטית למצב \"תאריך החזרה\"
+            setMode('end');
         } else {
             const start = parseDate(startInput.value);
             if (!start) {
@@ -1548,6 +1643,19 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 borrowerSuggestions.innerHTML = '';
             }, 150);
         });
+    }
+
+    // הצגת/הסתרת שדה \"סיבה\" בהתאם לבחירת האישור
+    if (approvalSelect && rejectionWrapper) {
+        function updateRejectionVisibility() {
+            if (approvalSelect.value === 'rejected') {
+                rejectionWrapper.style.display = 'block';
+            } else {
+                rejectionWrapper.style.display = 'none';
+            }
+        }
+        approvalSelect.addEventListener('change', updateRejectionVisibility);
+        updateRejectionVisibility();
     }
 
     // חיבור אירועים למעבר חודשים
