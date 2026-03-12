@@ -1119,18 +1119,21 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <?php
                         $todayYmd = date('Y-m-d');
                         $canShowAgreementButton = false;
+                        $agreementSigned = false;
                         if ($editingOrder) {
                             $orderStatus = (string)($editingOrder['status'] ?? '');
                             $orderStart  = (string)($editingOrder['start_date'] ?? '');
-                            if ($orderStatus === 'approved' && $orderStart === $todayYmd) {
+                            if (in_array($orderStatus, ['approved', 'on_loan'], true) && $orderStart === $todayYmd) {
                                 $canShowAgreementButton = true;
                             }
+                            $signatureFileEdit = __DIR__ . '/signatures/order_' . (int)$editingOrder['id'] . '.png';
+                            $agreementSigned = is_file($signatureFileEdit);
                         }
                         ?>
                         <?php if ($canShowAgreementButton): ?>
                             <button type="button" class="btn secondary"
                                     onclick="window.open('agreement.php?order_id=<?= (int)$editingOrder['id'] ?>', 'agreement', 'width=900,height=700')">
-                                הסכם השאלה
+                                הסכם השאלה<?= $agreementSigned ? ' ✓' : '' ?>
                             </button>
                         <?php endif; ?>
                     </div>
@@ -1301,10 +1304,15 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <td class="muted-small">
                             <?php
                             $todayYmd = date('Y-m-d');
-                            $showAgreementLink = ($order['status'] === 'approved' && $order['start_date'] === $todayYmd);
+                            $showAgreementLink = (
+                                in_array($order['status'], ['approved', 'on_loan'], true)
+                                && $order['start_date'] === $todayYmd
+                            );
+                            $signatureFile = __DIR__ . '/signatures/order_' . (int)$order['id'] . '.png';
+                            $hasSignatureRow = is_file($signatureFile);
                             if ($showAgreementLink): ?>
                                 <a href="agreement.php?order_id=<?= (int)$order['id'] ?>" target="_blank">
-                                    הסכם השאלה
+                                    הסכם השאלה<?= $hasSignatureRow ? ' ✓' : '' ?>
                                 </a>
                             <?php endif; ?>
                         </td>

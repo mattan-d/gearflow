@@ -39,8 +39,8 @@ $signDir      = __DIR__ . '/signatures';
 $signaturePng = $signDir . '/order_' . $orderId . '.png';
 $hasSignature = file_exists($signaturePng);
 
-// שמירת חתימה דיגיטלית (סטודנט בלבד, ורק אם עדיין אין חתימה)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasSignature && ($me['role'] ?? '') === 'student') {
+// שמירת חתימה דיגיטלית (סטודנט או מנהל, ורק אם עדיין אין חתימה)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasSignature) {
     $dataUrl = (string)($_POST['signature_data'] ?? '');
     if (strpos($dataUrl, 'data:image/png;base64,') === 0) {
         $base64 = substr($dataUrl, strlen('data:image/png;base64,'));
@@ -255,7 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasSignature && ($me['role'] ?? '
                          style="max-width: 100%; max-height: 180px; border: 1px solid #e5e7eb; border-radius: 8px;">
                 </div>
                 <div class="signature-line">חתימה דיגיטלית נשמרה</div>
-            <?php elseif (($me['role'] ?? '') === 'student'): ?>
+            <?php else: ?>
                 <form method="post" action="agreement.php?order_id=<?= (int)$orderId ?>">
                     <canvas id="signature_pad" class="signature-pad"></canvas>
                     <input type="hidden" name="signature_data" id="signature_data">
@@ -264,8 +264,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasSignature && ($me['role'] ?? '
                         <button type="button" class="btn-small btn-secondary" onclick="clearSignature()">נקה</button>
                     </div>
                 </form>
-                <div class="signature-line">חתימת המשאיל / השואל</div>
-            <?php else: ?>
                 <div class="signature-line">חתימת המשאיל / השואל</div>
             <?php endif; ?>
         </div>
@@ -279,7 +277,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasSignature && ($me['role'] ?? '
         מומלץ להדפיס את ההסכם ולצרף לעותק ההזמנה לתיעוד.
     </div>
 </div>
-<?php if (!$hasSignature && ($me['role'] ?? '') === 'student'): ?>
+<?php if (!$hasSignature): ?>
 <script>
     (function () {
         var canvas = document.getElementById('signature_pad');
