@@ -1116,10 +1116,23 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             placeholder="שעות איסוף / החזרה, שימוש מיוחד וכו׳"
                         ><?= $editingOrder ? htmlspecialchars($editingOrder['notes'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
 
-                        <button type="button" class="btn secondary"
-                                onclick="window.open('agreement.php<?= $editingOrder ? '?order_id=' . (int)$editingOrder['id'] : '' ?>', 'agreement', 'width=900,height=700')">
-                            הסכם השאלה
-                        </button>
+                        <?php
+                        $todayYmd = date('Y-m-d');
+                        $canShowAgreementButton = false;
+                        if ($editingOrder) {
+                            $orderStatus = (string)($editingOrder['status'] ?? '');
+                            $orderStart  = (string)($editingOrder['start_date'] ?? '');
+                            if ($orderStatus === 'approved' && $orderStart === $todayYmd) {
+                                $canShowAgreementButton = true;
+                            }
+                        }
+                        ?>
+                        <?php if ($canShowAgreementButton): ?>
+                            <button type="button" class="btn secondary"
+                                    onclick="window.open('agreement.php?order_id=<?= (int)$editingOrder['id'] ?>', 'agreement', 'width=900,height=700')">
+                                הסכם השאלה
+                            </button>
+                        <?php endif; ?>
                     </div>
 
                     <!-- עמודת ציוד (זהה בהזמנה חדשה ובעריכה) -->
@@ -1286,9 +1299,14 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             <?= htmlspecialchars($order['borrower_contact'] ?? '', ENT_QUOTES, 'UTF-8') ?>
                         </td>
                         <td class="muted-small">
-                            <a href="agreement.php?order_id=<?= (int)$order['id'] ?>" target="_blank">
-                                הסכם השאלה
-                            </a>
+                            <?php
+                            $todayYmd = date('Y-m-d');
+                            $showAgreementLink = ($order['status'] === 'approved' && $order['start_date'] === $todayYmd);
+                            if ($showAgreementLink): ?>
+                                <a href="agreement.php?order_id=<?= (int)$order['id'] ?>" target="_blank">
+                                    הסכם השאלה
+                                </a>
+                            <?php endif; ?>
                         </td>
                         <td class="muted-small">
                             <?= htmlspecialchars($order['notes'] ?? '', ENT_QUOTES, 'UTF-8') ?>
