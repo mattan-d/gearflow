@@ -102,6 +102,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $success = $createdCount > 1
                         ? "נוצרו {$createdCount} הזמנות בהצלחה."
                         : 'הזמנה נוצרה בהצלחה.';
+
+                    // עבור סטודנט – לאחר יצירת ההזמנה נעבור אוטומטית לטאב \"ממתין\"
+                    if ($role === 'student') {
+                        header('Location: admin_orders.php?tab=pending');
+                        exit;
+                    }
                 } elseif ($action === 'update' && $id > 0) {
                     $equipmentId = $equipmentIds[0];
                     $stmt = $pdo->prepare(
