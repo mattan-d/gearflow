@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 
-require_admin_or_warehouse();
+$pdo = get_db();
+$me  = current_user();
 
-$pdo   = get_db();
-$me    = current_user();
+if ($me === null) {
+    header('Location: login.php');
+    exit;
+}
+
 $order = null;
 
 $orderId = isset($_GET['order_id']) ? (int)$_GET['order_id'] : 0;
@@ -18,11 +22,48 @@ if ($orderId > 0) {
                 e.name AS equipment_name,
                 e.code AS equipment_code
          FROM orders o
-         JOIN equipment e ON e.id = o.equipment_id
-         WHERE o.id = :id'
+         JOIN equipment e ON e.id = :id'
     );
     $stmt->execute([':id' => $orderId]);
     $order = $stmt->fetch() ?: null;
+}
+
+if (!$order) {
+    http_response_code(404);
+    echo 'Order not found.';
+    exit;
+}
+
+// נתיב קובץ החתימה להזמנה
+$signDir      = __DIR__ . '/signatures';
+$signaturePng = $signDir . '/order_' . $orderId . '.png';
+$hasSignature = file_exists($signaturePng);
+
+// שמירת חתימה דיגיטלית (סטודנט בלבד, ורק אם עדיין אין חתימה)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasSignature && ($me['role'] ?? '') === 'student') {
+    $dataUrl = (string)($_POST['signature_data'] ?? '');
+    if (strpos($dataUrl, 'data:image/png;base64,') === 0) {
+        $base64 = substr($dataUrl, strlen('data:image/png;base64,'));
+        $binary = base64_decode($base64, true);
+        if ($binary !== false) {
+            if (!is_dir($signDir)) {
+                @mkdir($signDir, 0775, true);
+            }
+            file_put_contents($signaturePng, $binary);
+            $hasSignature = true;
+
+            // לאחר חתימה – מעדכנים סטטוס להזמנה במצב "בהשאלה"
+            $stmt = $pdo->prepare('UPDATE orders SET status = :status, updated_at = :updated_at WHERE id = :id');
+            $stmt->execute([
+                ':status'     => 'on_loan',
+                ':updated_at' => date('Y-m-d H:i:s'),
+                ':id'         => $orderId,
+            ]);
+
+            header('Location: agreement.php?order_id=' . $orderId . '&signed=1');
+            exit;
+        }
+    }
 }
 
 ?>
@@ -115,6 +156,34 @@ if ($orderId > 0) {
             padding: 0.4rem 0.9rem;
             font-size: 0.8rem;
             cursor: pointer;
+        }
+        .signature-pad {
+            border: 1px solid #9ca3af;
+            border-radius: 8px;
+            background: #f9fafb;
+            width: 100%;
+            max-width: 400px;
+            height: 160px;
+            cursor: crosshair;
+        }
+        .signature-actions {
+            margin-top: 0.5rem;
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        .btn-small {
+            border-radius: 999px;
+            border: none;
+            background: #111827;
+            color: #f9fafb;
+            padding: 0.35rem 0.8rem;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #111827;
         }
     </style>
     <script>
