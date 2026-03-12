@@ -125,9 +125,21 @@ function initialize_database(PDO $pdo): void
             status TEXT NOT NULL DEFAULT 'pending',
             notes TEXT,
             created_at TEXT NOT NULL,
-            updated_at TEXT
+            updated_at TEXT,
+            creator_username TEXT
         )
     ");
+
+    // מיגרציה: הוספת creator_username להזמנות קיימות אם העמודה חסרה
+    try {
+        $orderCols = $pdo->query("PRAGMA table_info(orders)")->fetchAll(PDO::FETCH_ASSOC);
+        $orderNames = array_column($orderCols, 'name');
+        if (!in_array('creator_username', $orderNames, true)) {
+            $pdo->exec("ALTER TABLE orders ADD COLUMN creator_username TEXT");
+        }
+    } catch (PDOException $e) {
+        // מתעלמים משגיאות מיגרציה כדי לא להפיל את הטעינה
+    }
 
     // Ensure default admin user exists: admin / admin
     $stmt = $pdo->prepare('SELECT COUNT(*) AS cnt FROM users WHERE username = :username');

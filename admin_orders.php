@@ -86,9 +86,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $initialStatus = ($role === 'student') ? 'pending' : 'approved';
                     $stmt = $pdo->prepare(
                         'INSERT INTO orders
-                         (equipment_id, borrower_name, borrower_contact, start_date, end_date, status, notes, created_at)
+                         (equipment_id, borrower_name, borrower_contact, start_date, end_date, status, notes, created_at, creator_username)
                          VALUES
-                         (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :status, :notes, :created_at)'
+                         (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :status, :notes, :created_at, :creator_username)'
                     );
                     $createdCount = 0;
                     foreach ($equipmentIds as $equipmentId) {
@@ -101,6 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':status'           => $initialStatus,
                             ':notes'            => $notes,
                             ':created_at'       => date('Y-m-d H:i:s'),
+                            ':creator_username' => (string)($me['username'] ?? ''),
                         ]);
                         $createdCount++;
                     }
@@ -307,6 +308,15 @@ if (!in_array($tab, $validTabs, true)) {
     $tab = 'today';
 }
 
+// תתי־טאבים ל"טאב היום": השאלה/החזרה
+$todayMode = 'borrow';
+if ($tab === 'today') {
+    $todayMode = $_GET['today_mode'] ?? 'borrow';
+    if (!in_array($todayMode, ['borrow', 'return'], true)) {
+        $todayMode = 'borrow';
+    }
+}
+
 // טעינת הזמנות לפי טאב
 $baseSql = 'SELECT o.id,
                    o.borrower_name,
@@ -317,6 +327,7 @@ $baseSql = 'SELECT o.id,
                    o.notes,
                    o.created_at,
                    o.updated_at,
+                   o.creator_username,
                    e.name AS equipment_name,
                    e.code AS equipment_code
             FROM orders o
@@ -359,10 +370,16 @@ switch ($tab) {
 
     case 'today':
     default:
-        // היום – כל בקשה מאושרת / בהשאלה שהיום נמצא בטווח ההשאלה
-        $where = " WHERE o.status IN ('approved', 'on_loan')
-                   AND DATE(o.start_date) <= :today
-                   AND DATE(o.end_date)   >= :today";
+        // היום – מפוצל לתת־מצבים:
+        // השאלה: כל בקשה שהיום הוא יום ההשאלה
+        // החזרה: כל בקשה שהיום הוא יום ההחזרה
+        if ($todayMode === 'return') {
+            $where = " WHERE o.status IN ('approved', 'on_loan')
+                       AND DATE(o.end_date) = :today";
+        } else {
+            $where = " WHERE o.status IN ('approved', 'on_loan')
+                       AND DATE(o.start_date) = :today";
+        }
         $params[':today'] = $today;
         break;
 }
@@ -1146,6 +1163,14 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             <a href="admin_orders.php?tab=not_returned" class="<?= $tab === 'not_returned' ? 'active' : '' ?>">לא הוחזר</a>
             <a href="admin_orders.php?tab=history"      class="<?= $tab === 'history'      ? 'active' : '' ?>">היסטוריה</a>
         </div>
+        <?php if ($tab === 'today'): ?>
+            <div class="tabs" style="margin-top: 0.5rem;">
+                <a href="admin_orders.php?tab=today&today_mode=borrow"
+                   class="<?= $todayMode === 'borrow' ? 'active' : '' ?>">השאלה</a>
+                <a href="admin_orders.php?tab=today&today_mode=return"
+                   class="<?= $todayMode === 'return' ? 'active' : '' ?>">החזרה</a>
+            </div>
+        <?php endif; ?>
         <?php if (count($orders) === 0): ?>
             <p class="muted-small">עדיין לא נוצרו הזמנות במערכת לטאב זה.</p>
         <?php else: ?>
@@ -1221,40 +1246,69 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             <?= htmlspecialchars($order['notes'] ?? '', ENT_QUOTES, 'UTF-8') ?>
                         </td>
                         <td>
-                            <div class="row-actions">
-                                <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="icon-btn" title="עריכה">
-                                    ✏️
-                                </a>
+                            <?php
+                            // לסטודנט אין פעולות מחיקה/שכפול/אישור. עריכה מותרת רק בטאב "ממתין" ועד שעה מזמן יצירת ההזמנה.
+                            if ($role === 'student') {
+                                $canEdit = false;
+                                if ($tab === 'pending') {
+                                    $createdAtTs = strtotime((string)($order['created_at'] ?? ''));
+                                    if ($createdAtTs !== false && $createdAtTs >= time() - 3600) {
+                                        $canEdit = true;
+                                    }
+                                }
+                                if ($canEdit): ?>
+                                    <div class="row-actions">
+                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="icon-btn" title="עריכה">
+                                            ✏️
+                                        </a>
+                                    </div>
+                                <?php endif;
+                            } else {
+                                // למנהל/מנהל מחסן: פעולות רק בטאבים today, pending, future; ללא שינויים לסטטוסים active/history.
+                                $adminTabsAllowed = in_array($tab, ['today', 'pending', 'future'], true);
+                                if ($adminTabsAllowed): ?>
+                                    <div class="row-actions">
+                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="icon-btn" title="עריכה">
+                                            ✏️
+                                        </a>
 
-                                <form method="post" action="admin_orders.php"
-                                      onsubmit="return confirm('למחוק את ההזמנה הזו?');">
-                                    <input type="hidden" name="action" value="delete">
-                                    <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                    <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                    <button type="submit" class="icon-btn" title="מחיקה">🗑️</button>
-                                </form>
+                                        <?php
+                                        // מנהל יכול למחוק רק הזמנות שהוא יצר בעצמו (creator_username), לא הזמנות סטודנט
+                                        $canDelete = isset($order['creator_username'], $me['username'])
+                                            && $order['creator_username'] === $me['username'];
+                                        if ($canDelete): ?>
+                                            <form method="post" action="admin_orders.php"
+                                                  onsubmit="return confirm('למחוק את ההזמנה הזו?');">
+                                                <input type="hidden" name="action" value="delete">
+                                                <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                                <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                                <button type="submit" class="icon-btn" title="מחיקה">🗑️</button>
+                                            </form>
+                                        <?php endif; ?>
 
-                                <form method="post" action="admin_orders.php">
-                                    <input type="hidden" name="action" value="duplicate">
-                                    <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                    <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                    <button type="submit" class="icon-btn" title="שכפול">⧉</button>
-                                </form>
+                                        <form method="post" action="admin_orders.php">
+                                            <input type="hidden" name="action" value="duplicate">
+                                            <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                            <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                            <button type="submit" class="icon-btn" title="שכפול">⧉</button>
+                                        </form>
 
-                                <form method="post" action="admin_orders.php">
-                                    <input type="hidden" name="action" value="update_status">
-                                    <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                    <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                    <select name="status" class="muted-small">
-                                        <option value="pending"   <?= $order['status'] === 'pending'   ? 'selected' : '' ?>>ממתין</option>
-                                        <option value="approved"  <?= $order['status'] === 'approved'  ? 'selected' : '' ?>>מאושר</option>
-                                        <option value="on_loan"   <?= $order['status'] === 'on_loan'   ? 'selected' : '' ?>>בהשאלה</option>
-                                        <option value="returned"  <?= $order['status'] === 'returned'  ? 'selected' : '' ?>>עבר</option>
-                                        <option value="rejected"  <?= $order['status'] === 'rejected'  ? 'selected' : '' ?>>נדחה</option>
-                                    </select>
-                                    <button type="submit" class="btn small neutral">עדכון</button>
-                                </form>
-                            </div>
+                                        <form method="post" action="admin_orders.php">
+                                            <input type="hidden" name="action" value="update_status">
+                                            <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                            <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                            <select name="status" class="muted-small">
+                                                <option value="pending"   <?= $order['status'] === 'pending'   ? 'selected' : '' ?>>ממתין</option>
+                                                <option value="approved"  <?= $order['status'] === 'approved'  ? 'selected' : '' ?>>מאושר</option>
+                                                <option value="on_loan"   <?= $order['status'] === 'on_loan'   ? 'selected' : '' ?>>בהשאלה</option>
+                                                <option value="returned"  <?= $order['status'] === 'returned'  ? 'selected' : '' ?>>עבר</option>
+                                                <option value="rejected"  <?= $order['status'] === 'rejected'  ? 'selected' : '' ?>>נדחה</option>
+                                            </select>
+                                            <button type="submit" class="btn small neutral">עדכון</button>
+                                        </form>
+                                    </div>
+                                <?php endif;
+                            } ?>
                         </td>
                     </tr>
                 <?php endforeach; ?>
