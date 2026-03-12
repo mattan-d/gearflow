@@ -16,7 +16,7 @@ if (!is_dir($docDir)) {
 
 $documents = [
     'consent_form' => [
-        'title'   => 'טופס הסכמה',
+        'title'   => 'הסכם השאלה',
         'file'    => $docDir . '/consent_form.txt',
         'default' => "טופס הסכמה לשאלת ציוד\n\nאני, {borrower_name}, מאשר/ת שקראתי והבנתי את תנאי ההשאלה לגבי הציוד {equipment_name} ({equipment_code}) לתקופה מ־{start_date} עד {end_date}, ואני מתחייב/ת להחזירו תקין ובמועד.",
     ],
@@ -211,8 +211,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="flash notice"><?= htmlspecialchars($notice, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
 
-        <button type="button" class="btn secondary" disabled style="opacity: 0.6; cursor: default;">
-            מסמך חדש (בקרוב)
+        <button type="button" class="btn secondary" onclick="alert('הוספת מסמך חדש תתווסף בגרסה הבאה. כרגע ניתן לערוך רק מסמכים קיימים.')">
+            הוספת מסמך
         </button>
 
         <div class="doc-list">
@@ -233,7 +233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </label>
                 <textarea id="doc_content" name="doc_content"><?= htmlspecialchars($documents['consent_form']['content'] ?? '', ENT_QUOTES, 'UTF-8') ?></textarea>
                 <p class="muted" style="margin-top:0.4rem;">
-                    שים לב: בשדה "טופס הסכמה" אין לשנות את שמות המשתנים במבנה `{...}` (למשל `{borrower_name}`). אפשר לערוך רק את הטקסט סביבם.
+                    שים לב: במסמך "הסכם השאלה" אין לשנות את שמות המשתנים במבנה `{...}` (למשל `{borrower_name}`). אפשר לערוך רק את הטקסט סביבם.
                 </p>
                 <button type="submit" class="btn" style="margin-top:0.6rem;">שמירת מסמך</button>
             </form>
