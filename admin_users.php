@@ -589,10 +589,9 @@ if (isset($_GET['edit_id'])) {
             <form method="post" action="admin_users.php" enctype="multipart/form-data" style="display:inline-flex;align-items:center;gap:0.4rem;">
                 <input type="hidden" name="action" value="import_csv">
                 <label class="btn secondary" style="cursor:pointer; margin:0;">
-                    בחירת קובץ CSV
+                    יבוא CSV
                     <input type="file" name="import_file" id="import_file" accept=".csv" required style="display:none;">
                 </label>
-                <button type="submit" class="btn secondary" style="font-size:0.8rem;">יבוא</button>
             </form>
         </div>
     </div>
