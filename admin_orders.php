@@ -1247,20 +1247,27 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         </td>
                         <td>
                             <?php
-                            // לסטודנט אין פעולות מחיקה/שכפול/אישור. עריכה מותרת רק בטאב "ממתין" ועד שעה מזמן יצירת ההזמנה.
+                            // סטודנט: יכול לערוך/למחוק רק הזמנות שלו בטאב "ממתין" ועד שעה מזמן יצירת ההזמנה.
                             if ($role === 'student') {
-                                $canEdit = false;
+                                $canEditOrDelete = false;
                                 if ($tab === 'pending') {
                                     $createdAtTs = strtotime((string)($order['created_at'] ?? ''));
                                     if ($createdAtTs !== false && $createdAtTs >= time() - 3600) {
-                                        $canEdit = true;
+                                        $canEditOrDelete = true;
                                     }
                                 }
-                                if ($canEdit): ?>
+                                if ($canEditOrDelete): ?>
                                     <div class="row-actions">
                                         <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="icon-btn" title="עריכה">
                                             ✏️
                                         </a>
+                                        <form method="post" action="admin_orders.php"
+                                              onsubmit="return confirm('למחוק את ההזמנה הזו?');">
+                                            <input type="hidden" name="action" value="delete">
+                                            <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                            <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                            <button type="submit" class="icon-btn" title="מחיקה">🗑️</button>
+                                        </form>
                                     </div>
                                 <?php endif;
                             } else {
