@@ -108,11 +108,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ? "נוצרו {$createdCount} הזמנות בהצלחה."
                         : 'הזמנה נוצרה בהצלחה.';
 
-                    // עבור סטודנט – לאחר יצירת ההזמנה נעבור אוטומטית לטאב \"ממתין\"
+                    // לאחר יצירת הזמנה – סוגרים את הטופס תמיד ע\"י רענון לדף הרשימה
                     if ($role === 'student') {
                         header('Location: admin_orders.php?tab=pending');
-                        exit;
+                    } else {
+                        header('Location: admin_orders.php');
                     }
+                    exit;
                 } elseif ($action === 'update' && $id > 0) {
                     $equipmentId = $equipmentIds[0];
                     // אם מנהל בוחר \"נדחה\" – נוסיף סיבת דחייה להערות
@@ -143,7 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':borrower_name'    => $borrowerName,
                             ':borrower_contact' => $borrowerContact,
                             ':start_date'       => $startDate,
-                            ':end_date'         => $EndDate,
+                            ':end_date'         => $endDate,
                             ':status'           => $newStatus,
                             ':notes'            => $notes,
                             ':updated_at'       => date('Y-m-d H:i:s'),
@@ -187,6 +189,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                         }
                         header('Location: admin_orders.php?tab=' . $targetTab);
+                        exit;
+                    } else {
+                        // עדכון רגיל – לאחר שמירה נסגור את הטופס ונחזור לרשימת ההזמנות
+                        header('Location: admin_orders.php');
                         exit;
                     }
                 }
