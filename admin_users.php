@@ -580,8 +580,21 @@ if (isset($_GET['edit_id'])) {
         <div class="flash error" style="margin-bottom: 1rem;"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
     <?php endif; ?>
 
-    <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem;">
-        <button type="button" class="btn" id="open_user_modal_btn">משתמש חדש</button>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 0.75rem;">
+        <div>
+            <button type="button" class="btn" id="open_user_modal_btn">משתמש חדש</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem;">
+            <a href="admin_users.php?export=1" class="btn secondary">יצוא CSV</a>
+            <form method="post" action="admin_users.php" enctype="multipart/form-data" style="display:inline-flex;align-items:center;gap:0.4rem;">
+                <input type="hidden" name="action" value="import_csv">
+                <label class="btn secondary" style="cursor:pointer; margin:0;">
+                    בחירת קובץ CSV
+                    <input type="file" name="import_file" id="import_file" accept=".csv" required style="display:none;">
+                </label>
+                <button type="submit" class="btn secondary" style="font-size:0.8rem;">יבוא</button>
+            </form>
+        </div>
     </div>
 
     <?php $showUserModal = $editingUser !== null; ?>
@@ -665,11 +678,7 @@ if (isset($_GET['edit_id'])) {
             <h2 style="margin-bottom:0;">רשימת משתמשים</h2>
             <div>
                 <a href="admin_users.php?export=1" class="btn secondary" style="margin-left:0.5rem;">יצוא CSV</a>
-                <form method="post" action="admin_users.php" enctype="multipart/form-data" style="display:inline-block;">
-                    <input type="hidden" name="action" value="import_csv">
-                    <input type="file" name="import_file" accept=".csv" required style="font-size:0.8rem;margin-left:0.25rem;">
-                    <button type="submit" class="btn secondary" style="font-size:0.8rem;">יבוא CSV</button>
-                </form>
+                <!-- טופס ישן ליבוא CSV הוחלף בטופס בראש העמוד -->
             </div>
         </div>
         <table>
