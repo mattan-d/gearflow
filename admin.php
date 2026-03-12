@@ -50,16 +50,19 @@ $me = current_user();
         .main-nav {
             margin-top: 0.5rem;
             display: flex;
-            gap: 1rem;
+            gap: 0.6rem;
             font-size: 0.85rem;
+            white-space: nowrap;
+            align-items: center;
         }
         .main-nav a {
             color: #e5e7eb;
             text-decoration: none;
+            display: inline-block;
         }
         .main-nav-primary {
             display: flex;
-            gap: 0.8rem;
+            gap: 0.6rem;
         }
         .main-nav-item-wrapper {
             position: relative;
