@@ -14,15 +14,95 @@ $error    = '';
 $success  = '';
 $editingOrder = null;
 
-// AJAX: בדיקת זמינות ציוד לטווח תאריכים/שעות נבחר
+// AJAX: בדיקת זמינות ציוד לטווח תאריכים/שעות נבחר (כולל הזמנה מחזורית)
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'available_equipment') {
     header('Content-Type: application/json; charset=UTF-8');
 
+    $excludeId  = (int)($_GET['exclude_order_id'] ?? 0);
+    $recurringEnabled = !empty($_GET['recurring_enabled']);
+
+    $unavailableIds = [];
+
+    if ($recurringEnabled) {
+        // הזמנה מחזורית – בדיקת זמינות לכל המופעים
+        $recStartDate   = trim($_GET['recurring_start_date'] ?? '');
+        $recStartTime   = trim($_GET['recurring_start_time'] ?? '');
+        $recFreq        = $_GET['recurring_freq'] ?? 'day';
+        $recDuration    = (float)($_GET['recurring_duration'] ?? 1);
+        $recEndType     = $_GET['recurring_end_type'] ?? 'count';
+        $recCount       = (int)($_GET['recurring_count'] ?? 1);
+        $recEndDate     = trim($_GET['recurring_end_date'] ?? '');
+
+        if ($recStartDate === '' || $recStartTime === '' || !in_array($recFreq, ['day', 'week'], true)) {
+            echo json_encode(['unavailable_ids' => []], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $startTs = strtotime($recStartDate . ' ' . $recStartTime);
+        if ($startTs === false) {
+            echo json_encode(['unavailable_ids' => []], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        $stepDays        = ($recFreq === 'week') ? 7 : 1;
+        $durationMinutes = (int)round($recDuration * 60);
+        $n               = ($recEndType === 'count') ? max(1, $recCount) : 0;
+
+        $current = $startTs;
+        $count   = 0;
+        while (true) {
+            if ($recEndType === 'count' && $count >= $n) {
+                break;
+            }
+            if ($recEndType === 'end_date' && $recEndDate !== '' && date('Y-m-d', $current) > $recEndDate) {
+                break;
+            }
+
+            $occStart = date('Y-m-d H:i', $current);
+            $endOccTs = $current + $durationMinutes * 60;
+            $occEnd   = date('Y-m-d H:i', $endOccTs);
+
+            $sql = "
+                SELECT DISTINCT equipment_id
+                FROM orders
+                WHERE status IN ('pending', 'approved', 'on_loan')
+                  AND (
+                        (start_date || ' ' || COALESCE(start_time, '00:00')) <= :req_end
+                    AND (end_date   || ' ' || COALESCE(end_time,   '23:59')) >= :req_start
+                  )
+            ";
+            $params = [
+                ':req_start' => $occStart,
+                ':req_end'   => $occEnd,
+            ];
+            if ($excludeId > 0) {
+                $sql .= " AND id != :exclude_id";
+                $params[':exclude_id'] = $excludeId;
+            }
+
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $row) {
+                $eid = (int)($row['equipment_id'] ?? 0);
+                if ($eid > 0 && !in_array($eid, $unavailableIds, true)) {
+                    $unavailableIds[] = $eid;
+                }
+            }
+
+            $count++;
+            $current = strtotime('+' . $stepDays . ' days', $current);
+        }
+
+        echo json_encode(['unavailable_ids' => $unavailableIds], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    // מצב רגיל – הזמנה בודדת
     $startDate  = trim($_GET['start_date'] ?? '');
     $endDate    = trim($_GET['end_date'] ?? '');
     $startTime  = trim($_GET['start_time'] ?? '');
     $endTime    = trim($_GET['end_time'] ?? '');
-    $excludeId  = (int)($_GET['exclude_order_id'] ?? 0);
 
     if ($startDate === '' || $endDate === '') {
         echo json_encode(['unavailable_ids' => []], JSON_UNESCAPED_UNICODE);
@@ -170,6 +250,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (count($equipmentIds) === 0 || $borrowerName === '') {
             $error = 'יש למלא ציוד ושם שואל.';
+        } elseif ($recurringEnabled && !$isRecurringCreate && $action === 'create') {
+            $error = 'יש להשלים את כל פרטי ההזמנה המחזורית (תאריך ושעה התחלה, מחזוריות, משך וסיום).';
         } elseif (!$isRecurringCreate && ($startDate === '' || $endDate === '')) {
             $error = 'יש למלא תאריכי התחלה וסיום.';
         } elseif ($action === 'create' && !$isRecurringCreate && $originalStart !== '' && $originalEnd !== '' && $originalStart === $startDate && $originalEnd === $endDate) {
@@ -2044,8 +2126,52 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     }
 
     function refreshEquipmentAvailability() {
+        const recurringOn = recurringToggle && recurringToggle.checked;
         const startDate = startInput ? startInput.value : '';
         const endDate = endInput ? endInput.value : '';
+
+        // הזמנה מחזורית – משתמשים בפרמטרים המחזוריים בלבד
+        if (recurringOn) {
+            const rStartDate = recurringStartDateH ? recurringStartDateH.value : '';
+            const rStartTime = recurringStartTimeSelect ? recurringStartTimeSelect.value : '';
+            if (!rStartDate || !rStartTime) {
+                unavailableEquipmentIds = [];
+                return Promise.resolve();
+            }
+            const endTypeEl = document.querySelector('input[name=\"recurring_end_type\"]:checked');
+            const endType = endTypeEl ? endTypeEl.value : 'count';
+            const rCount = recurringCountInput ? parseInt(recurringCountInput.value, 10) : 1;
+            const rEndDate = recurringEndDateH ? recurringEndDateH.value : '';
+            const rFreq = document.getElementById('recurring_freq') ? document.getElementById('recurring_freq').value : 'day';
+            const rDur = document.getElementById('recurring_duration') ? document.getElementById('recurring_duration').value : '1';
+
+            const orderIdInput = orderModal ? orderModal.querySelector('input[name=\"id\"]') : null;
+            const excludeOrderId = orderIdInput ? parseInt(orderIdInput.value, 10) : 0;
+
+            const params = new URLSearchParams({
+                ajax: 'available_equipment',
+                recurring_enabled: '1',
+                recurring_start_date: rStartDate,
+                recurring_start_time: rStartTime,
+                recurring_freq: rFreq,
+                recurring_duration: rDur.toString(),
+                recurring_end_type: endType,
+                recurring_count: isNaN(rCount) ? '1' : rCount.toString(),
+                recurring_end_date: rEndDate || '',
+                exclude_order_id: excludeOrderId.toString()
+            });
+
+            return fetch('admin_orders.php?' + params.toString())
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    unavailableEquipmentIds = data.unavailable_ids || [];
+                })
+                .catch(function () {
+                    unavailableEquipmentIds = [];
+                });
+        }
+
+        // הזמנה רגילה
         if (startDate === '' || endDate === '') {
             unavailableEquipmentIds = [];
             return Promise.resolve();
