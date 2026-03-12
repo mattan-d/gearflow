@@ -122,6 +122,8 @@ function initialize_database(PDO $pdo): void
             borrower_contact TEXT,
             start_date TEXT NOT NULL,
             end_date TEXT NOT NULL,
+            start_time TEXT,
+            end_time TEXT,
             status TEXT NOT NULL DEFAULT 'pending',
             notes TEXT,
             created_at TEXT NOT NULL,
@@ -130,12 +132,18 @@ function initialize_database(PDO $pdo): void
         )
     ");
 
-    // מיגרציה: הוספת creator_username להזמנות קיימות אם העמודה חסרה
+    // מיגרציה: הוספת עמודות שחסרות בטבלת orders קיימת
     try {
         $orderCols = $pdo->query("PRAGMA table_info(orders)")->fetchAll(PDO::FETCH_ASSOC);
         $orderNames = array_column($orderCols, 'name');
         if (!in_array('creator_username', $orderNames, true)) {
             $pdo->exec("ALTER TABLE orders ADD COLUMN creator_username TEXT");
+        }
+        if (!in_array('start_time', $orderNames, true)) {
+            $pdo->exec("ALTER TABLE orders ADD COLUMN start_time TEXT");
+        }
+        if (!in_array('end_time', $orderNames, true)) {
+            $pdo->exec("ALTER TABLE orders ADD COLUMN end_time TEXT");
         }
     } catch (PDOException $e) {
         // מתעלמים משגיאות מיגרציה כדי לא להפיל את הטעינה

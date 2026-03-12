@@ -67,6 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $borrowerContact = trim($_POST['borrower_contact'] ?? '');
         $startDate       = trim($_POST['start_date'] ?? '');
         $endDate         = trim($_POST['end_date'] ?? '');
+        $startTime       = trim($_POST['start_time'] ?? '');
+        $endTime         = trim($_POST['end_time'] ?? '');
         $notes           = trim($_POST['notes'] ?? '');
         $approvalStatus  = $_POST['approval_status'] ?? null; // לשימוש באישור/דחייה ע\"י מנהל
         $rejectionReason = trim($_POST['rejection_reason'] ?? '');
@@ -118,9 +120,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $initialStatus = ($role === 'student') ? 'pending' : 'approved';
                     $stmt = $pdo->prepare(
                         'INSERT INTO orders
-                         (equipment_id, borrower_name, borrower_contact, start_date, end_date, status, notes, created_at, creator_username)
+                         (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, created_at, creator_username)
                          VALUES
-                         (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :status, :notes, :created_at, :creator_username)'
+                         (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :created_at, :creator_username)'
                     );
                     $createdCount = 0;
                     foreach ($equipmentIds as $equipmentId) {
@@ -130,6 +132,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':borrower_contact' => $borrowerContact,
                             ':start_date'       => $startDate,
                             ':end_date'         => $endDate,
+                            ':start_time'       => $startTime !== '' ? $startTime : null,
+                            ':end_time'         => $endTime !== '' ? $endTime : null,
                             ':status'           => $initialStatus,
                             ':notes'            => $notes,
                             ':created_at'       => date('Y-m-d H:i:s'),
@@ -168,6 +172,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                  borrower_contact = :borrower_contact,
                                  start_date       = :start_date,
                                  end_date         = :end_date,
+                                 start_time       = :start_time,
+                                 end_time         = :end_time,
                                  status           = :status,
                                  notes            = :notes,
                                  updated_at       = :updated_at
@@ -179,6 +185,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':borrower_contact' => $borrowerContact,
                             ':start_date'       => $startDate,
                             ':end_date'         => $endDate,
+                            ':start_time'       => $startTime !== '' ? $startTime : null,
+                            ':end_time'         => $endTime !== '' ? $endTime : null,
                             ':status'           => $newStatus,
                             ':notes'            => $notes,
                             ':updated_at'       => date('Y-m-d H:i:s'),
@@ -192,6 +200,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                  borrower_contact = :borrower_contact,
                                  start_date       = :start_date,
                                  end_date         = :end_date,
+                                 start_time       = :start_time,
+                                 end_time         = :end_time,
                                  notes            = :notes,
                                  updated_at       = :updated_at
                              WHERE id = :id'
@@ -202,6 +212,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':borrower_contact' => $borrowerContact,
                             ':start_date'       => $startDate,
                             ':end_date'         => $endDate,
+                            ':start_time'       => $startTime !== '' ? $startTime : null,
+                            ':end_time'         => $endTime !== '' ? $endTime : null,
                             ':notes'            => $notes,
                             ':updated_at'       => date('Y-m-d H:i:s'),
                             ':id'               => $id,
@@ -407,6 +419,8 @@ $baseSql = 'SELECT o.id,
                    o.borrower_contact,
                    o.start_date,
                    o.end_date,
+                   o.start_time,
+                   o.end_time,
                    o.status,
                    o.notes,
                    o.created_at,
@@ -1360,7 +1374,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <th>שם הפריט</th>
                         <th>סטטוס</th>
                         <th>תאריך השאלה</th>
-                        <th>תאריך</th>
+                        <th>תאריך החזרה</th>
                         <th>החברה</th>
                         <th>טופס השאלה</th>
                         <th>הערות</th>
@@ -1407,10 +1421,26 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             <span class="badge <?= $statusClass ?>"><?= $statusLabel ?></span>
                         </td>
                         <td class="muted-small">
-                            <?= htmlspecialchars($order['start_date'], ENT_QUOTES, 'UTF-8') ?>
+                            <?php
+                            $startDateDisplay = (string)($order['start_date'] ?? '');
+                            $startTimeDisplay = (string)($order['start_time'] ?? '');
+                            $startCombined = $startDateDisplay;
+                            if ($startTimeDisplay !== '') {
+                                $startCombined .= ' ' . $startTimeDisplay;
+                            }
+                            echo htmlspecialchars($startCombined, ENT_QUOTES, 'UTF-8');
+                            ?>
                         </td>
                         <td class="muted-small">
-                            <?= htmlspecialchars($order['end_date'], ENT_QUOTES, 'UTF-8') ?>
+                            <?php
+                            $endDateDisplay = (string)($order['end_date'] ?? '');
+                            $endTimeDisplay = (string)($order['end_time'] ?? '');
+                            $endCombined = $endDateDisplay;
+                            if ($endTimeDisplay !== '') {
+                                $endCombined .= ' ' . $endTimeDisplay;
+                            }
+                            echo htmlspecialchars($endCombined, ENT_QUOTES, 'UTF-8');
+                            ?>
                         </td>
                         <td class="muted-small">
                             <?= htmlspecialchars($order['borrower_contact'] ?? '', ENT_QUOTES, 'UTF-8') ?>
