@@ -367,14 +367,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// ציוד לבחירה בטופס
-$equipmentStmt = $pdo->query(
-    "SELECT id, name, code, category
-     FROM equipment
-     WHERE status = 'active'
-     ORDER BY name ASC"
-);
-$equipmentOptions = $equipmentStmt->fetchAll();
+// ציוד לבחירה בטופס – רק ציוד פעיל ופנוי בטווח התאריכים שנבחרו, ובמחסן של המשתמש (אם הוגדר)
+$userWarehouse = '';
+if ($me) {
+    $userWarehouse = trim((string)($me['warehouse'] ?? ''));
+}
+
+$equipmentSql = "SELECT id, name, code, category, location
+                 FROM equipment
+                 WHERE status = 'active'";
+$equipmentParams = [];
+if ($userWarehouse !== '') {
+    $equipmentSql .= " AND location = :warehouse";
+    $equipmentParams[':warehouse'] = $userWarehouse;
+}
+$equipmentSql .= " ORDER BY name ASC";
+
+$equipmentStmt = $pdo->prepare($equipmentSql);
+$equipmentStmt->execute($equipmentParams);
+$equipmentOptions = $equipmentStmt->fetchAll(PDO::FETCH_ASSOC);
 
 // קטגוריות ייחודיות לצורך סינון
 $equipmentCategories = [];
