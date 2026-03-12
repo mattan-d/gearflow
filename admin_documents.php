@@ -191,17 +191,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </style>
 </head>
 <body>
-<header>
-    <div>
-        <h1>ניהול מסמכים</h1>
-        <div class="muted">מסכים, טפסים והסכמים במערכת</div>
-    </div>
-    <div class="user-info">
-        מחובר כ־<?= htmlspecialchars($me['username'] ?? '', ENT_QUOTES, 'UTF-8') ?>
-        (<?= ($me['role'] ?? '') === 'admin' ? 'אדמין' : 'מנהל מחסן' ?>)
-        <a href="logout.php">התנתק</a>
-    </div>
-</header>
+<?php include __DIR__ . '/admin_header.php'; ?>
 <main>
     <div class="card">
         <h2>ניהול מסמכים</h2>
