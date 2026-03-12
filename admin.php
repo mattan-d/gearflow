@@ -158,14 +158,20 @@ $me = current_user();
                     <div class="main-nav-item-wrapper">
                         <a href="admin.php">ניהול מערכת</a>
                         <div class="main-nav-sub">
-                            <a href="admin_users.php">ניהול משתמשים</a>
                             <a href="admin_documents.php">ניהול מסמכים</a>
                             <a href="admin_design.php">עיצוב ממשק</a>
                             <a href="admin_times.php">ניהול זמנים</a>
                         </div>
                     </div>
+                    <a href="admin_users.php">ניהול משתמשים</a>
                     <a href="admin_orders.php">ניהול הזמנות</a>
                     <a href="admin_equipment.php">ניהול ציוד</a>
+                    <div class="main-nav-item-wrapper">
+                        <a href="#">נהלים</a>
+                        <div class="main-nav-sub">
+                            <a href="warehouse_rules.php">נהלי מחסן</a>
+                        </div>
+                    </div>
                 <?php else: ?>
                     <a href="admin_orders.php">ניהול הזמנות</a>
                 <?php endif; ?>
@@ -190,11 +196,6 @@ $me = current_user();
             <div class="icon">🕐</div>
             <h2>ניהול זמנים</h2>
             <p>הגדרת שעות פעילות, חלונות השאלה ומגבלות זמנים.</p>
-        </a>
-        <a href="admin_users.php" class="menu-card">
-            <div class="icon">👥</div>
-            <h2>ניהול משתמשים</h2>
-            <p>הוספת משתמשים, הרשאות, הפעלה והשבתה של חשבונות.</p>
         </a>
         <a href="admin_documents.php" class="menu-card">
             <div class="icon">📄</div>
