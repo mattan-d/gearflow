@@ -146,6 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = 'שם המשתמש כבר קיים.';
                 } else {
                     $error = 'שגיאה בעדכון המשתמש.';
+                }
             }
         }
     } elseif ($action === 'import_csv') {
