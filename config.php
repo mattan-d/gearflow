@@ -85,7 +85,7 @@ function initialize_database(PDO $pdo): void
         // אם המיגרציה נכשלת לא נכשיל את הטעינה כולה – רק לא נוסיף את העמודה
     }
 
-    // מיגרציה: הוספת עמודות שם פרטי, שם משפחה, מחסן לטבלת users
+    // מיגרציה: הוספת עמודות שם פרטי, שם משפחה, מחסן, מייל וטלפון לטבלת users
     try {
         $userCols = $pdo->query("PRAGMA table_info(users)")->fetchAll(PDO::FETCH_ASSOC);
         $names = array_column($userCols, 'name');
@@ -97,6 +97,12 @@ function initialize_database(PDO $pdo): void
         }
         if (!in_array('warehouse', $names, true)) {
             $pdo->exec("ALTER TABLE users ADD COLUMN warehouse TEXT");
+        }
+        if (!in_array('email', $names, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN email TEXT");
+        }
+        if (!in_array('phone', $names, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN phone TEXT");
         }
         if (!in_array('reset_token', $names, true)) {
             $pdo->exec("ALTER TABLE users ADD COLUMN reset_token TEXT");

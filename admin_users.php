@@ -24,14 +24,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $firstName  = trim($_POST['first_name'] ?? '');
         $lastName   = trim($_POST['last_name'] ?? '');
         $warehouse  = trim($_POST['warehouse'] ?? '');
+        $email      = trim($_POST['email'] ?? '');
+        $phone      = trim($_POST['phone'] ?? '');
 
         if ($username === '' || $password === '') {
             $error = 'יש למלא שם משתמש וסיסמה.';
         } else {
             try {
                 $stmt = $pdo->prepare(
-                    'INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, created_at)
-                     VALUES (:username, :password_hash, :role, :is_active, :first_name, :last_name, :warehouse, :created_at)'
+                    'INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, email, phone, created_at)
+                     VALUES (:username, :password_hash, :role, :is_active, :first_name, :last_name, :warehouse, :email, :phone, :created_at)'
                 );
                 $stmt->execute([
                     ':username'      => $username,
@@ -41,6 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':first_name'    => $firstName,
                     ':last_name'     => $lastName,
                     ':warehouse'     => $warehouse,
+                    ':email'        => $email,
+                    ':phone'        => $phone,
                     ':created_at'   => date('Y-m-d H:i:s'),
                 ]);
                 $_SESSION['admin_users_success'] = 'המשתמש נוצר בהצלחה.';
@@ -80,6 +84,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $firstName  = trim($_POST['first_name'] ?? '');
         $lastName   = trim($_POST['last_name'] ?? '');
         $warehouse  = trim($_POST['warehouse'] ?? '');
+        $email      = trim($_POST['email'] ?? '');
+        $phone      = trim($_POST['phone'] ?? '');
 
         if ($id <= 0 || $username === '') {
             $error = 'יש לבחור משתמש ולמלא שם משתמש.';
@@ -93,7 +99,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                              role = :role,
                              first_name = :first_name,
                              last_name = :last_name,
-                             warehouse = :warehouse
+                             warehouse = :warehouse,
+                             email = :email,
+                             phone = :phone
                          WHERE id = :id'
                     );
                     $stmt->execute([
@@ -103,6 +111,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':first_name'    => $firstName,
                         ':last_name'     => $lastName,
                         ':warehouse'     => $warehouse,
+                        ':email'         => $email,
+                        ':phone'         => $phone,
                         ':id'            => $id,
                     ]);
                 } else {
@@ -112,7 +122,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                              role = :role,
                              first_name = :first_name,
                              last_name = :last_name,
-                             warehouse = :warehouse
+                             warehouse = :warehouse,
+                             email = :email,
+                             phone = :phone
                          WHERE id = :id'
                     );
                     $stmt->execute([
@@ -121,6 +133,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':first_name' => $firstName,
                         ':last_name'  => $lastName,
                         ':warehouse'  => $warehouse,
+                        ':email'      => $email,
+                        ':phone'      => $phone,
                         ':id'         => $id,
                     ]);
                 }
@@ -138,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$usersStmt = $pdo->query('SELECT id, username, role, is_active, first_name, last_name, warehouse FROM users ORDER BY id ASC');
+$usersStmt = $pdo->query('SELECT id, username, role, is_active, first_name, last_name, warehouse, email, phone FROM users ORDER BY id ASC');
 $users = $usersStmt->fetchAll();
 
 // משתמש לעריכה בחלון קופץ
@@ -146,7 +160,7 @@ $editingUser = null;
 if (isset($_GET['edit_id'])) {
     $editId = (int)$_GET['edit_id'];
     if ($editId > 0) {
-        $stmt = $pdo->prepare('SELECT id, username, role, first_name, last_name, warehouse FROM users WHERE id = :id');
+        $stmt = $pdo->prepare('SELECT id, username, role, first_name, last_name, warehouse, email, phone FROM users WHERE id = :id');
         $stmt->execute([':id' => $editId]);
         $editingUser = $stmt->fetch() ?: null;
     }
@@ -483,6 +497,14 @@ if (isset($_GET['edit_id'])) {
                         <?php endif; ?>
                     </div>
                     <div>
+                        <label for="modal_email">אימייל</label>
+                        <input type="text" id="modal_email" name="email"
+                               value="<?= $editingUser ? htmlspecialchars($editingUser['email'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
+
+                        <label for="modal_phone">טלפון</label>
+                        <input type="text" id="modal_phone" name="phone"
+                               value="<?= $editingUser ? htmlspecialchars($editingUser['phone'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
+
                         <label for="modal_role">תפקיד</label>
                         <?php $currentRole = $editingUser['role'] ?? 'student'; ?>
                         <select id="modal_role" name="role">
@@ -521,6 +543,8 @@ if (isset($_GET['edit_id'])) {
                 <th>שם משתמש</th>
                 <th>שם פרטי</th>
                 <th>שם משפחה</th>
+                <th>אימייל</th>
+                <th>טלפון</th>
                 <th>מחסן</th>
                 <th>תפקיד</th>
                 <th>סטטוס</th>
@@ -534,6 +558,8 @@ if (isset($_GET['edit_id'])) {
                     <td><?= htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars($user['first_name'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars($user['last_name'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><?= htmlspecialchars($user['email'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><?= htmlspecialchars($user['phone'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars($user['warehouse'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
                     <td>
                         <?php if ($user['role'] === 'admin'): ?>
