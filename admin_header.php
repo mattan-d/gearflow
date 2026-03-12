@@ -30,6 +30,7 @@ $role = $me['role'] ?? 'student';
     }
     .main-nav-item-wrapper {
         position: relative;
+        display: inline-block;
     }
     .main-nav-sub {
         position: absolute;
