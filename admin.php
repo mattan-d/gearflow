@@ -67,14 +67,14 @@ $me = current_user();
         .main-nav-sub {
             position: absolute;
             right: 0;
-            top: 130%;
+            top: 100%; /* צמוד לכפתור הראשי כדי שלא ייעלם במעבר העכבר */
             background: #111827;
             border-radius: 8px;
             padding: 0.4rem 0.6rem;
             box-shadow: 0 12px 30px rgba(0,0,0,0.45);
             display: none;
             min-width: 170px;
-            z-index: 20;
+            z-index: 30;
         }
         .main-nav-sub a {
             display: block;
