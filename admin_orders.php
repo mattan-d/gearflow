@@ -154,6 +154,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ':id'         => $id,
             ]);
             $success = 'סטטוס ההזמנה עודכן.';
+
+            // אם מנהל מאשר הזמנה מטאב \"ממתין\" – נשארים באותו טאב לאחר העדכון
+            if ($status === 'approved' && $tab === 'pending') {
+                header('Location: admin_orders.php?tab=pending');
+                exit;
+            }
         }
     } elseif ($action === 'delete') {
         $id = (int)($_POST['id'] ?? 0);
@@ -161,6 +167,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare('DELETE FROM orders WHERE id = :id');
             $stmt->execute([':id' => $id]);
             $success = 'הזמנה נמחקה.';
+
+            // לאחר מחיקה – נשארים בטאב הנוכחי (אם קיים בפרמטרים)
+            if (isset($_GET['tab']) && in_array($_GET['tab'], ['today', 'pending', 'future', 'active', 'not_returned', 'history'], true)) {
+                header('Location: admin_orders.php?tab=' . urlencode($_GET['tab']));
+                exit;
+            }
         }
     } elseif ($action === 'duplicate') {
         $id = (int)($_POST['id'] ?? 0);
