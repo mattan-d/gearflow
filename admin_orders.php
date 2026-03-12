@@ -14,7 +14,7 @@ $error    = '';
 $success  = '';
 $editingOrder = null;
 
-// עריכת הזמנה קיימת - טעינת נתונים לטופס
+// עריכת הזמנה קיימת - טעינת נתונים לטופס / שכפול
 if (isset($_GET['edit_id'])) {
     $editId = (int)$_GET['edit_id'];
     if ($editId > 0) {
@@ -28,6 +28,31 @@ if (isset($_GET['edit_id'])) {
         );
         $stmt->execute([':id' => $editId]);
         $editingOrder = $stmt->fetch() ?: null;
+    }
+}
+$isDuplicateMode = false;
+if (isset($_GET['duplicate_id']) && !$editingOrder) {
+    $dupId = (int)$_GET['duplicate_id'];
+    if ($dupId > 0) {
+        $stmt = $pdo->prepare(
+            'SELECT o.*,
+                    e.name AS equipment_name,
+                    e.code AS equipment_code
+             FROM orders o
+             JOIN equipment e ON e.id = o.equipment_id
+             WHERE o.id = :id'
+        );
+        $stmt->execute([':id' => $dupId]);
+        $editingOrder = $stmt->fetch() ?: null;
+        if ($editingOrder) {
+            $isDuplicateMode = true;
+            // אם ההזמנה המקורית כבר עברה – מאפסים תאריכים
+            $todayYmd = date('Y-m-d');
+            if (!empty($editingOrder['end_date']) && $editingOrder['end_date'] < $todayYmd) {
+                $editingOrder['start_date'] = '';
+                $editingOrder['end_date']   = '';
+            }
+        }
     }
 }
 
@@ -66,6 +91,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        // במקרה של שכפול הזמנה – לא ניתן לשמור ללא שינוי תאריכים ביחס למקור
+        $originalStart = $_POST['original_start_date'] ?? '';
+        $originalEnd   = $_POST['original_end_date'] ?? '';
+
         // אם המשתמש המחובר הוא סטודנט – לא מאפשרים להחליף שם שואל מהטופס, אלא נועלים אותו על שם המשתמש הנוכחי
         if ($role === 'student' && $me) {
             $fn = trim((string)($me['first_name'] ?? ''));
@@ -79,6 +108,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (count($equipmentIds) === 0 || $borrowerName === '' || $startDate === '' || $endDate === '') {
             $error = 'יש למלא ציוד, שם שואל, ותאריכי התחלה וסיום.';
+        } elseif ($action === 'create' && $originalStart !== '' && $originalEnd !== '' && $originalStart === $startDate && $originalEnd === $endDate) {
+            // שכפול: חייבים לשנות לפחות אחד מהתאריכים לפני שמירה
+            $error = 'בשכפול הזמנה יש לשנות את תאריכי ההשאלה ו/או ההחזרה לפני שמירה.';
         } else {
             try {
                 if ($action === 'create') {
@@ -205,24 +237,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id     = (int)($_POST['id'] ?? 0);
         $status = $_POST['status'] ?? 'pending';
 
-        if ($id > 0 && in_array($status, ['pending', 'approved', 'on_loan', 'rejected', 'returned'], true)) {
-            $stmt = $pdo->prepare(
-                'UPDATE orders
-                 SET status = :status,
-                     updated_at = :updated_at
-                 WHERE id = :id'
-            );
-            $stmt->execute([
-                ':status'     => $status,
-                ':updated_at' => date('Y-m-d H:i:s'),
-                ':id'         => $id,
-            ]);
-            $success = 'סטטוס ההזמנה עודכן.';
+        if ($id > 0) {
+            // מביאים את הסטטוס הנוכחי כדי לבדוק מעבר חוקי
+            $stmt = $pdo->prepare('SELECT status FROM orders WHERE id = :id');
+            $stmt->execute([':id' => $id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $currentStatus = $row['status'] ?? null;
 
-            // אם מנהל מאשר הזמנה – נשארים בטאב \"ממתין\" לאחר העדכון
-            if ($status === 'approved') {
-                header('Location: admin_orders.php?tab=pending');
-                exit;
+            $allowedNext = [];
+            if ($currentStatus === 'pending') {
+                $allowedNext = ['approved', 'rejected'];
+            } elseif ($currentStatus === 'approved') {
+                $allowedNext = ['on_loan'];
+            } elseif ($currentStatus === 'on_loan') {
+                $allowedNext = ['returned'];
+            } else {
+                $allowedNext = [];
+            }
+
+            if ($currentStatus === null) {
+                $error = 'ההזמנה לא נמצאה.';
+            } elseif (!in_array($status, $allowedNext, true)) {
+                $error = 'שינוי סטטוס זה אינו מותר לפי כללי המעבר.';
+            } else {
+                $stmt = $pdo->prepare(
+                    'UPDATE orders
+                     SET status = :status,
+                         updated_at = :updated_at
+                     WHERE id = :id'
+                );
+                $stmt->execute([
+                    ':status'     => $status,
+                    ':updated_at' => date('Y-m-d H:i:s'),
+                    ':id'         => $id,
+                ]);
+                $success = 'סטטוס ההזמנה עודכן.';
+
+                // אם מנהל אישר הזמנה (ממתין -> מאושר) – נשארים בטאב "ממתין"
+                if ($currentStatus === 'pending' && $status === 'approved') {
+                    header('Location: admin_orders.php?tab=pending');
+                    exit;
+                }
             }
         }
     } elseif ($action === 'delete') {
@@ -241,32 +296,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'duplicate') {
         $id = (int)($_POST['id'] ?? 0);
         if ($id > 0) {
-            $stmt = $pdo->prepare(
-                'SELECT equipment_id, borrower_name, borrower_contact, start_date, end_date, notes
-                 FROM orders
-                 WHERE id = :id'
-            );
-            $stmt->execute([':id' => $id]);
-            $orderToCopy = $stmt->fetch();
-            if ($orderToCopy) {
-                $stmtInsert = $pdo->prepare(
-                    'INSERT INTO orders
-                     (equipment_id, borrower_name, borrower_contact, start_date, end_date, status, notes, created_at)
-                     VALUES
-                     (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :status, :notes, :created_at)'
-                );
-                $stmtInsert->execute([
-                    ':equipment_id'     => (int)$orderToCopy['equipment_id'],
-                    ':borrower_name'    => $orderToCopy['borrower_name'],
-                    ':borrower_contact' => $orderToCopy['borrower_contact'],
-                    ':start_date'       => $orderToCopy['start_date'],
-                    ':end_date'         => $orderToCopy['end_date'],
-                    ':status'           => 'pending',
-                    ':notes'            => $orderToCopy['notes'],
-                    ':created_at'       => date('Y-m-d H:i:s'),
-                ]);
-                $success = 'הזמנה שוכפלה בהצלחה.';
-            }
+            // במקום שכפול מידי – מעבר למסך \"שכפול הזמנה\"
+            header('Location: admin_orders.php?duplicate_id=' . $id);
+            exit;
         }
     }
 }
@@ -913,7 +945,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
     <?php
     $mode     = $_GET['mode'] ?? null;
-    // טופס ההזמנה נפתח רק אם ביקשו במפורש (mode=new), יש שגיאה, או עורכים הזמנה קיימת.
+    // טופס ההזמנה נפתח רק אם ביקשו במפורש (mode=new), יש שגיאה, או עורכים / משכפלים הזמנה.
     // הצלחה בלבד לא פותחת טופס.
     $showForm = $mode === 'new' || $editingOrder !== null || $error !== '';
     ?>
@@ -921,7 +953,15 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     <div class="modal-backdrop" id="order_modal" style="display: <?= $showForm ? 'flex' : 'none' ?>;">
         <div class="modal-card">
             <div class="modal-header">
-                <h2><?= $editingOrder ? 'עריכת הזמנה' : 'הזמנה חדשה' ?></h2>
+                <h2>
+                    <?php if ($editingOrder && $isDuplicateMode): ?>
+                        שכפול הזמנה
+                    <?php elseif ($editingOrder): ?>
+                        עריכת הזמנה
+                    <?php else: ?>
+                        הזמנה חדשה
+                    <?php endif; ?>
+                </h2>
                 <button type="button" class="modal-close" id="order_modal_close" aria-label="סגירת חלון">✕</button>
             </div>
 
@@ -937,6 +977,12 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                value="<?= $editingOrder ? htmlspecialchars($editingOrder['start_date'], ENT_QUOTES, 'UTF-8') : '' ?>">
                         <input type="hidden" id="end_date" name="end_date"
                                value="<?= $editingOrder ? htmlspecialchars($editingOrder['end_date'], ENT_QUOTES, 'UTF-8') : '' ?>">
+                        <?php if ($editingOrder && $isDuplicateMode): ?>
+                            <input type="hidden" name="original_start_date"
+                                   value="<?= htmlspecialchars((string)($editingOrder['start_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                            <input type="hidden" name="original_end_date"
+                                   value="<?= htmlspecialchars((string)($editingOrder['end_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                        <?php endif; ?>
 
                         <label>
                             בחירת תאריכים
@@ -1302,19 +1348,40 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                             <button type="submit" class="icon-btn" title="שכפול">⧉</button>
                                         </form>
 
-                                        <form method="post" action="admin_orders.php">
-                                            <input type="hidden" name="action" value="update_status">
-                                            <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                            <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                            <select name="status" class="muted-small">
-                                                <option value="pending"   <?= $order['status'] === 'pending'   ? 'selected' : '' ?>>ממתין</option>
-                                                <option value="approved"  <?= $order['status'] === 'approved'  ? 'selected' : '' ?>>מאושר</option>
-                                                <option value="on_loan"   <?= $order['status'] === 'on_loan'   ? 'selected' : '' ?>>בהשאלה</option>
-                                                <option value="returned"  <?= $order['status'] === 'returned'  ? 'selected' : '' ?>>עבר</option>
-                                                <option value="rejected"  <?= $order['status'] === 'rejected'  ? 'selected' : '' ?>>נדחה</option>
-                                            </select>
-                                            <button type="submit" class="btn small neutral">עדכון</button>
-                                        </form>
+                                        <?php
+                                        // בחירת סטטוס בהתאם לכללי המעבר:
+                                        // pending -> approved / rejected
+                                        // approved -> on_loan
+                                        // on_loan -> returned
+                                        $options = [];
+                                        if ($order['status'] === 'pending') {
+                                            $options = [
+                                                'approved' => 'מאושר',
+                                                'rejected' => 'נדחה',
+                                            ];
+                                        } elseif ($order['status'] === 'approved') {
+                                            $options = [
+                                                'on_loan' => 'בהשאלה',
+                                            ];
+                                        } elseif ($order['status'] === 'on_loan') {
+                                            $options = [
+                                                'returned' => 'עבר',
+                                            ];
+                                        }
+                                        ?>
+                                        <?php if (!empty($options)): ?>
+                                            <form method="post" action="admin_orders.php">
+                                                <input type="hidden" name="action" value="update_status">
+                                                <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                                <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                                <select name="status" class="muted-small">
+                                                    <?php foreach ($options as $value => $label): ?>
+                                                        <option value="<?= $value ?>"><?= $label ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                                <button type="submit" class="btn small neutral">עדכון</button>
+                                            </form>
+                                        <?php endif; ?>
                                     </div>
                                 <?php endif;
                             } ?>
