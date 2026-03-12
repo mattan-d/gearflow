@@ -1509,6 +1509,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const orderModalCancel = document.getElementById('order_modal_cancel');
     const bulkUpdateBtn = document.getElementById('bulk_update_btn');
     const changesJsonInput = document.getElementById('changes_json');
+    const originalStartInput = document.querySelector('input[name="original_start_date"]');
+    const originalEndInput = document.querySelector('input[name="original_end_date"]');
+    const isDuplicateMode = !!(originalStartInput || originalEndInput);
 
     if (!startInput || !endInput || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel || !toggle || !panel) {
         return;
@@ -1624,8 +1627,16 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         const hasEquipCheckbox = anyEquipmentChecked();
         const hasEquip = hasEquipFromList || hasEquipCheckbox;
 
+        let allowByDuplicate = true;
+        if (isDuplicateMode && submitBtn) {
+            const origStart = originalStartInput ? originalStartInput.value : '';
+            const origEnd = originalEndInput ? originalEndInput.value : '';
+            const datesChanged = (startInput.value !== origStart) || (endInput.value !== origEnd);
+            allowByDuplicate = datesChanged;
+        }
+
         if (submitBtn) {
-            submitBtn.disabled = !(datesReady && hasEquip);
+            submitBtn.disabled = !(datesReady && hasEquip && allowByDuplicate);
         }
     }
 
