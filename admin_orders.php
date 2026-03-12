@@ -14,6 +14,54 @@ $error    = '';
 $success  = '';
 $editingOrder = null;
 
+// AJAX: בדיקת זמינות ציוד לטווח תאריכים/שעות נבחר
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'available_equipment') {
+    header('Content-Type: application/json; charset=UTF-8');
+
+    $startDate  = trim($_GET['start_date'] ?? '');
+    $endDate    = trim($_GET['end_date'] ?? '');
+    $startTime  = trim($_GET['start_time'] ?? '');
+    $endTime    = trim($_GET['end_time'] ?? '');
+    $excludeId  = (int)($_GET['exclude_order_id'] ?? 0);
+
+    if ($startDate === '' || $endDate === '') {
+        echo json_encode(['unavailable_ids' => []], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $reqStart = $startDate . ' ' . ($startTime !== '' ? $startTime : '00:00');
+    $reqEnd   = $endDate . ' ' . ($endTime !== '' ? $endTime : '23:59');
+
+    $sql = "
+        SELECT DISTINCT equipment_id
+        FROM orders
+        WHERE status IN ('pending', 'approved', 'on_loan')
+          AND (
+                (start_date || ' ' || COALESCE(start_time, '00:00')) <= :req_end
+            AND (end_date   || ' ' || COALESCE(end_time,   '23:59')) >= :req_start
+          )
+    ";
+    $params = [
+        ':req_start' => $reqStart,
+        ':req_end'   => $reqEnd,
+    ];
+    if ($excludeId > 0) {
+        $sql .= " AND id != :exclude_id";
+        $params[':exclude_id'] = $excludeId;
+    }
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $ids  = [];
+    foreach ($rows as $row) {
+        $ids[] = (int)($row['equipment_id'] ?? 0);
+    }
+
+    echo json_encode(['unavailable_ids' => $ids], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // עריכת הזמנה קיימת - טעינת נתונים לטופס / שכפול
 if (isset($_GET['edit_id'])) {
     $editId = (int)$_GET['edit_id'];
@@ -70,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $startTime       = trim($_POST['start_time'] ?? '');
         $endTime         = trim($_POST['end_time'] ?? '');
         $notes           = trim($_POST['notes'] ?? '');
-        $approvalStatus  = $_POST['approval_status'] ?? null; // לשימוש באישור/דחייה ע\"י מנהל
+        $orderStatus     = $_POST['order_status'] ?? null; // מצב הזמנה (למנהל בעריכה)
         $rejectionReason = trim($_POST['rejection_reason'] ?? '');
 
         // איסוף מזהי ציוד – מרובים במצב יצירה, יחיד במצב עדכון
@@ -114,6 +162,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // שכפול: חייבים לשנות לפחות אחד מהתאריכים לפני שמירה
             $error = 'בשכפול הזמנה יש לשנות את תאריכי ההשאלה ו/או ההחזרה לפני שמירה.';
         } else {
+            $reqStart = $startDate . ' ' . ($startTime !== '' ? $startTime : '00:00');
+            $reqEnd   = $endDate . ' ' . ($endTime !== '' ? $endTime : '23:59');
+            $excludeId = ($action === 'update' && $id > 0) ? $id : 0;
+            $conflicted = [];
+            if (count($equipmentIds) > 0) {
+                $placeholders = implode(',', array_fill(0, count($equipmentIds), '?'));
+                $sql = "SELECT DISTINCT equipment_id FROM orders
+                        WHERE equipment_id IN ($placeholders)
+                        AND status IN ('pending', 'approved', 'on_loan')
+                        AND (start_date || ' ' || COALESCE(start_time, '00:00')) <= ?
+                        AND (end_date || ' ' || COALESCE(end_time, '23:59')) >= ?
+                        AND id != ?";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute(array_merge($equipmentIds, [$reqEnd, $reqStart, $excludeId]));
+                $conflicted = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            }
+            if (!empty($conflicted)) {
+                $error = 'חלק מפריטי הציוד הנבחרים תפוסים בפרק הזמן הנבחר. נא לבחור תאריכים אחרים או להסיר פריטים תפוסים.';
+            }
+            if ($error === '') {
             try {
                 if ($action === 'create') {
                     // הזמנה שנפתחת ע\"י סטודנט מתחילה כ\"ממתין\"; ע\"י אדמין/מנהל מחסן – מאושרת כברירת מחדל
@@ -154,95 +222,94 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     exit;
                 } elseif ($action === 'update' && $id > 0) {
                     $equipmentId = $equipmentIds[0];
-                    // אם מנהל בוחר \"נדחה\" – נוסיף סיבת דחייה להערות
-                    if ($approvalStatus === 'rejected' && $rejectionReason !== '') {
+
+                    // אם מנהל שינה את מצב ההזמנה – בודקים שהמעבר חוקי ומעדכנים
+                    $currentStatusRow = $pdo->prepare('SELECT status FROM orders WHERE id = :id');
+                    $currentStatusRow->execute([':id' => $id]);
+                    $currentStatus = $currentStatusRow->fetchColumn() ?: '';
+                    $allowedNext = [];
+                    if ($currentStatus === 'pending') {
+                        $allowedNext = ['approved', 'rejected'];
+                    } elseif ($currentStatus === 'approved') {
+                        $allowedNext = ['on_loan'];
+                    } elseif ($currentStatus === 'on_loan') {
+                        $allowedNext = ['returned'];
+                    }
+                    $newStatus = $currentStatus;
+                    if ($orderStatus !== null && $orderStatus !== '') {
+                        if (in_array($orderStatus, $allowedNext, true)) {
+                            $newStatus = $orderStatus;
+                        } elseif ($orderStatus === $currentStatus) {
+                            $newStatus = $currentStatus;
+                        }
+                    }
+                    if ($newStatus === 'rejected' && $rejectionReason !== '') {
                         if ($notes !== '') {
                             $notes .= "\n";
                         }
                         $notes .= 'סיבה לדחייה: ' . $rejectionReason;
                     }
 
-                    // נבנה שאילתת עדכון בהתאם לסטטוס (אם השתנה)
-                    if ($approvalStatus === 'approved' || $approvalStatus === 'rejected') {
-                        $newStatus = $approvalStatus === 'approved' ? 'approved' : 'rejected';
-                        $stmt = $pdo->prepare(
-                            'UPDATE orders
-                             SET equipment_id     = :equipment_id,
-                                 borrower_name    = :borrower_name,
-                                 borrower_contact = :borrower_contact,
-                                 start_date       = :start_date,
-                                 end_date         = :end_date,
-                                 start_time       = :start_time,
-                                 end_time         = :end_time,
-                                 status           = :status,
-                                 notes            = :notes,
-                                 updated_at       = :updated_at
-                             WHERE id = :id'
-                        );
-                        $stmt->execute([
-                            ':equipment_id'     => $equipmentId,
-                            ':borrower_name'    => $borrowerName,
-                            ':borrower_contact' => $borrowerContact,
-                            ':start_date'       => $startDate,
-                            ':end_date'         => $endDate,
-                            ':start_time'       => $startTime !== '' ? $startTime : null,
-                            ':end_time'         => $endTime !== '' ? $endTime : null,
-                            ':status'           => $newStatus,
-                            ':notes'            => $notes,
-                            ':updated_at'       => date('Y-m-d H:i:s'),
-                            ':id'               => $id,
-                        ]);
-                    } else {
-                        $stmt = $pdo->prepare(
-                            'UPDATE orders
-                             SET equipment_id     = :equipment_id,
-                                 borrower_name    = :borrower_name,
-                                 borrower_contact = :borrower_contact,
-                                 start_date       = :start_date,
-                                 end_date         = :end_date,
-                                 start_time       = :start_time,
-                                 end_time         = :end_time,
-                                 notes            = :notes,
-                                 updated_at       = :updated_at
-                             WHERE id = :id'
-                        );
-                        $stmt->execute([
-                            ':equipment_id'     => $equipmentId,
-                            ':borrower_name'    => $borrowerName,
-                            ':borrower_contact' => $borrowerContact,
-                            ':start_date'       => $startDate,
-                            ':end_date'         => $endDate,
-                            ':start_time'       => $startTime !== '' ? $startTime : null,
-                            ':end_time'         => $endTime !== '' ? $endTime : null,
-                            ':notes'            => $notes,
-                            ':updated_at'       => date('Y-m-d H:i:s'),
-                            ':id'               => $id,
-                        ]);
-                    }
+                    $stmt = $pdo->prepare(
+                        'UPDATE orders
+                         SET equipment_id     = :equipment_id,
+                             borrower_name    = :borrower_name,
+                             borrower_contact = :borrower_contact,
+                             start_date       = :start_date,
+                             end_date         = :end_date,
+                             start_time       = :start_time,
+                             end_time         = :end_time,
+                             status           = :status,
+                             notes            = :notes,
+                             updated_at       = :updated_at
+                         WHERE id = :id'
+                    );
+                    $stmt->execute([
+                        ':equipment_id'     => $equipmentId,
+                        ':borrower_name'    => $borrowerName,
+                        ':borrower_contact' => $borrowerContact,
+                        ':start_date'       => $startDate,
+                        ':end_date'         => $endDate,
+                        ':start_time'       => $startTime !== '' ? $startTime : null,
+                        ':end_time'         => $endTime !== '' ? $endTime : null,
+                        ':status'           => $newStatus,
+                        ':notes'            => $notes,
+                        ':updated_at'       => date('Y-m-d H:i:s'),
+                        ':id'               => $id,
+                    ]);
 
                     $success = 'הזמנה עודכנה בהצלחה.';
 
-                    // ניווט לאחר אישור/דחייה של הזמנה של סטודנט
-                    if ($approvalStatus === 'approved' || $approvalStatus === 'rejected') {
-                        $today = date('Y-m-d');
-                        $targetTab = 'pending';
-                        if ($approvalStatus === 'approved') {
-                            if ($startDate <= $today && $endDate >= $today) {
-                                $targetTab = 'today';
-                            } elseif ($startDate > $today) {
-                                $targetTab = 'future';
-                            }
+                    // ניווט לאחר שמירה לפי הסטטוס המעודכן
+                    $today = date('Y-m-d');
+                    $targetTab = 'pending';
+                    if ($newStatus === 'approved') {
+                        if ($startDate <= $today && $endDate >= $today) {
+                            $targetTab = 'today';
+                        } elseif ($startDate > $today) {
+                            $targetTab = 'future';
                         }
                         header('Location: admin_orders.php?tab=' . $targetTab);
                         exit;
-                    } else {
-                        // עדכון רגיל – לאחר שמירה נסגור את הטופס ונחזור לרשימת ההזמנות
-                        header('Location: admin_orders.php');
+                    }
+                    if ($newStatus === 'rejected') {
+                        header('Location: admin_orders.php?tab=pending');
                         exit;
                     }
+                    if ($newStatus === 'on_loan') {
+                        header('Location: admin_orders.php?tab=active');
+                        exit;
+                    }
+                    if ($newStatus === 'returned') {
+                        header('Location: admin_orders.php?tab=history');
+                        exit;
+                    }
+                    header('Location: admin_orders.php');
+                    exit;
                 }
             } catch (PDOException $e) {
                 $error = 'שגיאה בשמירת ההזמנה.';
+            }
             }
         }
     } elseif ($action === 'update_status') {
@@ -705,6 +772,20 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             align-items: center;
             justify-content: center;
         }
+        .recurring-toggle-row .toggle-label { display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+        .recurring-toggle-row input[type="checkbox"] { width: 1.1rem; height: 1.1rem; }
+        .recurring-section { border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem; background: #f9fafb; margin-bottom: 0.75rem; }
+        .recurring-row { margin-bottom: 0.6rem; }
+        .recurring-row label { display: block; font-size: 0.9rem; margin-bottom: 0.2rem; }
+        .recurring-date-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+        .recurring-date-row input, .recurring-date-row select { padding: 0.35rem 0.5rem; border-radius: 6px; border: 1px solid #d1d5db; }
+        .recurring-end-radio { display: flex; gap: 1rem; }
+        .recurring-end-radio label { display: inline-flex; align-items: center; gap: 0.35rem; margin-bottom: 0; }
+        .recurring-mini-cal { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 0.5rem; max-width: 280px; }
+        .recurring-mini-cal .day-cell { display: inline-block; width: 2rem; text-align: center; padding: 0.25rem; margin: 2px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+        .recurring-mini-cal .day-cell:hover { background: #e5e7eb; }
+        .recurring-mini-cal .day-cell.selected { background: #4f46e5; color: #fff; }
+        .recurring-mini-cal .day-cell.disabled { color: #9ca3af; cursor: not-allowed; }
         .time-modal-backdrop {
             position: fixed;
             inset: 0;
@@ -1097,6 +1178,71 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                    value="<?= htmlspecialchars((string)($editingOrder['end_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                         <?php endif; ?>
 
+                        <?php
+                        $showRecurringBlock = !$editingOrder && ($role === 'admin' || $role === 'warehouse_manager');
+                        if ($showRecurringBlock): ?>
+                        <div class="recurring-toggle-row" style="margin-bottom: 0.75rem;">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="recurring_toggle" name="recurring_enabled" value="1" autocomplete="off">
+                                <span>הזמנה מחזורית</span>
+                            </label>
+                        </div>
+                        <div id="recurring_section" class="recurring-section" style="display: none;">
+                            <div class="recurring-row">
+                                <label>תאריך התחלה ושעת התחלה</label>
+                                <div class="recurring-date-row">
+                                    <input type="hidden" name="recurring_start_date" id="recurring_start_date_h" value="">
+                                    <input type="text" id="recurring_start_date" readonly placeholder="תאריך" style="max-width: 7rem;" title="לחץ לבחירת תאריך">
+                                    <select id="recurring_start_time" name="recurring_start_time">
+                                        <option value="">שעה</option>
+                                        <?php for ($h = 9; $h <= 15; $h++): ?>
+                                            <option value="<?= sprintf('%02d:00', $h) ?>"><?= sprintf('%02d:00', $h) ?></option>
+                                            <?php if ($h < 15): ?>
+                                            <option value="<?= sprintf('%02d:30', $h) ?>"><?= sprintf('%02d:30', $h) ?></option>
+                                            <?php endif; ?>
+                                        <?php endfor; ?>
+                                    </select>
+                                </div>
+                                <div id="recurring_calendar_wrapper" class="recurring-mini-cal" style="display: none; margin-top: 0.5rem;"></div>
+                            </div>
+                            <div class="recurring-row">
+                                <label for="recurring_freq">מחזוריות</label>
+                                <select id="recurring_freq" name="recurring_freq">
+                                    <option value="day">יום</option>
+                                    <option value="week">שבוע</option>
+                                </select>
+                            </div>
+                            <div class="recurring-row">
+                                <label for="recurring_duration">משך הזמן</label>
+                                <select id="recurring_duration" name="recurring_duration">
+                                    <option value="1">שעה</option>
+                                    <option value="1.5">שעה וחצי</option>
+                                    <option value="2">שעתיים</option>
+                                    <option value="2.5">שעתיים וחצי</option>
+                                    <option value="3">שלוש שעות</option>
+                                </select>
+                            </div>
+                            <div class="recurring-row">
+                                <label>סיום</label>
+                                <div class="recurring-end-radio">
+                                    <label><input type="radio" name="recurring_end_type" value="count" checked> מספר פעמים</label>
+                                    <label><input type="radio" name="recurring_end_type" value="end_date"> תאריך סיום</label>
+                                </div>
+                            </div>
+                            <div id="recurring_count_wrapper" class="recurring-row">
+                                <label for="recurring_count">כמות פעמים</label>
+                                <input type="number" id="recurring_count" name="recurring_count" min="1" max="999" value="1" style="width: 5rem;">
+                            </div>
+                            <div id="recurring_end_date_wrapper" class="recurring-row" style="display: none;">
+                                <label>תאריך סיום</label>
+                                <input type="hidden" name="recurring_end_date" id="recurring_end_date_h" value="">
+                                <input type="text" id="recurring_end_date" readonly placeholder="תאריך סיום" style="max-width: 7rem;" title="לחץ לבחירת תאריך">
+                                <div id="recurring_end_calendar_wrapper" class="recurring-mini-cal" style="display: none; margin-top: 0.5rem;"></div>
+                            </div>
+                        </div>
+                        <div id="normal_date_section">
+                        <?php endif; ?>
+
                         <label>
                             בחירת תאריכים
                             <span id="date_range_label" class="muted-small">-</span>
@@ -1134,6 +1280,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 </div>
                             </div>
                         </div>
+                        <?php if ($showRecurringBlock): ?>
+                        </div>
+                        <?php endif; ?>
 
                         <!-- רשימת פריטי הציוד שנבחרו (מתעדכנת אחרי לחיצה על "הוסף") -->
                         <div id="selected_equipment_list" style="margin: 0.5rem 0;">
@@ -1211,19 +1360,47 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <input type="hidden" id="borrower_contact" name="borrower_contact"
                                value="<?= htmlspecialchars($editingOrder ? (string)($editingOrder['borrower_contact'] ?? '') : '', ENT_QUOTES, 'UTF-8') ?>">
 
-                        <?php if ($editingOrder && $role !== 'student' && $editingOrder['status'] === 'pending'): ?>
-                            <label for="approval_status">אישור</label>
-                            <select id="approval_status" name="approval_status">
-                                <option value="approved">מאושר</option>
-                                <option value="rejected">נדחה</option>
+                        <?php
+                        if ($editingOrder && $role !== 'student') {
+                            $currentStatus = (string)($editingOrder['status'] ?? '');
+                            $orderStatusOptions = [];
+                            if ($currentStatus === 'pending') {
+                                $orderStatusOptions = [
+                                    'pending'  => 'ממתין (נוכחי)',
+                                    'approved' => 'מאושר',
+                                    'rejected' => 'נדחה',
+                                ];
+                            } elseif ($currentStatus === 'approved') {
+                                $orderStatusOptions = [
+                                    'approved' => 'מאושר (נוכחי)',
+                                    'on_loan'  => 'בהשאלה',
+                                ];
+                            } elseif ($currentStatus === 'on_loan') {
+                                $orderStatusOptions = [
+                                    'on_loan'  => 'בהשאלה (נוכחי)',
+                                    'returned' => 'עבר',
+                                ];
+                            } elseif ($currentStatus === 'rejected') {
+                                $orderStatusOptions = ['rejected' => 'נדחה (נוכחי)'];
+                            } elseif ($currentStatus === 'returned') {
+                                $orderStatusOptions = ['returned' => 'עבר (נוכחי)'];
+                            }
+                            ?>
+                            <label for="order_status">מצב הזמנה</label>
+                            <select id="order_status" name="order_status">
+                                <?php foreach ($orderStatusOptions as $val => $label): ?>
+                                    <option value="<?= htmlspecialchars($val, ENT_QUOTES, 'UTF-8') ?>" <?= $val === $currentStatus ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?>
+                                    </option>
+                                <?php endforeach; ?>
                             </select>
 
-                            <div id="rejection_reason_wrapper" style="margin-top: 0.5rem; display: none;">
+                            <div id="rejection_reason_wrapper" style="margin-top: 0.5rem; display: <?= $currentStatus === 'rejected' ? 'block' : 'none' ?>;">
                                 <label for="rejection_reason">סיבה לדחיית הבקשה</label>
                                 <textarea id="rejection_reason" name="rejection_reason"
                                           placeholder="פרט את הסיבה לדחיית הבקשה"></textarea>
                             </div>
-                        <?php endif; ?>
+                        <?php } ?>
 
                         <label for="notes">הערות</label>
                         <textarea
@@ -1284,7 +1461,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 }
                                 $isChecked = $editingOrder && (int)$editingOrder['equipment_id'] === (int)$item['id'];
                                 ?>
-                                <tr data-category="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>">
+                                <tr data-category="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>" data-equipment-id="<?= (int)$item['id'] ?>">
                                     <td>
                                         <input type="checkbox"
                                                name="equipment_ids[]"
@@ -1596,7 +1773,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const borrowerSearch = document.getElementById('borrower_search');
     const borrowerHidden = document.getElementById('borrower_name');
     const borrowerSuggestions = document.getElementById('borrower_suggestions');
-    const approvalSelect = document.getElementById('approval_status');
+    const orderStatusSelect = document.getElementById('order_status');
     const rejectionWrapper = document.getElementById('rejection_reason_wrapper');
     const modeStartBtn = document.getElementById('mode_start');
     const modeEndBtn = document.getElementById('mode_end');
@@ -1627,6 +1804,18 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const timeModalCancel = document.getElementById('time_modal_cancel');
 
     let currentTimeTarget = null; // 'start' | 'end' | null
+
+    const recurringToggle = document.getElementById('recurring_toggle');
+    const recurringSection = document.getElementById('recurring_section');
+    const normalDateSection = document.getElementById('normal_date_section');
+    const recurringStartDateInput = document.getElementById('recurring_start_date');
+    const recurringStartDateH = document.getElementById('recurring_start_date_h');
+    const recurringStartTimeSelect = document.getElementById('recurring_start_time');
+    const recurringCountWrapper = document.getElementById('recurring_count_wrapper');
+    const recurringEndDateWrapper = document.getElementById('recurring_end_date_wrapper');
+    const recurringEndDateInput = document.getElementById('recurring_end_date');
+    const recurringEndDateH = document.getElementById('recurring_end_date_h');
+    const recurringCountInput = document.getElementById('recurring_count');
 
     if (!startInput || !endInput || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel || !toggle || !panel) {
         return;
@@ -1723,25 +1912,51 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         }
     }
 
-    function updateEquipmentState() {
-        const hasStart = !!startInput.value;
-        const hasEnd = !!endInput.value;
-        const datesReady = hasStart && hasEnd;
+    let unavailableEquipmentIds = [];
+
+    function isRecurringReady() {
+        if (!recurringToggle || !recurringToggle.checked) return false;
+        const startD = recurringStartDateH ? recurringStartDateH.value : '';
+        const startT = recurringStartTimeSelect ? recurringStartTimeSelect.value : '';
+        const endTypeEl = document.querySelector('input[name="recurring_end_type"]:checked');
+        const endType = endTypeEl ? endTypeEl.value : 'count';
+        if (endType === 'count') {
+            const n = recurringCountInput ? parseInt(recurringCountInput.value, 10) : 0;
+            return !!(startD && startT && !isNaN(n) && n >= 1);
+        }
+        return !!(startD && startT && recurringEndDateH && recurringEndDateH.value);
+    }
+
+    function applyEquipmentVisibility() {
+        const normalDatesReady = !!startInput.value && !!endInput.value;
+        const recurringReady = isRecurringReady();
+        const datesReady = normalDatesReady || recurringReady;
+        const categoryValue = categoryFilter ? categoryFilter.value : 'all';
 
         equipmentCheckboxes.forEach(function (cb) {
             cb.disabled = !datesReady;
         });
         if (equipmentTableBody) {
             const rows = equipmentTableBody.querySelectorAll('tr');
+            const useAvailability = !recurringReady;
             rows.forEach(function (row) {
-                row.style.display = datesReady ? '' : 'none';
+                const cat = row.getAttribute('data-category');
+                const eqId = parseInt(row.getAttribute('data-equipment-id'), 10);
+                const categoryMatch = categoryValue === 'all' || categoryValue === cat;
+                const available = useAvailability ? (unavailableEquipmentIds.indexOf(eqId) === -1) : true;
+                const show = datesReady && categoryMatch && available;
+                row.style.display = show ? '' : 'none';
+                const checkbox = row.querySelector('input[type="checkbox"]');
+                if (checkbox) {
+                    checkbox.disabled = !datesReady || !available;
+                    if (!available) checkbox.checked = false;
+                }
             });
         }
 
         const hasEquipFromList = equipmentIdHidden ? !!equipmentIdHidden.value : false;
         const hasEquipCheckbox = anyEquipmentChecked();
         const hasEquip = hasEquipFromList || hasEquipCheckbox;
-
         let allowByDuplicate = true;
         if (isDuplicateMode && submitBtn) {
             const origStart = originalStartInput ? originalStartInput.value : '';
@@ -1749,9 +1964,57 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             const datesChanged = (startInput.value !== origStart) || (endInput.value !== origEnd);
             allowByDuplicate = datesChanged;
         }
-
         if (submitBtn) {
             submitBtn.disabled = !(datesReady && hasEquip && allowByDuplicate);
+        }
+    }
+
+    function refreshEquipmentAvailability() {
+        const startDate = startInput ? startInput.value : '';
+        const endDate = endInput ? endInput.value : '';
+        if (startDate === '' || endDate === '') {
+            unavailableEquipmentIds = [];
+            return Promise.resolve();
+        }
+        const startTime = startTimeInput ? startTimeInput.value : '';
+        const endTime = endTimeInput ? endTimeInput.value : '';
+        const orderIdInput = orderModal ? orderModal.querySelector('input[name="id"]') : null;
+        const excludeOrderId = orderIdInput ? parseInt(orderIdInput.value, 10) : 0;
+
+        const params = new URLSearchParams({
+            ajax: 'available_equipment',
+            start_date: startDate,
+            end_date: endDate,
+            start_time: startTime,
+            end_time: endTime,
+            exclude_order_id: excludeOrderId.toString()
+        });
+        return fetch('admin_orders.php?' + params.toString())
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                unavailableEquipmentIds = data.unavailable_ids || [];
+            })
+            .catch(function () {
+                unavailableEquipmentIds = [];
+            });
+    }
+
+    function updateEquipmentState() {
+        const recurringOn = recurringToggle && recurringToggle.checked;
+        const hasStart = !!startInput.value;
+        const hasEnd = !!endInput.value;
+        const datesReady = hasStart && hasEnd;
+
+        if (recurringOn) {
+            unavailableEquipmentIds = [];
+            applyEquipmentVisibility();
+        } else if (datesReady && equipmentTableBody) {
+            refreshEquipmentAvailability().then(function () {
+                applyEquipmentVisibility();
+            });
+        } else {
+            unavailableEquipmentIds = [];
+            applyEquipmentVisibility();
         }
     }
 
@@ -1986,14 +2249,117 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     // סינון טבלת הציוד לפי קטגוריה
     if (categoryFilter && equipmentTableBody) {
         categoryFilter.addEventListener('change', function () {
-            const value = categoryFilter.value;
-            const rows = equipmentTableBody.querySelectorAll('tr');
-            rows.forEach(function (row) {
-                const cat = row.getAttribute('data-category');
-                row.style.display = (value === 'all' || value === cat) ? '' : 'none';
+            applyEquipmentVisibility();
+        });
+    }
+
+    // הזמנה מחזורית: טוגל, רדיו, לוחות שנה מיני
+    if (recurringToggle && recurringSection && normalDateSection) {
+        recurringToggle.addEventListener('change', function () {
+            const on = recurringToggle.checked;
+            recurringSection.style.display = on ? 'block' : 'none';
+            normalDateSection.style.display = on ? 'none' : 'block';
+            if (!on) {
+                startInput.value = '';
+                endInput.value = '';
+                if (startTimeInput) startTimeInput.value = '';
+                if (endTimeInput) endTimeInput.value = '';
+            }
+            updateEquipmentState();
+        });
+    }
+    const recurringEndTypeRadios = document.querySelectorAll('input[name="recurring_end_type"]');
+    if (recurringCountWrapper && recurringEndDateWrapper) {
+        recurringEndTypeRadios.forEach(function (radio) {
+            radio.addEventListener('change', function () {
+                const useCount = document.querySelector('input[name="recurring_end_type"]:checked').value === 'count';
+                recurringCountWrapper.style.display = useCount ? 'block' : 'none';
+                recurringEndDateWrapper.style.display = useCount ? 'none' : 'block';
+                updateEquipmentState();
             });
         });
     }
+    if (recurringCountInput) {
+        recurringCountInput.addEventListener('input', function () { updateEquipmentState(); });
+    }
+
+    function buildMiniCalendar(containerId, currentYmd, onSelect) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        const parts = (currentYmd || '').split('-');
+        let year = parts.length === 3 ? parseInt(parts[0], 10) : new Date().getFullYear();
+        let month = (parts.length === 3 ? parseInt(parts[1], 10) : new Date().getMonth() + 1) - 1;
+        if (isNaN(year)) year = new Date().getFullYear();
+        if (isNaN(month) || month < 0) month = new Date().getMonth();
+        const first = new Date(year, month, 1);
+        const last = new Date(year, month + 1, 0);
+        const firstDay = first.getDay();
+        const daysInMonth = last.getDate();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        let html = '<div class="recurring-cal-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">';
+        html += '<button type="button" class="icon-btn" data-dir="-1">‹</button>';
+        html += '<span>' + year + '-' + (month + 1) + '</span>';
+        html += '<button type="button" class="icon-btn" data-dir="1">›</button></div>';
+        html += '<div class="recurring-cal-weekdays" style="display:flex;gap:2px;margin-bottom:4px;font-size:0.75rem;">';
+        ['א','ב','ג','ד','ה','ו','ש'].forEach(function (w) { html += '<span style="width:2rem;text-align:center;">' + w + '</span>'; });
+        html += '</div><div class="recurring-cal-grid" style="display:flex;flex-wrap:wrap;gap:2px;">';
+        for (let i = 0; i < firstDay; i++) html += '<span style="width:2rem;height:2rem;"></span>';
+        for (let d = 1; d <= daysInMonth; d++) {
+            const cellDate = new Date(year, month, d);
+            const disabled = cellDate.getDay() === 5 || cellDate.getDay() === 6 || cellDate < today;
+            const ymd = year + '-' + (month + 1 < 10 ? '0' : '') + (month + 1) + '-' + (d < 10 ? '0' : '') + d;
+            const sel = ymd === currentYmd ? ' selected' : '';
+            const dis = disabled ? ' disabled' : '';
+            html += '<span class="day-cell' + sel + dis + '" data-ymd="' + ymd + '" style="width:2rem;height:2rem;text-align:center;line-height:2rem;border-radius:6px;cursor:' + (disabled ? 'not-allowed' : 'pointer') + ';font-size:0.85rem;">' + d + '</span>';
+        }
+        html += '</div>';
+        container.innerHTML = html;
+        container.querySelectorAll('.day-cell:not(.disabled)').forEach(function (cell) {
+            cell.addEventListener('click', function () {
+                const ymd = cell.getAttribute('data-ymd');
+                if (ymd) onSelect(ymd);
+            });
+        });
+        container.querySelectorAll('.recurring-cal-header button').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const dir = parseInt(btn.getAttribute('data-dir'), 10);
+                const next = new Date(year, month + dir, 1);
+                buildMiniCalendar(containerId, null, onSelect);
+                const nextYmd = next.getFullYear() + '-' + (next.getMonth() + 1 < 10 ? '0' : '') + (next.getMonth() + 1);
+                buildMiniCalendar(containerId, nextYmd + '-01', onSelect);
+            });
+        });
+    }
+    if (recurringStartDateInput && recurringStartDateH && document.getElementById('recurring_calendar_wrapper')) {
+        recurringStartDateInput.addEventListener('focus', function () {
+            const wrap = document.getElementById('recurring_calendar_wrapper');
+            if (wrap.style.display === 'none') {
+                wrap.style.display = 'block';
+                buildMiniCalendar('recurring_calendar_wrapper', recurringStartDateH.value, function (ymd) {
+                    recurringStartDateH.value = ymd;
+                    recurringStartDateInput.value = ymd;
+                    wrap.style.display = 'none';
+                    updateEquipmentState();
+                });
+            } else wrap.style.display = 'none';
+        });
+    }
+    if (recurringEndDateInput && recurringEndDateH && document.getElementById('recurring_end_calendar_wrapper')) {
+        recurringEndDateInput.addEventListener('focus', function () {
+            const wrap = document.getElementById('recurring_end_calendar_wrapper');
+            if (wrap.style.display === 'none') {
+                wrap.style.display = 'block';
+                buildMiniCalendar('recurring_end_calendar_wrapper', recurringEndDateH.value, function (ymd) {
+                    recurringEndDateH.value = ymd;
+                    recurringEndDateInput.value = ymd;
+                    wrap.style.display = 'none';
+                    updateEquipmentState();
+                });
+            } else wrap.style.display = 'none';
+        });
+    }
+    if (recurringStartTimeSelect) recurringStartTimeSelect.addEventListener('change', function () { updateEquipmentState(); });
 
     // כפתור "הוסף" – מעדכן את רשימת הפריטים שנבחרו בטופס (מעל שם השואל), לא מגיש את הטופס
     if (addEquipmentBtn) {
@@ -2093,16 +2459,12 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         });
     }
 
-    // הצגת/הסתרת שדה \"סיבה\" בהתאם לבחירת האישור
-    if (approvalSelect && rejectionWrapper) {
+    // הצגת/הסתרת שדה "סיבה לדחייה" בהתאם למצב הזמנה שנבחר
+    if (orderStatusSelect && rejectionWrapper) {
         function updateRejectionVisibility() {
-            if (approvalSelect.value === 'rejected') {
-                rejectionWrapper.style.display = 'block';
-            } else {
-                rejectionWrapper.style.display = 'none';
-            }
+            rejectionWrapper.style.display = orderStatusSelect.value === 'rejected' ? 'block' : 'none';
         }
-        approvalSelect.addEventListener('change', updateRejectionVisibility);
+        orderStatusSelect.addEventListener('change', updateRejectionVisibility);
         updateRejectionVisibility();
     }
 
