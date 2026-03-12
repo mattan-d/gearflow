@@ -249,10 +249,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasSignature) {
                 <div class="signature-line">חתימת המשאיל / השואל</div>
             <?php endif; ?>
         </div>
-        <div class="signature-box">
-            <div>אישור מנהל מחסן / אחראי:</div>
-            <div class="signature-line">חתימת מנהל מחסן / אחראי</div>
-        </div>
     </div>
 
     <div class="print-hint">
