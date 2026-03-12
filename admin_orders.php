@@ -273,9 +273,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 $success = 'סטטוס ההזמנה עודכן.';
 
-                // אם מנהל אישר הזמנה (ממתין -> מאושר) – נשארים בטאב "ממתין"
+                // ניתוב אחרי שינוי סטטוס:
+                // מ"pending" ל"approved" – נשארים בטאב "ממתין"
                 if ($currentStatus === 'pending' && $status === 'approved') {
                     header('Location: admin_orders.php?tab=pending');
+                    exit;
+                }
+                // מ"approved" ל"on_loan" – עוברים לטאב "בהשאלה"
+                if ($currentStatus === 'approved' && $status === 'on_loan') {
+                    header('Location: admin_orders.php?tab=active');
                     exit;
                 }
             }
@@ -1229,7 +1235,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             <div style="margin-top: 0.5rem;">
                 <div class="tabs" style="display: flex; width: 100%; justify-content: flex-start;">
                     <a href="admin_orders.php?tab=today&today_mode=borrow"
-                       class="<?= $todayMode === 'borrow' ? 'active' : '' ?>">השאלה</a>
+                       class="<?= $todayMode === 'borrow' ? 'active' : '' ?>">קבלת ציוד</a>
                     <a href="admin_orders.php?tab=today&today_mode=return"
                        class="<?= $todayMode === 'return' ? 'active' : '' ?>">החזרה</a>
                 </div>
