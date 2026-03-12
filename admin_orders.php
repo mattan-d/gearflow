@@ -868,17 +868,29 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <?php endif; ?>
 
                         <label for="borrower_search">שם שואל</label>
+                        <?php
+                        $defaultBorrower = '';
+                        if (!$editingOrder && $me) {
+                            $fn = trim((string)($me['first_name'] ?? ''));
+                            $ln = trim((string)($me['last_name'] ?? ''));
+                            if ($fn !== '' || $ln !== '') {
+                                $defaultBorrower = trim($fn . ' ' . $ln);
+                            } else {
+                                $defaultBorrower = (string)($me['username'] ?? '');
+                            }
+                        }
+                        ?>
                         <input
                             type="text"
                             id="borrower_search"
                             autocomplete="off"
-                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_name'], ENT_QUOTES, 'UTF-8') : '' ?>"
+                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_name'], ENT_QUOTES, 'UTF-8') : htmlspecialchars($defaultBorrower, ENT_QUOTES, 'UTF-8') ?>"
                         >
                         <input
                             type="hidden"
                             id="borrower_name"
                             name="borrower_name"
-                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_name'], ENT_QUOTES, 'UTF-8') : '' ?>"
+                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_name'], ENT_QUOTES, 'UTF-8') : htmlspecialchars($defaultBorrower, ENT_QUOTES, 'UTF-8') ?>"
                         >
                         <div id="borrower_suggestions" class="suggestions"></div>
 

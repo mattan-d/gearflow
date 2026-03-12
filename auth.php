@@ -10,11 +10,16 @@ function current_user(): ?array
         return null;
     }
 
-    return [
-        'id'       => $_SESSION['user_id'],
-        'username' => $_SESSION['username'] ?? null,
-        'role'     => $_SESSION['role'] ?? null,
-    ];
+    $pdo = get_db();
+    $stmt = $pdo->prepare('SELECT id, username, role, first_name, last_name, warehouse FROM users WHERE id = :id LIMIT 1');
+    $stmt->execute([':id' => (int)$_SESSION['user_id']]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$user) {
+        return null;
+    }
+
+    return $user;
 }
 
 function require_admin(): void
