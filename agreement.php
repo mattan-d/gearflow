@@ -248,7 +248,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasSignature && ($me['role'] ?? '
     <div class="signature-blocks">
         <div class="signature-box">
             <div>חתימת השואל:</div>
-            <div class="signature-line">חתימת המשאיל / השואל</div>
+            <?php if ($hasSignature): ?>
+                <div style="margin-top: 0.75rem;">
+                    <img src="signatures/order_<?= (int)$orderId ?>.png"
+                         alt="חתימת השואל"
+                         style="max-width: 100%; max-height: 180px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                </div>
+                <div class="signature-line">חתימה דיגיטלית נשמרה</div>
+            <?php elseif (($me['role'] ?? '') === 'student'): ?>
+                <form method="post" action="agreement.php?order_id=<?= (int)$orderId ?>">
+                    <canvas id="signature_pad" class="signature-pad"></canvas>
+                    <input type="hidden" name="signature_data" id="signature_data">
+                    <div class="signature-actions">
+                        <button type="button" class="btn-small" onclick="saveSignature()">שמירת חתימה</button>
+                        <button type="button" class="btn-small btn-secondary" onclick="clearSignature()">נקה</button>
+                    </div>
+                </form>
+                <div class="signature-line">חתימת המשאיל / השואל</div>
+            <?php else: ?>
+                <div class="signature-line">חתימת המשאיל / השואל</div>
+            <?php endif; ?>
         </div>
         <div class="signature-box">
             <div>אישור מנהל מחסן / אחראי:</div>
@@ -260,6 +279,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasSignature && ($me['role'] ?? '
         מומלץ להדפיס את ההסכם ולצרף לעותק ההזמנה לתיעוד.
     </div>
 </div>
+<?php if (!$hasSignature && ($me['role'] ?? '') === 'student'): ?>
+<script>
+    (function () {
+        var canvas = document.getElementById('signature_pad');
+        if (!canvas) return;
+        var ctx = canvas.getContext('2d');
+        var drawing = false;
+        var lastX = 0;
+        var lastY = 0;
+
+        function getPos(evt) {
+            var rect = canvas.getBoundingClientRect();
+            if (evt.touches && evt.touches.length > 0) {
+                return {
+                    x: evt.touches[0].clientX - rect.left,
+                    y: evt.touches[0].clientY - rect.top
+                };
+            }
+            return {
+                x: evt.clientX - rect.left,
+                y: evt.clientY - rect.top
+            };
+        }
+
+        function startDraw(evt) {
+            drawing = true;
+            var pos = getPos(evt);
+            lastX = pos.x;
+            lastY = pos.y;
+        }
+
+        function moveDraw(evt) {
+            if (!drawing) return;
+            evt.preventDefault();
+            var pos = getPos(evt);
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.strokeStyle = '#111827';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+            lastX = pos.x;
+            lastY = pos.y;
+        }
+
+        function endDraw() {
+            drawing = false;
+        }
+
+        canvas.addEventListener('mousedown', startDraw);
+        canvas.addEventListener('mousemove', moveDraw);
+        window.addEventListener('mouseup', endDraw);
+
+        canvas.addEventListener('touchstart', function (e) {
+            startDraw(e);
+        }, {passive: false});
+        canvas.addEventListener('touchmove', function (e) {
+            moveDraw(e);
+        }, {passive: false});
+        canvas.addEventListener('touchend', endDraw);
+
+        window.clearSignature = function () {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        };
+
+        window.saveSignature = function () {
+            var input = document.getElementById('signature_data');
+            if (!input) return;
+            var dataUrl = canvas.toDataURL('image/png');
+            input.value = dataUrl;
+            input.form.submit();
+        };
+    })();
+</script>
+<?php endif; ?>
 </body>
 </html>
 
