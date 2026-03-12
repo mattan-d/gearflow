@@ -1164,11 +1164,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             <a href="admin_orders.php?tab=history"      class="<?= $tab === 'history'      ? 'active' : '' ?>">היסטוריה</a>
         </div>
         <?php if ($tab === 'today'): ?>
-            <div class="tabs" style="margin-top: 0.5rem;">
-                <a href="admin_orders.php?tab=today&today_mode=borrow"
-                   class="<?= $todayMode === 'borrow' ? 'active' : '' ?>">השאלה</a>
-                <a href="admin_orders.php?tab=today&today_mode=return"
-                   class="<?= $todayMode === 'return' ? 'active' : '' ?>">החזרה</a>
+            <div style="margin-top: 0.5rem;">
+                <div class="tabs" style="display: flex; width: 100%; justify-content: flex-start;">
+                    <a href="admin_orders.php?tab=today&today_mode=borrow"
+                       class="<?= $todayMode === 'borrow' ? 'active' : '' ?>">השאלה</a>
+                    <a href="admin_orders.php?tab=today&today_mode=return"
+                       class="<?= $todayMode === 'return' ? 'active' : '' ?>">החזרה</a>
+                </div>
             </div>
         <?php endif; ?>
         <?php if (count($orders) === 0): ?>
