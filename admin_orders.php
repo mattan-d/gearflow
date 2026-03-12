@@ -650,6 +650,12 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             background: #f3f4f6;
             color: #111827;
         }
+        .btn[disabled] {
+            opacity: 0.5;
+            cursor: default;
+            background: #e5e7eb;
+            color: #9ca3af;
+        }
         .icon-btn {
             border: none;
             background: transparent;
@@ -698,6 +704,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             background: #f9fafb;
             font-weight: 600;
             color: #374151;
+            position: sticky;
+            top: 0;
+            z-index: 1;
         }
         tr:nth-child(even) td {
             background: #f9fafb;
@@ -1267,25 +1276,26 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         <?php if (count($orders) === 0): ?>
             <p class="muted-small">עדיין לא נוצרו הזמנות במערכת לטאב זה.</p>
         <?php else: ?>
-            <table>
-                <thead>
-                <tr>
-                    <th>#</th>
-                    <th>שם המזמין</th>
-                    <th>שם הפריט</th>
-                    <th>סטטוס</th>
-                    <th>תאריך השאלה</th>
-                    <th>תאריך</th>
-                    <th>החברה</th>
-                    <th>טופס השאלה</th>
-                    <th>הערות</th>
-                    <th>פעולות</th>
-                </tr>
-                </thead>
-                <tbody>
-                <?php foreach ($orders as $order): ?>
-                    <tr data-order-id="<?= (int)$order['id'] ?>">
-                        <td><?= (int)$order['id'] ?></td>
+            <div class="orders-table-wrapper" style="max-height:60vh;overflow-y:auto;border-radius:12px;">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>שם המזמין</th>
+                        <th>שם הפריט</th>
+                        <th>סטטוס</th>
+                        <th>תאריך השאלה</th>
+                        <th>תאריך</th>
+                        <th>החברה</th>
+                        <th>טופס השאלה</th>
+                        <th>הערות</th>
+                        <th>פעולות</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($orders as $order): ?>
+                        <tr data-order-id="<?= (int)$order['id'] ?>">
+                            <td><?= (int)$order['id'] ?></td>
                         <td>
                             <?= htmlspecialchars($order['borrower_name'], ENT_QUOTES, 'UTF-8') ?><br>
                             <?php if ($order['borrower_contact'] !== null && $order['borrower_contact'] !== ''): ?>
@@ -1378,24 +1388,6 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 $adminTabsAllowed = in_array($tab, ['today', 'pending', 'future'], true);
                                 if ($adminTabsAllowed): ?>
                                     <div class="row-actions">
-                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="icon-btn" title="עריכה">
-                                            ✏️
-                                        </a>
-
-                                        <?php
-                                        // מנהל יכול למחוק רק הזמנות שהוא יצר בעצמו (creator_username), לא הזמנות סטודנט
-                                        $canDelete = isset($order['creator_username'], $me['username'])
-                                            && $order['creator_username'] === $me['username'];
-                                        if ($canDelete): ?>
-                                            <form method="post" action="admin_orders.php"
-                                                  onsubmit="return confirm('למחוק את ההזמנה הזו?');">
-                                                <input type="hidden" name="action" value="delete">
-                                                <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                                <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                                <button type="submit" class="icon-btn" title="מחיקה">🗑️</button>
-                                            </form>
-                                        <?php endif; ?>
-
                                         <?php
                                         // בחירת סטטוס בהתאם לכללי המעבר:
                                         // מציגים את הסטטוס הנוכחי (כפריט ראשון, מסומן), ועוד את הסטטוס הבא המותר
@@ -1418,6 +1410,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                             ];
                                         }
                                         ?>
+                                        <form method="post" action="admin_orders.php">
+                                            <input type="hidden" name="action" value="duplicate">
+                                            <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                            <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                            <button type="submit" class="icon-btn" title="שכפול">⧉</button>
+                                        </form>
+
                                         <?php if (!empty($options)): ?>
                                             <select name="status"
                                                     class="muted-small order-status-select"
@@ -1431,20 +1430,32 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                             </select>
                                         <?php endif; ?>
 
-                                        <form method="post" action="admin_orders.php">
-                                            <input type="hidden" name="action" value="duplicate">
-                                            <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                            <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                            <button type="submit" class="icon-btn" title="שכפול">⧉</button>
-                                        </form>
+                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="icon-btn" title="עריכה">
+                                            ✏️
+                                        </a>
+
+                                        <?php
+                                        // מנהל יכול למחוק רק הזמנות שהוא יצר בעצמו (creator_username), לא הזמנות סטודנט
+                                        $canDelete = isset($order['creator_username'], $me['username'])
+                                            && $order['creator_username'] === $me['username'];
+                                        if ($canDelete): ?>
+                                            <form method="post" action="admin_orders.php"
+                                                  onsubmit="return confirm('למחוק את ההזמנה הזו?');">
+                                                <input type="hidden" name="action" value="delete">
+                                                <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                                <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                                <button type="submit" class="icon-btn" title="מחיקה">🗑️</button>
+                                            </form>
+                                        <?php endif; ?>
                                     </div>
                                 <?php endif;
                             } ?>
                         </td>
                     </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
         <?php endif; ?>
     </div>
 </main>
