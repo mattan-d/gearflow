@@ -675,10 +675,7 @@ if (isset($_GET['edit_id'])) {
     <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
             <h2 style="margin-bottom:0;">רשימת משתמשים</h2>
-            <div>
-                <a href="admin_users.php?export=1" class="btn secondary" style="margin-left:0.5rem;">יצוא CSV</a>
-                <!-- טופס ישן ליבוא CSV הוחלף בטופס בראש העמוד -->
-            </div>
+          
         </div>
         <table>
             <thead>
