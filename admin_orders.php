@@ -457,11 +457,12 @@ switch ($tab) {
         // היום – מפוצל לתת־מצבים:
         // השאלה: כל בקשה שהיום הוא יום ההשאלה
         // החזרה: כל בקשה שהיום הוא יום ההחזרה
+        // הזמנות בסטטוס "בהשאלה" נראות בטאבים "בהשאלה"/"לא הוחזר" בלבד
         if ($todayMode === 'return') {
-            $where = " WHERE o.status IN ('approved', 'on_loan')
+            $where = " WHERE o.status = 'approved'
                        AND DATE(o.end_date) = :today";
         } else {
-            $where = " WHERE o.status IN ('approved', 'on_loan')
+            $where = " WHERE o.status = 'approved'
                        AND DATE(o.start_date) = :today";
         }
         $params[':today'] = $today;
