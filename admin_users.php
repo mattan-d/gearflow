@@ -146,6 +146,133 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error = 'שם המשתמש כבר קיים.';
                 } else {
                     $error = 'שגיאה בעדכון המשתמש.';
+            }
+        }
+    } elseif ($action === 'import_csv') {
+        if (!isset($_FILES['import_file']) || ($_FILES['import_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            $error = 'יש לבחור קובץ CSV לייבוא.';
+        } else {
+            $tmpName = $_FILES['import_file']['tmp_name'];
+            $handle = fopen($tmpName, 'r');
+            if ($handle === false) {
+                $error = 'לא ניתן לקרוא את קובץ ה-CSV.';
+            } else {
+                $imported = 0;
+                $updated  = 0;
+                $header   = fgetcsv($handle);
+                if (!is_array($header)) {
+                    $error = 'קובץ ה-CSV ריק או בפורמט שגוי.';
+                } else {
+                    // ננרמל שמות עמודות
+                    $map = [];
+                    foreach ($header as $idx => $col) {
+                        $col = strtolower(trim((string)$col));
+                        $map[$col] = $idx;
+                    }
+                    while (($row = fgetcsv($handle)) !== false) {
+                        $get = function (string $col) use ($map, $row): string {
+                            if (!isset($map[$col])) return '';
+                            $i = $map[$col];
+                            return isset($row[$i]) ? trim((string)$row[$i]) : '';
+                        };
+                        $username  = $get('username');
+                        if ($username === '') {
+                            continue;
+                        }
+                        $password  = $get('password');
+                        $role      = $get('role') ?: 'student';
+                        if (!in_array($role, ['admin', 'warehouse_manager', 'student'], true)) {
+                            $role = 'student';
+                        }
+                        $firstName = $get('first_name');
+                        $lastName  = $get('last_name');
+                        $warehouse = $get('warehouse');
+                        $email     = $get('email');
+                        $phone     = $get('phone');
+                        $isActive  = $get('is_active');
+                        $activeVal = ($isActive === '0' || strtolower($isActive) === 'no') ? 0 : 1;
+
+                        $stmt = $pdo->prepare('SELECT id FROM users WHERE username = :u LIMIT 1');
+                        $stmt->execute([':u' => $username]);
+                        $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                        if ($existing) {
+                            $id = (int)$existing['id'];
+                            // עדכון משתמש קיים (לא נדרוש סיסמה; אם יש סיסמה בעמודה – נעדכן)
+                            if ($password !== '') {
+                                $upd = $pdo->prepare(
+                                    'UPDATE users
+                                     SET role = :role,
+                                         first_name = :first_name,
+                                         last_name = :last_name,
+                                         warehouse = :warehouse,
+                                         email = :email,
+                                         phone = :phone,
+                                         is_active = :is_active,
+                                         password_hash = :password_hash
+                                     WHERE id = :id'
+                                );
+                                $upd->execute([
+                                    ':role'          => $role,
+                                    ':first_name'    => $firstName,
+                                    ':last_name'     => $lastName,
+                                    ':warehouse'     => $warehouse,
+                                    ':email'         => $email,
+                                    ':phone'         => $phone,
+                                    ':is_active'     => $activeVal,
+                                    ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                                    ':id'            => $id,
+                                ]);
+                            } else {
+                                $upd = $pdo->prepare(
+                                    'UPDATE users
+                                     SET role = :role,
+                                         first_name = :first_name,
+                                         last_name = :last_name,
+                                         warehouse = :warehouse,
+                                         email = :email,
+                                         phone = :phone,
+                                         is_active = :is_active
+                                     WHERE id = :id'
+                                );
+                                $upd->execute([
+                                    ':role'      => $role,
+                                    ':first_name'=> $firstName,
+                                    ':last_name' => $lastName,
+                                    ':warehouse' => $warehouse,
+                                    ':email'     => $email,
+                                    ':phone'     => $phone,
+                                    ':is_active' => $activeVal,
+                                    ':id'        => $id,
+                                ]);
+                            }
+                            $updated++;
+                        } else {
+                            // יצירת משתמש חדש – דורש סיסמה
+                            if ($password === '') {
+                                continue;
+                            }
+                            $ins = $pdo->prepare(
+                                'INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, email, phone, created_at)
+                                 VALUES (:username, :password_hash, :role, :is_active, :first_name, :last_name, :warehouse, :email, :phone, :created_at)'
+                            );
+                            $ins->execute([
+                                ':username'      => $username,
+                                ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                                ':role'          => $role,
+                                ':is_active'     => $activeVal,
+                                ':first_name'    => $firstName,
+                                ':last_name'     => $lastName,
+                                ':warehouse'     => $warehouse,
+                                ':email'         => $email,
+                                ':phone'         => $phone,
+                                ':created_at'    => date('Y-m-d H:i:s'),
+                            ]);
+                            $imported++;
+                        }
+                    }
+                    fclose($handle);
+                    $success = 'ייבוא הושלם. נוספו ' . $imported . ' משתמשים חדשים, עודכנו ' . $updated . ' משתמשים קיימים.';
                 }
             }
         }
@@ -154,6 +281,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $usersStmt = $pdo->query('SELECT id, username, role, is_active, first_name, last_name, warehouse, email, phone FROM users ORDER BY id ASC');
 $users = $usersStmt->fetchAll();
+
+// יצוא משתמשים ל-CSV
+if (isset($_GET['export']) && $_GET['export'] === '1') {
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="users-' . date('Ymd-His') . '.csv"');
+    $out = fopen('php://output', 'w');
+    fputcsv($out, ['username', 'password', 'role', 'first_name', 'last_name', 'warehouse', 'email', 'phone', 'is_active']);
+    foreach ($users as $row) {
+        fputcsv($out, [
+            $row['username'] ?? '',
+            '', // לא מייצאים סיסמאות קיימות
+            $row['role'] ?? '',
+            $row['first_name'] ?? '',
+            $row['last_name'] ?? '',
+            $row['warehouse'] ?? '',
+            $row['email'] ?? '',
+            $row['phone'] ?? '',
+            (int)($row['is_active'] ?? 0),
+        ]);
+    }
+    fclose($out);
+    exit;
+}
 
 // משתמש לעריכה בחלון קופץ
 $editingUser = null;
@@ -510,7 +660,17 @@ if (isset($_GET['edit_id'])) {
     </div>
 
     <div class="card">
-        <h2>רשימת משתמשים</h2>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+            <h2 style="margin-bottom:0;">רשימת משתמשים</h2>
+            <div>
+                <a href="admin_users.php?export=1" class="btn secondary" style="margin-left:0.5rem;">יצוא CSV</a>
+                <form method="post" action="admin_users.php" enctype="multipart/form-data" style="display:inline-block;">
+                    <input type="hidden" name="action" value="import_csv">
+                    <input type="file" name="import_file" accept=".csv" required style="font-size:0.8rem;margin-left:0.25rem;">
+                    <button type="submit" class="btn secondary" style="font-size:0.8rem;">יבוא CSV</button>
+                </form>
+            </div>
+        </div>
         <table>
             <thead>
             <tr>
