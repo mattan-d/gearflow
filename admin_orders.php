@@ -661,11 +661,11 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             color: #ffffff;
         }
         .order-status-select {
-            max-width: 120px;
-            width: auto;
-            font-size: 0.75rem;
-            padding-right: 0.4rem;
-            padding-left: 0.4rem;
+            width: 90px;
+            max-width: 90px;
+            font-size: 0.7rem;
+            padding-right: 0.25rem;
+            padding-left: 0.25rem;
         }
         .icon-btn {
             border: none;
