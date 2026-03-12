@@ -680,6 +680,50 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             align-items: center;
             justify-content: center;
         }
+        .time-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+        .time-modal {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.35);
+            padding: 1rem 1.25rem;
+            min-width: 260px;
+        }
+        .time-modal h3 {
+            margin: 0 0 0.5rem;
+            font-size: 0.95rem;
+        }
+        .time-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.4rem;
+            margin-bottom: 0.8rem;
+        }
+        .time-option-btn {
+            border-radius: 999px;
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            padding: 0.25rem 0.4rem;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+        .time-option-btn.selected {
+            background: linear-gradient(135deg, #4f46e5, #6366f1);
+            border-color: transparent;
+            color: #ffffff;
+        }
+        .time-modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.4rem;
+        }
         #submit_order_btn {
             margin-top: 10px;
         }
@@ -1018,6 +1062,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                value="<?= $editingOrder ? htmlspecialchars($editingOrder['start_date'], ENT_QUOTES, 'UTF-8') : '' ?>">
                         <input type="hidden" id="end_date" name="end_date"
                                value="<?= $editingOrder ? htmlspecialchars($editingOrder['end_date'], ENT_QUOTES, 'UTF-8') : '' ?>">
+                        <!-- שדות חבויים לשעת התחלה/סיום (לבחירה בחלון שעות) -->
+                        <input type="hidden" id="start_time" name="start_time" value="">
+                        <input type="hidden" id="end_time" name="end_time" value="">
                         <?php if ($editingOrder && $isDuplicateMode): ?>
                             <input type="hidden" name="original_start_date"
                                    value="<?= htmlspecialchars((string)($editingOrder['start_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
@@ -1251,6 +1298,19 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                     <button type="button" class="btn secondary" id="order_modal_cancel">ביטול</button>
                 <?php endif; ?>
             </form>
+        </div>
+    </div>
+
+    <!-- חלון בחירת שעות (השאלה / החזרה) -->
+    <div class="time-modal-backdrop" id="time_modal_backdrop">
+        <div class="time-modal">
+            <h3 id="time_modal_title">בחירת שעה</h3>
+            <div class="time-grid" id="time_options_container">
+                <!-- ימולא דינמית בשעות מ-09:00 עד 15:00 -->
+            </div>
+            <div class="time-modal-footer">
+                <button type="button" class="btn secondary" id="time_modal_cancel">ביטול</button>
+            </div>
         </div>
     </div>
 
@@ -1514,6 +1574,15 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const originalEndInput = document.querySelector('input[name="original_end_date"]');
     const isDuplicateMode = !!(originalStartInput || originalEndInput);
 
+    const startTimeInput = document.getElementById('start_time');
+    const endTimeInput = document.getElementById('end_time');
+    const timeModalBackdrop = document.getElementById('time_modal_backdrop');
+    const timeModalTitle = document.getElementById('time_modal_title');
+    const timeOptionsContainer = document.getElementById('time_options_container');
+    const timeModalCancel = document.getElementById('time_modal_cancel');
+
+    let currentTimeTarget = null; // 'start' | 'end' | null
+
     if (!startInput || !endInput || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel || !toggle || !panel) {
         return;
     }
@@ -1705,6 +1774,23 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 cell.addEventListener('click', function () {
                     selectDate(cellDate);
                 });
+                cell.addEventListener('dblclick', function () {
+                    const isoVal = cell.dataset.date;
+                    const isStartDate = startInput.value === isoVal;
+                    const isEndDate = endInput.value === isoVal;
+                    let target = null;
+                    if (isStartDate && isEndDate) {
+                        // אם שני התאריכים שווים – נחליט לפי המצב הנוכחי
+                        target = (mode === 'end') ? 'end' : 'start';
+                    } else if (isStartDate) {
+                        target = 'start';
+                    } else if (isEndDate) {
+                        target = 'end';
+                    }
+                    if (target) {
+                        openTimePicker(target, isoVal);
+                    }
+                });
             }
 
             // סימון טווח ותאריכים נבחרים
@@ -1764,6 +1850,57 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 panel.style.display = 'none';
             }, 1000);
         }
+    }
+
+    function openTimePicker(target, isoDate) {
+        if (!timeModalBackdrop || !timeModalTitle || !timeOptionsContainer) {
+            return;
+        }
+        currentTimeTarget = target; // 'start' או 'end'
+
+        const isStart = target === 'start';
+        timeModalTitle.textContent = isStart ? 'בחירת שעת השאלה' : 'בחירת שעת החזרה';
+
+        // ניקוי אופציות קודמות
+        timeOptionsContainer.innerHTML = '';
+
+        const hours = [9, 10, 11, 12, 13, 14, 15];
+        const currentValue = isStart && startTimeInput ? startTimeInput.value :
+            (!isStart && endTimeInput ? endTimeInput.value : '');
+
+        hours.forEach(function (h) {
+            const label = (h < 10 ? '0' + h : '' + h) + ':00';
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'time-option-btn';
+            btn.textContent = label;
+            if (currentValue === label) {
+                btn.classList.add('selected');
+            }
+            btn.addEventListener('click', function () {
+                if (isStart && startTimeInput) {
+                    startTimeInput.value = label;
+                } else if (!isStart && endTimeInput) {
+                    endTimeInput.value = label;
+                }
+                timeModalBackdrop.style.display = 'none';
+            });
+            timeOptionsContainer.appendChild(btn);
+        });
+
+        timeModalBackdrop.style.display = 'flex';
+    }
+
+    // סגירת חלון השעות בלחיצה על "ביטול" או מחוץ לחלון
+    if (timeModalBackdrop && timeModalCancel) {
+        timeModalCancel.addEventListener('click', function () {
+            timeModalBackdrop.style.display = 'none';
+        });
+        timeModalBackdrop.addEventListener('click', function (e) {
+            if (e.target === timeModalBackdrop) {
+                timeModalBackdrop.style.display = 'none';
+            }
+        });
     }
 
     // לחיצה על פח אשפה ברשימת הציוד (הזמנה חדשה ועריכה)
