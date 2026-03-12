@@ -120,6 +120,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $notes           = trim($_POST['notes'] ?? '');
         $orderStatus     = $_POST['order_status'] ?? null; // מצב הזמנה (למנהל בעריכה)
         $rejectionReason = trim($_POST['rejection_reason'] ?? '');
+        $recurringEnabled = !empty($_POST['recurring_enabled']);
+        $recurringStartDate = trim($_POST['recurring_start_date'] ?? '');
+        $recurringStartTime = trim($_POST['recurring_start_time'] ?? '');
+        $recurringFreq = $_POST['recurring_freq'] ?? 'day';
+        $recurringDuration = (float)($_POST['recurring_duration'] ?? 1);
+        $recurringEndType = $_POST['recurring_end_type'] ?? 'count';
+        $recurringCount = (int)($_POST['recurring_count'] ?? 1);
+        $recurringEndDate = trim($_POST['recurring_end_date'] ?? '');
 
         // איסוף מזהי ציוד – מרובים במצב יצירה, יחיד במצב עדכון
         $equipmentIds = [];
@@ -156,17 +164,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        if (count($equipmentIds) === 0 || $borrowerName === '' || $startDate === '' || $endDate === '') {
-            $error = 'יש למלא ציוד, שם שואל, ותאריכי התחלה וסיום.';
-        } elseif ($action === 'create' && $originalStart !== '' && $originalEnd !== '' && $originalStart === $startDate && $originalEnd === $endDate) {
+        $isRecurringCreate = ($action === 'create' && $recurringEnabled && $recurringStartDate !== '' && $recurringStartTime !== ''
+            && in_array($recurringFreq, ['day', 'week'], true) && $recurringDuration >= 0.5 && $recurringDuration <= 3
+            && (($recurringEndType === 'count' && $recurringCount >= 1) || ($recurringEndType === 'end_date' && $recurringEndDate !== '')));
+
+        if (count($equipmentIds) === 0 || $borrowerName === '') {
+            $error = 'יש למלא ציוד ושם שואל.';
+        } elseif (!$isRecurringCreate && ($startDate === '' || $endDate === '')) {
+            $error = 'יש למלא תאריכי התחלה וסיום.';
+        } elseif ($action === 'create' && !$isRecurringCreate && $originalStart !== '' && $originalEnd !== '' && $originalStart === $startDate && $originalEnd === $endDate) {
             // שכפול: חייבים לשנות לפחות אחד מהתאריכים לפני שמירה
             $error = 'בשכפול הזמנה יש לשנות את תאריכי ההשאלה ו/או ההחזרה לפני שמירה.';
         } else {
-            $reqStart = $startDate . ' ' . ($startTime !== '' ? $startTime : '00:00');
-            $reqEnd   = $endDate . ' ' . ($endTime !== '' ? $endTime : '23:59');
-            $excludeId = ($action === 'update' && $id > 0) ? $id : 0;
             $conflicted = [];
-            if (count($equipmentIds) > 0) {
+            if (!$isRecurringCreate && count($equipmentIds) > 0) {
+                $reqStart = $startDate . ' ' . ($startTime !== '' ? $startTime : '00:00');
+                $reqEnd   = $endDate . ' ' . ($endTime !== '' ? $endTime : '23:59');
+                $excludeId = ($action === 'update' && $id > 0) ? $id : 0;
                 $placeholders = implode(',', array_fill(0, count($equipmentIds), '?'));
                 $sql = "SELECT DISTINCT equipment_id FROM orders
                         WHERE equipment_id IN ($placeholders)
@@ -183,7 +197,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if ($error === '') {
             try {
-                if ($action === 'create') {
+                if ($action === 'create' && $isRecurringCreate) {
+                    // יצירת הזמנות מחזוריות: חישוב מופעים והכנסה לכל (מופע × ציוד)
+                    $occurrences = [];
+                    $startTs = strtotime($recurringStartDate . ' ' . $recurringStartTime);
+                    if ($startTs === false) {
+                        $error = 'תאריך או שעת התחלה לא תקינים.';
+                    } else {
+                        $stepDays = ($recurringFreq === 'week') ? 7 : 1;
+                        $durationMinutes = (int)round($recurringDuration * 60);
+                        $n = ($recurringEndType === 'count') ? $recurringCount : 0;
+                        $count = 0;
+                        $current = $startTs;
+                        while (true) {
+                            if ($recurringEndType === 'count' && $count >= $n) break;
+                            if ($recurringEndType === 'end_date' && $recurringEndDate !== '' && date('Y-m-d', $current) > $recurringEndDate) break;
+                            $startDateOcc = date('Y-m-d', $current);
+                            $startTimeOcc = date('H:i', $current);
+                            $endTsOcc = $current + $durationMinutes * 60;
+                            $endDateOcc = date('Y-m-d', $endTsOcc);
+                            $endTimeOcc = date('H:i', $endTsOcc);
+                            $occurrences[] = [$startDateOcc, $startTimeOcc, $endDateOcc, $endTimeOcc];
+                            $count++;
+                            $current = strtotime('+' . $stepDays . ' days', $current);
+                        }
+                        if (empty($occurrences)) {
+                            $error = 'לא נוצר אף מופע בהזמנה המחזורית. בדוק תאריך סיום או כמות.';
+                        } else {
+                            $initialStatus = ($role === 'student') ? 'pending' : 'approved';
+                            $insertRecurring = $pdo->prepare(
+                                'INSERT INTO orders (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, created_at, creator_username)
+                                 VALUES (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :created_at, :creator_username)'
+                            );
+                            $createdCount = 0;
+                            foreach ($equipmentIds as $equipmentId) {
+                                foreach ($occurrences as $occ) {
+                                    $insertRecurring->execute([
+                                        ':equipment_id'     => $equipmentId,
+                                        ':borrower_name'    => $borrowerName,
+                                        ':borrower_contact' => $borrowerContact,
+                                        ':start_date'       => $occ[0],
+                                        ':end_date'         => $occ[2],
+                                        ':start_time'       => $occ[1],
+                                        ':end_time'         => $occ[3],
+                                        ':status'           => $initialStatus,
+                                        ':notes'            => $notes,
+                                        ':created_at'       => date('Y-m-d H:i:s'),
+                                        ':creator_username' => (string)($me['username'] ?? ''),
+                                    ]);
+                                    $createdCount++;
+                                }
+                            }
+                            $success = $createdCount > 1 ? "נוצרו {$createdCount} הזמנות בהצלחה." : 'הזמנה נוצרה בהצלחה.';
+                            if ($role === 'student') {
+                                header('Location: admin_orders.php?tab=pending');
+                            } else {
+                                header('Location: admin_orders.php');
+                            }
+                            exit;
+                        }
+                    }
+                } elseif ($action === 'create') {
                     // הזמנה שנפתחת ע\"י סטודנט מתחילה כ\"ממתין\"; ע\"י אדמין/מנהל מחסן – מאושרת כברירת מחדל
                     $initialStatus = ($role === 'student') ? 'pending' : 'approved';
                     $stmt = $pdo->prepare(
@@ -2325,9 +2399,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             btn.addEventListener('click', function () {
                 const dir = parseInt(btn.getAttribute('data-dir'), 10);
                 const next = new Date(year, month + dir, 1);
-                buildMiniCalendar(containerId, null, onSelect);
-                const nextYmd = next.getFullYear() + '-' + (next.getMonth() + 1 < 10 ? '0' : '') + (next.getMonth() + 1);
-                buildMiniCalendar(containerId, nextYmd + '-01', onSelect);
+                const nextYmd = next.getFullYear() + '-' + (next.getMonth() + 1 < 10 ? '0' : '') + (next.getMonth() + 1) + '-01';
+                buildMiniCalendar(containerId, nextYmd, onSelect);
             });
         });
     }
