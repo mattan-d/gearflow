@@ -23,15 +23,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'המשתמש אינו קיים.';
         } elseif ((int)$user['is_active'] !== 1) {
             $error = 'החשבון לא פעיל. פנה למנהל המערכת.';
-        } elseif (!password_verify($password, $user['password_hash'])) {
-            $error = 'הסיסמה אינה נכונה.';
         } else {
-            $_SESSION['user_id']  = $user['id'];
-            $_SESSION['username'] = $user['username'];
-            $_SESSION['role']     = $user['role'];
+            $loginOk = false;
+            $hash    = $user['password_hash'] ?? '';
+            $legacy  = $user['password'] ?? '';
 
-            header('Location: admin.php');
-            exit;
+            if (is_string($hash) && $hash !== '' && password_verify($password, $hash)) {
+                $loginOk = true;
+            } elseif (($hash === '' || $hash === null) && is_string($legacy) && $legacy !== '' && hash_equals($legacy, $password)) {
+                // תמיכה בסיסמאות ישנות שנשמרו בטקסט גלוי – נעדכן ל-hash מודרני
+                $loginOk = true;
+                $newHash = password_hash($password, PASSWORD_DEFAULT);
+                $update  = $pdo->prepare('UPDATE users SET password_hash = :password_hash WHERE id = :id');
+                $update->execute([
+                    ':password_hash' => $newHash,
+                    ':id'            => (int)$user['id'],
+                ]);
+            }
+
+            if (!$loginOk) {
+                $error = 'הסיסמה אינה נכונה.';
+            } else {
+                $_SESSION['user_id']  = $user['id'];
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['role']     = $user['role'];
+
+                header('Location: admin.php');
+                exit;
+            }
         }
     }
 }
