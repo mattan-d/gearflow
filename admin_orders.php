@@ -1337,13 +1337,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <?php
                         $showRecurringBlock = !$editingOrder && ($role === 'admin' || $role === 'warehouse_manager');
                         if ($showRecurringBlock): ?>
-                        <div class="recurring-toggle-row" style="margin-bottom: 0.35rem;">
+                        <div class="recurring-toggle-row" id="regular_toggle_row" style="margin-bottom: 0.35rem;">
                             <label class="toggle-label">
                                 <input type="checkbox" id="regular_toggle" checked autocomplete="off">
                                 <span>הזמנה רגילה</span>
                             </label>
                         </div>
-                        <div class="recurring-toggle-row" style="margin-bottom: 0.75rem;">
+                        <div class="recurring-toggle-row" id="recurring_toggle_row" style="margin-bottom: 0.75rem;">
                             <label class="toggle-label">
                                 <input type="checkbox" id="recurring_toggle" name="recurring_enabled" value="1" autocomplete="off">
                                 <span>הזמנה מחזורית</span>
@@ -1969,6 +1969,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
     const regularToggle = document.getElementById('regular_toggle');
     const recurringToggle = document.getElementById('recurring_toggle');
+    const regularToggleRow = document.getElementById('regular_toggle_row');
+    const recurringToggleRow = document.getElementById('recurring_toggle_row');
     const recurringSection = document.getElementById('recurring_section');
     const normalDateSection = document.getElementById('normal_date_section');
     const recurringStartDateInput = document.getElementById('recurring_start_date');
@@ -2465,12 +2467,26 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         const recurringOn = recurringToggle && recurringToggle.checked;
         const regularOn = regularToggle && regularToggle.checked;
 
+        if (regularToggleRow && recurringToggleRow) {
+            if (regularOn && !recurringOn) {
+                regularToggleRow.style.display = '';
+                recurringToggleRow.style.display = 'none';
+            } else if (recurringOn && !regularOn) {
+                regularToggleRow.style.display = 'none';
+                recurringToggleRow.style.display = '';
+            } else {
+                // אף אחד לא מסומן – מציגים את שתי האפשרויות (רק כותרות)
+                regularToggleRow.style.display = '';
+                recurringToggleRow.style.display = '';
+            }
+        }
+
         if (recurringSection && normalDateSection) {
             if (recurringOn && !regularOn) {
                 recurringSection.style.display = 'block';
                 normalDateSection.style.display = 'none';
             } else if (regularOn && !recurringOn) {
-                recurringSection.style.display = $showRecurringBlock ? 'none' : 'none';
+                recurringSection.style.display = 'none';
                 normalDateSection.style.display = 'block';
             } else {
                 // אף אחד לא מסומן – מציגים את שתי האפשרויות (כותרות) אבל מסתירים את התוכן עד בחירה
@@ -2592,6 +2608,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         });
     }
     if (recurringStartTimeSelect) recurringStartTimeSelect.addEventListener('change', function () { updateEquipmentState(); });
+
+    // הפעלה ראשונית של מצב ההזמנה (ברירת מחדל: הזמנה רגילה)
+    syncOrderModeVisibility();
 
     // כפתור "הוסף" – מעדכן את רשימת הפריטים שנבחרו בטופס (מעל שם השואל), לא מגיש את הטופס
     if (addEquipmentBtn) {
