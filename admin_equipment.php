@@ -468,23 +468,46 @@ $me = current_user();
         .equipment-filters {
             margin-bottom: 1rem;
         }
+        .equipment-filters-inner {
+            background: #ffffff;
+            border-radius: 999px;
+            padding: 0.4rem 0.75rem;
+            box-shadow: 0 6px 18px rgba(15,23,42,0.08);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
         .equipment-filters form {
             display: flex;
             flex-wrap: wrap;
             gap: 0.5rem;
-            align-items: flex-end;
+            align-items: center;
         }
         .equipment-filters label {
             margin-bottom: 0.1rem;
-            font-size: 0.8rem;
+            font-size: 0.78rem;
             color: #4b5563;
+        }
+        .equipment-filters .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
         }
         .equipment-filters input[type="text"],
         .equipment-filters select {
-            padding: 0.3rem 0.5rem;
-            border-radius: 8px;
-            border: 1px solid #d1d5db;
+            padding: 0.25rem 0.6rem;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
             font-size: 0.8rem;
+            background: #f9fafb;
+        }
+        .equipment-filters .filter-title-pill {
+            border-radius: 999px;
+            padding: 0.3rem 0.9rem;
+            background: #e5e7eb;
+            color: #111827;
+            font-size: 0.8rem;
+            font-weight: 600;
         }
         table {
             width: 100%;
@@ -627,46 +650,50 @@ $me = current_user();
     </div>
 
     <div class="equipment-filters">
-        <form method="get" action="admin_equipment.php">
-            <div>
-                <label for="filter_q">חיפוש לפי שם ציוד</label><br>
-                <input type="text" id="filter_q" name="q"
-                       value="<?= htmlspecialchars($searchTerm ?? '', ENT_QUOTES, 'UTF-8') ?>"
-                       placeholder="הקלד תחילת שם הציוד">
-            </div>
-            <div>
-                <label for="filter_category">קטגוריה</label><br>
-                <select id="filter_category" name="filter_category">
-                    <option value="">כל הקטגוריות</option>
-                    <option value="מצלמה"   <?= ($filterCategory ?? '') === 'מצלמה'   ? 'selected' : '' ?>>מצלמה</option>
-                    <option value="מיקרופון" <?= ($filterCategory ?? '') === 'מיקרופון' ? 'selected' : '' ?>>מיקרופון</option>
-                    <option value="חצובה"   <?= ($filterCategory ?? '') === 'חצובה'   ? 'selected' : '' ?>>חצובה</option>
-                    <option value="תאורה"   <?= ($filterCategory ?? '') === 'תאורה'   ? 'selected' : '' ?>>תאורה</option>
-                </select>
-            </div>
-            <div>
-                <label for="filter_status">סטטוס</label><br>
-                <select id="filter_status" name="filter_status">
-                    <option value="">כל הסטטוסים</option>
-                    <option value="active"   <?= ($filterStatus ?? '') === 'active'   ? 'selected' : '' ?>>פעיל</option>
-                    <option value="out"      <?= ($filterStatus ?? '') === 'out'      ? 'selected' : '' ?>>לא זמין</option>
-                    <option value="disabled" <?= ($filterStatus ?? '') === 'disabled' ? 'selected' : '' ?>>מושבת</option>
-                </select>
-            </div>
-            <?php if (isset($me) && ($me['role'] ?? '') === 'admin'): ?>
-                <div>
-                    <label for="filter_warehouse">מחסן</label><br>
-                    <select id="filter_warehouse" name="filter_warehouse">
-                        <option value="">כל המחסנים</option>
-                        <option value="מחסן א" <?= ($filterWarehouse ?? '') === 'מחסן א' ? 'selected' : '' ?>>מחסן א</option>
-                        <option value="מחסן ב" <?= ($filterWarehouse ?? '') === 'מחסן ב' ? 'selected' : '' ?>>מחסן ב</option>
+        <div class="equipment-filters-inner">
+            <span class="filter-title-pill">סינון</span>
+            <form method="get" action="admin_equipment.php">
+                <div class="filter-group">
+                    <label for="filter_q">חיפוש לפי שם ציוד</label>
+                    <input type="text" id="filter_q" name="q"
+                           value="<?= htmlspecialchars($searchTerm ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                           placeholder="הקלד תחילת שם הציוד">
+                </div>
+                <div class="filter-group">
+                    <label for="filter_category">קטגוריה</label>
+                    <select id="filter_category" name="filter_category">
+                        <option value="">כל הקטגוריות</option>
+                        <option value="מצלמה"   <?= ($filterCategory ?? '') === 'מצלמה'   ? 'selected' : '' ?>>מצלמה</option>
+                        <option value="מיקרופון" <?= ($filterCategory ?? '') === 'מיקרופון' ? 'selected' : '' ?>>מיקרופון</option>
+                        <option value="חצובה"   <?= ($filterCategory ?? '') === 'חצובה'   ? 'selected' : '' ?>>חצובה</option>
+                        <option value="תאורה"   <?= ($filterCategory ?? '') === 'תאורה'   ? 'selected' : '' ?>>תאורה</option>
                     </select>
                 </div>
-            <?php endif; ?>
-            <div>
-                <button type="submit" class="btn secondary" style="margin-top: 1.1rem;">סינון</button>
-            </div>
-        </form>
+                <div class="filter-group">
+                    <label for="filter_status">סטטוס</label>
+                    <select id="filter_status" name="filter_status">
+                        <option value="">כל הסטטוסים</option>
+                        <option value="active"   <?= ($filterStatus ?? '') === 'active'   ? 'selected' : '' ?>>פעיל</option>
+                        <option value="out"      <?= ($filterStatus ?? '') === 'out'      ? 'selected' : '' ?>>לא זמין</option>
+                        <option value="disabled" <?= ($filterStatus ?? '') === 'disabled' ? 'selected' : '' ?>>מושבת</option>
+                    </select>
+                </div>
+                <?php if (isset($me) && ($me['role'] ?? '') === 'admin'): ?>
+                    <div class="filter-group">
+                        <label for="filter_warehouse">מחסן</label>
+                        <select id="filter_warehouse" name="filter_warehouse">
+                            <option value="">כל המחסנים</option>
+                            <option value="מחסן א" <?= ($filterWarehouse ?? '') === 'מחסן א' ? 'selected' : '' ?>>מחסן א</option>
+                            <option value="מחסן ב" <?= ($filterWarehouse ?? '') === 'מחסן ב' ? 'selected' : '' ?>>מחסן ב</option>
+                        </select>
+                    </div>
+                <?php endif; ?>
+                <div class="filter-group">
+                    <label style="visibility:hidden;">סינון</label>
+                    <button type="submit" class="btn secondary" style="padding:0.25rem 0.9rem;font-size:0.8rem;">סינון</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <?php
