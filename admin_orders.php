@@ -305,16 +305,24 @@ switch ($tab) {
         break;
 }
 
-// אם המשתמש הוא סטודנט – מציגים רק הזמנות של עצמו
-if ($role === 'student') {
-    $currentUsername = (string)($me['username'] ?? '');
-    if ($currentUsername !== '') {
+// אם המשתמש הוא סטודנט – מציגים רק הזמנות של עצמו (לפי אותו שם שנשמר ב-borrower_name)
+if ($role === 'student' && $me) {
+    $fn = trim((string)($me['first_name'] ?? ''));
+    $ln = trim((string)($me['last_name'] ?? ''));
+    $currentBorrower = '';
+    if ($fn !== '' || $ln !== '') {
+        $currentBorrower = trim($fn . ' ' . $ln);
+    } else {
+        $currentBorrower = (string)($me['username'] ?? '');
+    }
+
+    if ($currentBorrower !== '') {
         if ($where === '') {
             $where = ' WHERE o.borrower_name = :current_student';
         } else {
             $where .= ' AND o.borrower_name = :current_student';
         }
-        $params[':current_student'] = $currentUsername;
+        $params[':current_student'] = $currentBorrower;
     }
 }
 
