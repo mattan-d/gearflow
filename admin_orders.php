@@ -286,6 +286,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+    } elseif ($action === 'update_status_bulk') {
+        $raw = $_POST['changes_json'] ?? '';
+        $changes = json_decode((string)$raw, true);
+        if (!is_array($changes)) {
+            $error = 'מבנה נתונים לא תקין לעדכון סטטוס.';
+        } else {
+            foreach ($changes as $change) {
+                $id     = isset($change['id']) ? (int)$change['id'] : 0;
+                $status = $change['status'] ?? '';
+                if ($id <= 0 || $status === '') {
+                    continue;
+                }
+
+                $stmt = $pdo->prepare('SELECT status FROM orders WHERE id = :id');
+                $stmt->execute([':id' => $id]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+                $currentStatus = $row['status'] ?? null;
+
+                $allowedNext = [];
+                if ($currentStatus === 'pending') {
+                    $allowedNext = ['approved', 'rejected'];
+                } elseif ($currentStatus === 'approved') {
+                    $allowedNext = ['on_loan'];
+                } elseif ($currentStatus === 'on_loan') {
+                    $allowedNext = ['returned'];
+                }
+
+                if ($currentStatus === null || !in_array($status, $allowedNext, true)) {
+                    continue;
+                }
+
+                $stmt = $pdo->prepare(
+                    'UPDATE orders
+                     SET status = :status,
+                         updated_at = :updated_at
+                     WHERE id = :id'
+                );
+                $stmt->execute([
+                    ':status'     => $status,
+                    ':updated_at' => date('Y-m-d H:i:s'),
+                    ':id'         => $id,
+                ]);
+            }
+
+            $success = 'סטטוס ההזמנות עודכן.';
+        }
     } elseif ($action === 'delete') {
         $id = (int)($_POST['id'] ?? 0);
         if ($id > 0) {
@@ -1188,8 +1234,17 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     </div>
 
     <div class="card">
-        <div class="toolbar">
+        <div class="toolbar" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
             <h2>רשימת הזמנות</h2>
+            <?php if ($role === 'admin' || $role === 'warehouse_manager'): ?>
+                <form method="post" action="admin_orders.php" id="bulk_status_form">
+                    <input type="hidden" name="action" value="update_status_bulk">
+                    <input type="hidden" name="changes_json" id="changes_json" value="">
+                    <button type="submit" class="btn small neutral" id="bulk_update_btn" disabled>
+                        עדכון שינויים
+                    </button>
+                </form>
+            <?php endif; ?>
         </div>
         <div class="tabs">
             <a href="admin_orders.php?tab=today"   class="<?= $tab === 'today'   ? 'active' : '' ?>">היום</a>
@@ -1229,7 +1284,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 </thead>
                 <tbody>
                 <?php foreach ($orders as $order): ?>
-                    <tr>
+                    <tr data-order-id="<?= (int)$order['id'] ?>">
                         <td><?= (int)$order['id'] ?></td>
                         <td>
                             <?= htmlspecialchars($order['borrower_name'], ENT_QUOTES, 'UTF-8') ?><br>
@@ -1371,19 +1426,16 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                         }
                                         ?>
                                         <?php if (!empty($options)): ?>
-                                            <form method="post" action="admin_orders.php">
-                                                <input type="hidden" name="action" value="update_status">
-                                                <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                                <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                                <select name="status" class="muted-small">
-                                                    <?php foreach ($options as $value => $label): ?>
-                                                        <option value="<?= $value ?>" <?= $value === $order['status'] ? 'selected disabled' : '' ?>>
-                                                            <?= $label ?>
-                                                        </option>
-                                                    <?php endforeach; ?>
-                                                </select>
-                                                <button type="submit" class="btn small neutral">עדכון</button>
-                                            </form>
+                                            <select name="status"
+                                                    class="muted-small order-status-select"
+                                                    data-order-id="<?= (int)$order['id'] ?>"
+                                                    data-current-status="<?= htmlspecialchars($order['status'], ENT_QUOTES, 'UTF-8') ?>">
+                                                <?php foreach ($options as $value => $label): ?>
+                                                    <option value="<?= $value ?>" <?= $value === $order['status'] ? 'selected' : '' ?>>
+                                                        <?= $label ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
                                         <?php endif; ?>
                                     </div>
                                 <?php endif;
@@ -1433,6 +1485,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const openOrderModalBtn = document.getElementById('open_order_modal_btn');
     const orderModalClose = document.getElementById('order_modal_close');
     const orderModalCancel = document.getElementById('order_modal_cancel');
+    const bulkUpdateBtn = document.getElementById('bulk_update_btn');
+    const changesJsonInput = document.getElementById('changes_json');
 
     if (!startInput || !endInput || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel || !toggle || !panel) {
         return;
@@ -1781,6 +1835,35 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             setTimeout(function () {
                 borrowerSuggestions.innerHTML = '';
             }, 150);
+        });
+    }
+
+    // מעקב אחרי שינויים בסטטוסי הזמנות לטובת כפתור "עדכון שינויים"
+    const statusChanges = {};
+    const statusSelects = Array.from(document.querySelectorAll('.order-status-select'));
+    if (bulkUpdateBtn && changesJsonInput && statusSelects.length > 0) {
+        statusSelects.forEach(function (sel) {
+            sel.addEventListener('change', function () {
+                const id = sel.getAttribute('data-order-id');
+                const current = sel.getAttribute('data-current-status') || '';
+                const value = sel.value;
+                if (!id) return;
+                if (value === current) {
+                    delete statusChanges[id];
+                } else {
+                    statusChanges[id] = value;
+                }
+                const hasChanges = Object.keys(statusChanges).length > 0;
+                bulkUpdateBtn.disabled = !hasChanges;
+                if (hasChanges) {
+                    const payload = Object.keys(statusChanges).map(function (orderId) {
+                        return {id: parseInt(orderId, 10), status: statusChanges[orderId]};
+                    });
+                    changesJsonInput.value = JSON.stringify(payload);
+                } else {
+                    changesJsonInput.value = '';
+                }
+            });
         });
     }
 
