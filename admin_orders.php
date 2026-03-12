@@ -33,7 +33,8 @@ if (isset($_GET['edit_id'])) {
 
 // טיפול ביצירה / עדכון / סטטוס / מחיקה / שכפול
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
+    $action     = $_POST['action'] ?? '';
+    $currentTab = $_POST['current_tab'] ?? null;
 
     if ($action === 'create' || $action === 'update') {
         $id              = (int)($_POST['id'] ?? 0);
@@ -155,8 +156,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
             $success = 'סטטוס ההזמנה עודכן.';
 
-            // אם מנהל מאשר הזמנה מטאב \"ממתין\" – נשארים באותו טאב לאחר העדכון
-            if ($status === 'approved' && $tab === 'pending') {
+            // אם מנהל מאשר הזמנה – נשארים בטאב \"ממתין\" לאחר העדכון
+            if ($status === 'approved') {
                 header('Location: admin_orders.php?tab=pending');
                 exit;
             }
@@ -168,9 +169,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([':id' => $id]);
             $success = 'הזמנה נמחקה.';
 
-            // לאחר מחיקה – נשארים בטאב הנוכחי (אם קיים בפרמטרים)
-            if (isset($_GET['tab']) && in_array($_GET['tab'], ['today', 'pending', 'future', 'active', 'not_returned', 'history'], true)) {
-                header('Location: admin_orders.php?tab=' . urlencode($_GET['tab']));
+            // לאחר מחיקה – נשארים בטאב ממנו בוצעה הפעולה (נשלח בטופס)
+            if ($currentTab && in_array($currentTab, ['today', 'pending', 'future', 'active', 'not_returned', 'history'], true)) {
+                header('Location: admin_orders.php?tab=' . urlencode($currentTab));
                 exit;
             }
         }
@@ -323,17 +324,17 @@ $ordersStmt->execute($params);
 $orders = $ordersStmt->fetchAll();
 
 // רשימת סטודנטים (משתתפים) לשדה החיפוש של "שם שואל"
-// רשימת סטודנטים לבחירה של אדמין / מנהל מחסן בלבד
-$studentUsernames = [];
+// רשימת סטודנטים לבחירה של אדמין / מנהל מחסן בלבד (כולל פרטי קשר)
+$students = [];
 if ($role === 'admin' || $role === 'warehouse_manager') {
     $studentsStmt = $pdo->prepare(
-        "SELECT username
+        "SELECT username, first_name, last_name, email, phone
          FROM users
          WHERE role = 'student' AND is_active = 1
          ORDER BY username ASC"
     );
     $studentsStmt->execute();
-    $studentUsernames = $studentsStmt->fetchAll(PDO::FETCH_COLUMN);
+    $students = $studentsStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
 ?>
@@ -825,7 +826,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
     <?php
     $mode     = $_GET['mode'] ?? null;
-    $showForm = $mode === 'new' || $editingOrder !== null || $error !== '' || $success !== '';
+    // טופס ההזמנה נפתח רק אם ביקשו במפורש (mode=new), יש שגיאה, או עורכים הזמנה קיימת.
+    // הצלחה בלבד לא פותחת טופס.
+    $showForm = $mode === 'new' || $editingOrder !== null || $error !== '';
     ?>
 
     <div class="modal-backdrop" id="order_modal" style="display: <?= $showForm ? 'flex' : 'none' ?>;">
@@ -926,6 +929,27 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <?php if (!$isStudent): ?>
                             <div id="borrower_suggestions" class="suggestions"></div>
                         <?php endif; ?>
+
+                        <label for="borrower_email">מייל</label>
+                        <input
+                            type="text"
+                            id="borrower_email"
+                            autocomplete="off"
+                            value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_contact'] ?? '', ENT_QUOTES, 'UTF-8') : htmlspecialchars((string)($me['email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                            <?= $isStudent ? 'readonly' : '' ?>
+                        >
+
+                        <label for="borrower_phone">טלפון</label>
+                        <input
+                            type="text"
+                            id="borrower_phone"
+                            autocomplete="off"
+                            value="<?= htmlspecialchars((string)($me['phone'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                            <?= $isStudent ? 'readonly' : '' ?>
+                        >
+
+                        <input type="hidden" id="borrower_contact" name="borrower_contact"
+                               value="<?= htmlspecialchars($editingOrder ? (string)($editingOrder['borrower_contact'] ?? '') : '', ENT_QUOTES, 'UTF-8') ?>">
 
                         <label for="notes">הערות</label>
                         <textarea
@@ -1101,18 +1125,21 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                       onsubmit="return confirm('למחוק את ההזמנה הזו?');">
                                     <input type="hidden" name="action" value="delete">
                                     <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                    <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
                                     <button type="submit" class="icon-btn" title="מחיקה">🗑️</button>
                                 </form>
 
                                 <form method="post" action="admin_orders.php">
                                     <input type="hidden" name="action" value="duplicate">
                                     <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                    <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
                                     <button type="submit" class="icon-btn" title="שכפול">⧉</button>
                                 </form>
 
                                 <form method="post" action="admin_orders.php">
                                     <input type="hidden" name="action" value="update_status">
                                     <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                    <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
                                     <select name="status" class="muted-small">
                                         <option value="pending"   <?= $order['status'] === 'pending'   ? 'selected' : '' ?>>ממתין</option>
                                         <option value="approved"  <?= $order['status'] === 'approved'  ? 'selected' : '' ?>>מאושר</option>
@@ -1133,7 +1160,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 </main>
 <script>
 (function () {
-    const students = <?= json_encode($studentUsernames, JSON_UNESCAPED_UNICODE) ?>;
+    const students = <?= json_encode($students, JSON_UNESCAPED_UNICODE) ?>;
 
     const startInput = document.getElementById('start_date');
     const endInput = document.getElementById('end_date');
@@ -1145,6 +1172,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const addEquipmentBtn = document.getElementById('add_equipment_btn');
     const selectedEquipmentSummary = document.getElementById('selected_equipment_summary');
     const selectedEquipmentList = document.getElementById('selected_equipment_list');
+    const borrowerEmailInput = document.getElementById('borrower_email');
+    const borrowerPhoneInput = document.getElementById('borrower_phone');
+    const borrowerContactHidden = document.getElementById('borrower_contact');
     const submitBtn = document.getElementById('submit_order_btn');
     const borrowerSearch = document.getElementById('borrower_search');
     const borrowerHidden = document.getElementById('borrower_name');
@@ -1455,8 +1485,24 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         });
     }
 
-    // חיפוש "שם שואל" לפי רשימת הסטודנטים
-    if (borrowerSearch && borrowerHidden && borrowerSuggestions && Array.isArray(students)) {
+    // עדכון פרטי קשר (מייל + טלפון) לשדה החבוי borrower_contact
+    function updateBorrowerContact(email, phone) {
+        if (borrowerEmailInput) {
+            borrowerEmailInput.value = email || '';
+        }
+        if (borrowerPhoneInput) {
+            borrowerPhoneInput.value = phone || '';
+        }
+        if (borrowerContactHidden) {
+            const parts = [];
+            if (email) parts.push(email);
+            if (phone) parts.push(phone);
+            borrowerContactHidden.value = parts.join(' | ');
+        }
+    }
+
+    // חיפוש "שם שואל" לפי רשימת הסטודנטים + מילוי פרטי קשר אוטומטי
+    if (borrowerSearch && borrowerHidden && borrowerSuggestions && Array.isArray(students) && students.length > 0) {
         borrowerSearch.addEventListener('input', function () {
             const q = borrowerSearch.value.trim();
 
@@ -1469,18 +1515,21 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             }
 
             const qLower = q.toLowerCase();
-            const matches = students.filter(function (name) {
-                return name.toLowerCase().startsWith(qLower);
+            const matches = students.filter(function (u) {
+                const full = ((u.first_name || '') + ' ' + (u.last_name || '') + ' ' + (u.username || '')).trim();
+                return full.toLowerCase().indexOf(qLower) !== -1;
             }).slice(0, 20);
 
-            matches.forEach(function (name) {
+            matches.forEach(function (u) {
+                const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.username;
                 const item = document.createElement('div');
                 item.className = 'suggestion-item';
-                item.textContent = name;
+                item.textContent = fullName;
                 item.addEventListener('click', function () {
-                    borrowerSearch.value = name;
-                    borrowerHidden.value = name;
+                    borrowerSearch.value = fullName;
+                    borrowerHidden.value = fullName;
                     borrowerSuggestions.innerHTML = '';
+                    updateBorrowerContact(u.email || '', u.phone || '');
                 });
                 borrowerSuggestions.appendChild(item);
             });
