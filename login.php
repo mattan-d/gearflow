@@ -26,15 +26,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $loginOk = false;
             $hash    = $user['password_hash'] ?? '';
-            $legacy  = $user['password'] ?? '';
 
+            // 1. סיסמאות חדשות/רגילות עם password_hash
             if (is_string($hash) && $hash !== '' && password_verify($password, $hash)) {
                 $loginOk = true;
-            } elseif (($hash === '' || $hash === null) && is_string($legacy) && $legacy !== '' && hash_equals($legacy, $password)) {
-                // תמיכה בסיסמאות ישנות שנשמרו בטקסט גלוי – נעדכן ל-hash מודרני
+            }
+
+            // 2. תמיכה במקרה שבו נשמרה סיסמה כטקסט גלוי בעמודה password_hash (מערכת ישנה / ייבוא)
+            if (!$loginOk && is_string($hash) && $hash !== '' && hash_equals($hash, $password)) {
                 $loginOk = true;
                 $newHash = password_hash($password, PASSWORD_DEFAULT);
                 $update  = $pdo->prepare('UPDATE users SET password_hash = :password_hash WHERE id = :id');
+                $update->execute([
+                    ':password_hash' => $newHash,
+                    ':id'            => (int)$user['id'],
+                ]);
+            }
+
+            // 3. טיפול מיוחד למשתמש הדמו שביקשת
+            if (
+                !$loginOk
+                && $username === 'studentdemo'
+                && $password === '123456'
+            ) {
+                $loginOk = true;
+                $newHash = password_hash($password, PASSWORD_DEFAULT);
+                $update  = $pdo->prepare('UPDATE users SET password_hash = :password_hash, is_active = 1 WHERE id = :id');
                 $update->execute([
                     ':password_hash' => $newHash,
                     ':id'            => (int)$user['id'],
