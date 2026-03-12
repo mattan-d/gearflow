@@ -6,6 +6,9 @@ require_once __DIR__ . '/auth.php';
 
 require_admin_or_warehouse();
 
+$me   = current_user();
+$role = $me['role'] ?? 'student';
+
 $pdo      = get_db();
 $error    = '';
 $success  = '';
@@ -272,22 +275,37 @@ switch ($tab) {
         break;
 }
 
+// אם המשתמש הוא סטודנט – מציגים רק הזמנות של עצמו
+if ($role === 'student') {
+    $currentUsername = (string)($me['username'] ?? '');
+    if ($currentUsername !== '') {
+        if ($where === '') {
+            $where = ' WHERE o.borrower_name = :current_student';
+        } else {
+            $where .= ' AND o.borrower_name = :current_student';
+        }
+        $params[':current_student'] = $currentUsername;
+    }
+}
+
 $ordersSql  = $baseSql . $where . ' ORDER BY o.created_at DESC, o.id DESC';
 $ordersStmt = $pdo->prepare($ordersSql);
 $ordersStmt->execute($params);
 $orders = $ordersStmt->fetchAll();
 
 // רשימת סטודנטים (משתתפים) לשדה החיפוש של "שם שואל"
-$studentsStmt = $pdo->prepare(
-    "SELECT username
-     FROM users
-     WHERE role = 'student' AND is_active = 1
-     ORDER BY username ASC"
-);
-$studentsStmt->execute();
-$studentUsernames = $studentsStmt->fetchAll(PDO::FETCH_COLUMN);
-
-$me = current_user();
+// רשימת סטודנטים לבחירה של אדמין / מנהל מחסן בלבד
+$studentUsernames = [];
+if ($role === 'admin' || $role === 'warehouse_manager') {
+    $studentsStmt = $pdo->prepare(
+        "SELECT username
+         FROM users
+         WHERE role = 'student' AND is_active = 1
+         ORDER BY username ASC"
+    );
+    $studentsStmt->execute();
+    $studentUsernames = $studentsStmt->fetchAll(PDO::FETCH_COLUMN);
+}
 
 ?>
 <!DOCTYPE html>
