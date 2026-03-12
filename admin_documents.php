@@ -3,10 +3,12 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/config.php';
 
 require_admin_or_warehouse();
 
-$me = current_user();
+$me  = current_user();
+$pdo = get_db();
 
 // הגדרת מסמכים בסיסיים ושמירתם לקבצים פשוטים
 $docDir = __DIR__ . '/documents';
@@ -41,31 +43,99 @@ foreach ($documents as $key => &$doc) {
 unset($doc);
 
 // איזה מסמך פעיל לעריכה (אם בכלל)
-$currentDocKey = $_POST['doc_key'] ?? ($_GET['doc'] ?? '');
+$currentDocKey   = $_POST['doc_key'] ?? ($_GET['doc'] ?? '');
+$currentCustomId = isset($_GET['custom_id']) ? (int)$_GET['custom_id'] : 0;
+$currentCustom   = null;
 
-// שמירת מסמך מעורך
+// קריאת מסמכים מותאמים אישית מה-DB
+$customDocs = [];
+try {
+    $stmt = $pdo->query('SELECT id, title FROM documents_custom ORDER BY title ASC');
+    $customDocs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Throwable $e) {
+    $customDocs = [];
+}
+
+// טיפול בשמירה / יצירה / מחיקה
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $docKey  = $currentDocKey;
-    $content = (string)($_POST['doc_content'] ?? '');
+    $action = $_POST['action'] ?? '';
 
-    if (!isset($documents[$docKey])) {
-        $error = 'מסמך לא נמצא.';
-    } else {
-        // עבור טופס ההסכמה – מוודאים שלא שינו את שמות המשתנים
-        if ($docKey === 'consent_form') {
-            $requiredTokens = ['{borrower_name}', '{equipment_name}', '{equipment_code}', '{start_date}', '{end_date}'];
-            foreach ($requiredTokens as $token) {
-                if (strpos($content, $token) === false) {
-                    $error = 'אין לשנות או להסיר את המשתנים הקבועים (למשל ' . $token . '). ניתן לערוך רק את הטקסט סביבם.';
-                    break;
+    if ($action === 'save_builtin') {
+        $docKey  = $currentDocKey;
+        $content = (string)($_POST['doc_content'] ?? '');
+
+        if (!isset($documents[$docKey])) {
+            $error = 'מסמך לא נמצא.';
+        } else {
+            if ($docKey === 'consent_form') {
+                $requiredTokens = ['{borrower_name}', '{equipment_name}', '{equipment_code}', '{start_date}', '{end_date}'];
+                foreach ($requiredTokens as $token) {
+                    if (strpos($content, $token) === false) {
+                        $error = 'אין לשנות או להסיר את המשתנים הקבועים (למשל ' . $token . '). ניתן לערוך רק את הטקסט סביבם.';
+                        break;
+                    }
                 }
             }
-        }
 
-        if ($error === '') {
-            file_put_contents($documents[$docKey]['file'], $content);
-            $documents[$docKey]['content'] = $content;
-            $notice = 'המסמך "' . $documents[$docKey]['title'] . '" נשמר בהצלחה.';
+            if ($error === '') {
+                file_put_contents($documents[$docKey]['file'], $content);
+                $documents[$docKey]['content'] = $content;
+                $notice = 'המסמך "' . $documents[$docKey]['title'] . '" נשמר בהצלחה.';
+            }
+        }
+    } elseif ($action === 'create_custom' || $action === 'update_custom') {
+        $title   = trim((string)($_POST['custom_title'] ?? ''));
+        $content = (string)($_POST['custom_content'] ?? '');
+        $id      = (int)($_POST['custom_id'] ?? 0);
+
+        if ($title === '') {
+            $error = 'יש להזין שם למסמך.';
+        } elseif ($content === '') {
+            $error = 'יש להזין תוכן למסמך.';
+        } else {
+            $slugSource = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $title);
+            $slug = preg_replace('~[^a-zA-Z0-9_]+~', '-', strtolower($slugSource ?: 'doc'));
+            if ($slug === '' || $slug === '-') {
+                $slug = 'doc-' . date('Ymd-His');
+            }
+            try {
+                if ($action === 'create_custom') {
+                    $stmt = $pdo->prepare('INSERT INTO documents_custom (title, slug, content, created_at) VALUES (:title, :slug, :content, :created_at)');
+                    $stmt->execute([
+                        ':title'      => $title,
+                        ':slug'       => $slug,
+                        ':content'    => $content,
+                        ':created_at' => date('Y-m-d H:i:s'),
+                    ]);
+                    $newId = (int)$pdo->lastInsertId();
+                    $notice = 'המסמך נוצר ונשמר בהצלחה.';
+                    header('Location: admin_documents.php?custom_id=' . $newId);
+                    exit;
+                }
+                if ($action === 'update_custom' && $id > 0) {
+                    $stmt = $pdo->prepare('UPDATE documents_custom SET title = :title, content = :content, updated_at = :updated_at WHERE id = :id');
+                    $stmt->execute([
+                        ':title'      => $title,
+                        ':content'    => $content,
+                        ':updated_at' => date('Y-m-d H:i:s'),
+                        ':id'         => $id,
+                    ]);
+                    $notice = 'המסמך עודכן בהצלחה.';
+                    header('Location: admin_documents.php?custom_id=' . $id);
+                    exit;
+                }
+            } catch (PDOException $e) {
+                $error = 'שגיאה בשמירת המסמך.';
+            }
+        }
+    } elseif ($action === 'delete_custom') {
+        $id = (int)($_POST['custom_id'] ?? 0);
+        if ($id > 0) {
+            $stmt = $pdo->prepare('DELETE FROM documents_custom WHERE id = :id');
+            $stmt->execute([':id' => $id]);
+            $notice = 'המסמך נמחק.';
+            header('Location: admin_documents.php');
+            exit;
         }
     }
 }
@@ -247,22 +317,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="flash notice"><?= htmlspecialchars($notice, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
 
-        <button type="button" class="btn secondary" onclick="alert('הוספת מסמך חדש תתווסף בגרסה הבאה. כרגע ניתן לערוך רק מסמכים קיימים.')">
-            הוספת מסמך
-        </button>
+        <form method="get" action="admin_documents.php" style="margin-bottom:1rem;">
+            <button type="submit" class="btn secondary" name="new" value="1">
+                הוספת מסמך
+            </button>
+        </form>
 
         <div class="doc-list">
             <?php foreach ($documents as $key => $doc): ?>
                 <a href="admin_documents.php?doc=<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>"
-                   class="doc-pill <?= $key === $currentDocKey ? 'active' : '' ?>">
+                   class="doc-pill <?= $key === $currentDocKey && $currentCustomId === 0 ? 'active' : '' ?>">
                     <?= htmlspecialchars($doc['title'], ENT_QUOTES, 'UTF-8') ?>
+                </a>
+            <?php endforeach; ?>
+            <?php foreach ($customDocs as $c): ?>
+                <form method="post" action="admin_documents.php" style="display:inline;">
+                    <input type="hidden" name="action" value="delete_custom">
+                    <input type="hidden" name="custom_id" value="<?= (int)$c['id'] ?>">
+                    <button type="submit" class="doc-pill" style="background:#fee2e2;color:#b91c1c;border-color:#fecaca;margin-left:0.25rem;"
+                            onclick="return confirm('למחוק את המסמך \"<?= htmlspecialchars($c['title'], ENT_QUOTES, 'UTF-8') ?>\"?');">
+                        ✕
+                    </button>
+                </form>
+                <a href="admin_documents.php?custom_id=<?= (int)$c['id'] ?>"
+                   class="doc-pill <?= $currentCustomId === (int)$c['id'] ? 'active' : '' ?>">
+                    <?= htmlspecialchars($c['title'], ENT_QUOTES, 'UTF-8') ?>
                 </a>
             <?php endforeach; ?>
         </div>
 
-        <?php if ($currentDocKey !== '' && isset($documents[$currentDocKey])): ?>
+        <?php if (isset($_GET['new']) && (int)$_GET['new'] === 1): ?>
+            <div class="doc-editor">
+                <form method="post" action="admin_documents.php">
+                    <input type="hidden" name="action" value="create_custom">
+                    <label for="custom_title" style="display:block; margin-bottom:0.3rem; font-size:0.9rem; font-weight:600;">
+                        שם המסמך
+                    </label>
+                    <input type="text" id="custom_title" name="custom_title" style="width:100%;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;margin-bottom:0.5rem;">
+                    <label for="custom_content" style="display:block; margin-bottom:0.3rem; font-size:0.9rem; font-weight:600;">
+                        תוכן המסמך
+                    </label>
+                    <textarea id="custom_content" name="custom_content"></textarea>
+                    <button type="submit" class="btn" style="margin-top:0.6rem;">שמירת מסמך</button>
+                </form>
+            </div>
+        <?php elseif ($currentCustomId > 0): ?>
+            <?php
+            $stmtView = $pdo->prepare('SELECT id, title, content FROM documents_custom WHERE id = :id');
+            $stmtView->execute([':id' => $currentCustomId]);
+            $currentCustom = $stmtView->fetch(PDO::FETCH_ASSOC) ?: null;
+            ?>
+            <?php if ($currentCustom): ?>
+                <div class="doc-editor">
+                    <form method="post" action="admin_documents.php?custom_id=<?= (int)$currentCustom['id'] ?>">
+                        <input type="hidden" name="action" value="update_custom">
+                        <input type="hidden" name="custom_id" value="<?= (int)$currentCustom['id'] ?>">
+                        <label for="custom_title" style="display:block; margin-bottom:0.3rem; font-size:0.9rem; font-weight:600;">
+                            שם המסמך
+                        </label>
+                        <input type="text" id="custom_title" name="custom_title"
+                               value="<?= htmlspecialchars($currentCustom['title'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                               style="width:100%;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;margin-bottom:0.5rem;">
+                        <label for="custom_content" style="display:block; margin-bottom:0.3rem; font-size:0.9rem; font-weight:600;">
+                            תוכן המסמך
+                        </label>
+                        <textarea id="custom_content" name="custom_content"><?= htmlspecialchars($currentCustom['content'] ?? '', ENT_QUOTES, 'UTF-8') ?></textarea>
+                        <button type="submit" class="btn" style="margin-top:0.6rem;">שמירת מסמך</button>
+                    </form>
+                </div>
+            <?php endif; ?>
+        <?php elseif ($currentDocKey !== '' && isset($documents[$currentDocKey])): ?>
             <div class="doc-editor">
                 <form method="post" action="admin_documents.php?doc=<?= htmlspecialchars($currentDocKey, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="action" value="save_builtin">
                     <input type="hidden" name="doc_key" id="doc_key" value="<?= htmlspecialchars($currentDocKey, ENT_QUOTES, 'UTF-8') ?>">
                     <label for="doc_content" style="display:block; margin-bottom:0.3rem; font-size:0.9rem; font-weight:600;">
                         תוכן המסמך: <?= htmlspecialchars($documents[$currentDocKey]['title'], ENT_QUOTES, 'UTF-8') ?>

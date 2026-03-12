@@ -149,6 +149,18 @@ function initialize_database(PDO $pdo): void
         // מתעלמים משגיאות מיגרציה כדי לא להפיל את הטעינה
     }
 
+    // טבלת מסמכים מותאמים אישית (לנהלים נוספים וכו')
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS documents_custom (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            slug TEXT NOT NULL UNIQUE,
+            content TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )
+    ");
+
     // Ensure default admin user exists: admin / admin
     $stmt = $pdo->prepare('SELECT COUNT(*) AS cnt FROM users WHERE username = :username');
     $stmt->execute([':username' => 'admin']);

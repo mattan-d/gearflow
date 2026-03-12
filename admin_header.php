@@ -5,9 +5,19 @@ declare(strict_types=1);
 if (!function_exists('current_user')) {
     require_once __DIR__ . '/auth.php';
 }
+require_once __DIR__ . '/config.php';
 
 $me = $me ?? current_user();
 $role = $me['role'] ?? 'student';
+
+$pdo = get_db();
+$customDocs = [];
+try {
+    $stmtDocs = $pdo->query('SELECT id, title FROM documents_custom ORDER BY title ASC');
+    $customDocs = $stmtDocs->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Throwable $e) {
+    $customDocs = [];
+}
 
 ?>
 <style>
@@ -81,6 +91,11 @@ $role = $me['role'] ?? 'student';
                     <a href="#">נהלים</a>
                     <div class="main-nav-sub">
                         <a href="warehouse_rules.php">נהלי מחסן</a>
+                        <?php foreach ($customDocs as $doc): ?>
+                            <a href="document_view.php?id=<?= (int)($doc['id'] ?? 0) ?>">
+                                <?= htmlspecialchars((string)($doc['title'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                            </a>
+                        <?php endforeach; ?>
                     </div>
                 </div>
             </div>
