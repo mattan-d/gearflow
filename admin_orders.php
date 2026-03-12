@@ -1376,21 +1376,22 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                                         <?php
                                         // בחירת סטטוס בהתאם לכללי המעבר:
-                                        // pending -> approved / rejected
-                                        // approved -> on_loan
-                                        // on_loan -> returned
+                                        // מציגים את הסטטוס הנוכחי (כפריט ראשון, מסומן), ועוד את הסטטוס הבא המותר
                                         $options = [];
                                         if ($order['status'] === 'pending') {
                                             $options = [
+                                                'pending'  => 'ממתין (נוכחי)',
                                                 'approved' => 'מאושר',
                                                 'rejected' => 'נדחה',
                                             ];
                                         } elseif ($order['status'] === 'approved') {
                                             $options = [
-                                                'on_loan' => 'בהשאלה',
+                                                'approved' => 'מאושר (נוכחי)',
+                                                'on_loan'  => 'בהשאלה',
                                             ];
                                         } elseif ($order['status'] === 'on_loan') {
                                             $options = [
+                                                'on_loan'  => 'בהשאלה (נוכחי)',
                                                 'returned' => 'עבר',
                                             ];
                                         }
@@ -1402,7 +1403,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                                 <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
                                                 <select name="status" class="muted-small">
                                                     <?php foreach ($options as $value => $label): ?>
-                                                        <option value="<?= $value ?>"><?= $label ?></option>
+                                                        <option value="<?= $value ?>" <?= $value === $order['status'] ? 'selected disabled' : '' ?>>
+                                                            <?= $label ?>
+                                                        </option>
                                                     <?php endforeach; ?>
                                                 </select>
                                                 <button type="submit" class="btn small neutral">עדכון</button>
