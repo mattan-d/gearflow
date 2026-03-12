@@ -65,7 +65,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['username'] = $user['username'];
                 $_SESSION['role']     = $user['role'];
 
-                header('Location: admin.php');
+                $role = $user['role'] ?? 'student';
+                if ($role === 'admin') {
+                    $target = 'admin.php';
+                } else {
+                    // סטודנטים ומנהלי מחסן מגיעים למסך ההזמנות
+                    $target = 'admin_orders.php';
+                }
+
+                header('Location: ' . $target);
                 exit;
             }
         }
