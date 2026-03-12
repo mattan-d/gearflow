@@ -204,12 +204,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Reload list after changes
-$stmt = $pdo->query(
-    'SELECT id, name, code, description, category, location, quantity_total, quantity_available, status, picture, created_at, updated_at
-     FROM equipment
-     ORDER BY category ASC, name ASC'
-);
+// Reload list after changes + סינון
+$searchTerm      = trim($_GET['q'] ?? '');
+$filterCategory  = trim($_GET['filter_category'] ?? '');
+$filterStatus    = trim($_GET['filter_status'] ?? '');
+$filterWarehouse = trim($_GET['filter_warehouse'] ?? '');
+
+$sql = 'SELECT id, name, code, description, category, location, quantity_total, quantity_available, status, picture, created_at, updated_at
+        FROM equipment';
+$conditions = [];
+$params     = [];
+
+if ($searchTerm !== '') {
+    $conditions[]        = 'name LIKE :search';
+    $params[':search']   = $searchTerm . '%';
+}
+if ($filterCategory !== '') {
+    $conditions[]        = 'category = :cat';
+    $params[':cat']      = $filterCategory;
+}
+if ($filterStatus !== '') {
+    $conditions[]        = 'status = :st';
+    $params[':st']       = $filterStatus;
+}
+
+// $me יוגדר מיד אחרי הבלוק הזה – אבל כאן עדיין לא נגיש, לכן נשתמש ב-role דרך session אם קיים
+$roleForFilter = 'student';
+if (!empty($_SESSION['user_id'] ?? null)) {
+    // נשמור את זה פשוט: נסמך על admin_orders/auth שנטענו קודם
+    $currentTmp = current_user();
+    if (is_array($currentTmp) && isset($currentTmp['role'])) {
+        $roleForFilter = (string)$currentTmp['role'];
+    }
+}
+if ($filterWarehouse !== '' && $roleForFilter === 'admin') {
+    $conditions[]        = 'location = :loc';
+    $params[':loc']      = $filterWarehouse;
+}
+
+if ($conditions) {
+    $sql .= ' WHERE ' . implode(' AND ', $conditions);
+}
+$sql .= ' ORDER BY category ASC, name ASC';
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
 $equipmentList = $stmt->fetchAll();
 
 // יצוא רשימת ציוד ל-CSV
@@ -426,6 +465,27 @@ $me = current_user();
             display: flex;
             gap: 0.5rem;
         }
+        .equipment-filters {
+            margin-bottom: 1rem;
+        }
+        .equipment-filters form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: flex-end;
+        }
+        .equipment-filters label {
+            margin-bottom: 0.1rem;
+            font-size: 0.8rem;
+            color: #4b5563;
+        }
+        .equipment-filters input[type="text"],
+        .equipment-filters select {
+            padding: 0.3rem 0.5rem;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            font-size: 0.8rem;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -564,6 +624,49 @@ $me = current_user();
             <button type="button" class="btn secondary" id="toggle_import_equipment_btn">יבוא רשימת ציוד</button>
             <a href="admin_equipment.php?export=1" class="btn neutral">יצוא רשימת ציוד</a>
         </div>
+    </div>
+
+    <div class="equipment-filters">
+        <form method="get" action="admin_equipment.php">
+            <div>
+                <label for="filter_q">חיפוש לפי שם ציוד</label><br>
+                <input type="text" id="filter_q" name="q"
+                       value="<?= htmlspecialchars($searchTerm ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                       placeholder="הקלד תחילת שם הציוד">
+            </div>
+            <div>
+                <label for="filter_category">קטגוריה</label><br>
+                <select id="filter_category" name="filter_category">
+                    <option value="">כל הקטגוריות</option>
+                    <option value="מצלמה"   <?= ($filterCategory ?? '') === 'מצלמה'   ? 'selected' : '' ?>>מצלמה</option>
+                    <option value="מיקרופון" <?= ($filterCategory ?? '') === 'מיקרופון' ? 'selected' : '' ?>>מיקרופון</option>
+                    <option value="חצובה"   <?= ($filterCategory ?? '') === 'חצובה'   ? 'selected' : '' ?>>חצובה</option>
+                    <option value="תאורה"   <?= ($filterCategory ?? '') === 'תאורה'   ? 'selected' : '' ?>>תאורה</option>
+                </select>
+            </div>
+            <div>
+                <label for="filter_status">סטטוס</label><br>
+                <select id="filter_status" name="filter_status">
+                    <option value="">כל הסטטוסים</option>
+                    <option value="active"   <?= ($filterStatus ?? '') === 'active'   ? 'selected' : '' ?>>פעיל</option>
+                    <option value="out"      <?= ($filterStatus ?? '') === 'out'      ? 'selected' : '' ?>>לא זמין</option>
+                    <option value="disabled" <?= ($filterStatus ?? '') === 'disabled' ? 'selected' : '' ?>>מושבת</option>
+                </select>
+            </div>
+            <?php if (isset($me) && ($me['role'] ?? '') === 'admin'): ?>
+                <div>
+                    <label for="filter_warehouse">מחסן</label><br>
+                    <select id="filter_warehouse" name="filter_warehouse">
+                        <option value="">כל המחסנים</option>
+                        <option value="מחסן א" <?= ($filterWarehouse ?? '') === 'מחסן א' ? 'selected' : '' ?>>מחסן א</option>
+                        <option value="מחסן ב" <?= ($filterWarehouse ?? '') === 'מחסן ב' ? 'selected' : '' ?>>מחסן ב</option>
+                    </select>
+                </div>
+            <?php endif; ?>
+            <div>
+                <button type="submit" class="btn secondary" style="margin-top: 1.1rem;">סינון</button>
+            </div>
+        </form>
     </div>
 
     <?php
