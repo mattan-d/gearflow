@@ -656,6 +656,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             background: #e5e7eb;
             color: #9ca3af;
         }
+        #bulk_update_btn:not([disabled]) {
+            background: linear-gradient(135deg, #4f46e5, #6366f1);
+            color: #ffffff;
+        }
         .icon-btn {
             border: none;
             background: transparent;
