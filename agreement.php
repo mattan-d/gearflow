@@ -200,49 +200,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasSignature) {
 
     <h1>הסכם השאלת ציוד</h1>
 
-    <div class="meta">
-        <?php if ($order): ?>
-            <div class="meta-row">
-                <div>מספר הזמנה: <strong><?= (int)$order['id'] ?></strong></div>
-                <div>שם השואל: <strong><?= htmlspecialchars($order['borrower_name'], ENT_QUOTES, 'UTF-8') ?></strong></div>
-            </div>
-            <div class="meta-row" style="margin-top: 0.4rem;">
-                <div>ציוד: <strong><?= htmlspecialchars($order['equipment_name'], ENT_QUOTES, 'UTF-8') ?>
-                        (<?= htmlspecialchars($order['equipment_code'], ENT_QUOTES, 'UTF-8') ?>)</strong></div>
-                <div>
-                    תקופת השאלה:
-                    <strong>
-                        <?= htmlspecialchars($order['start_date'], ENT_QUOTES, 'UTF-8') ?>
-                        -
-                        <?= htmlspecialchars($order['end_date'], ENT_QUOTES, 'UTF-8') ?>
-                    </strong>
-                </div>
-            </div>
-        <?php else: ?>
-            <div>מספר הזמנה: __________</div>
-            <div style="margin-top: 0.3rem;">שם השואל: ______________________________</div>
-            <div style="margin-top: 0.3rem;">ציוד: _________________________________________________</div>
-            <div style="margin-top: 0.3rem;">תקופת השאלה: מ־ __________ עד __________</div>
-        <?php endif; ?>
-    </div>
+    <?php
+    // טעינת נוסח הסכם השאלה מתוך ניהול המסמכים
+    $docDir        = __DIR__ . '/documents';
+    $consentFile   = $docDir . '/consent_form.txt';
+    $consentSample = "הסכם השאלת ציוד\n\nמספר הזמנה: {order_number}\nשם השואל: {borrower_name}\nציוד: {equipment_name} ({equipment_code})\nתקופת השאלה: {start_date} - {end_date}\n\nהנני מתחייב/ת לשמור על הציוד המפורט לעיל (להלן: \"הציוד\") ולהחזירו תקין ושלם במועד שסוכם, בהתאם לכללים הבאים:\n\n1. השואל אחראי באופן מלא לשלמות הציוד מרגע יציאתו מהמחסן ועד להחזרתו בפועל.\n2. אסור להעביר את הציוד לצד ג' ללא אישור מראש ממנהל המחסן/האחראי.\n3. השואל מתחייב להשתמש בציוד בהתאם להנחיות הבטיחות ולמפרט היצרן בלבד.\n4. במקרה של נזק, אובדן או גניבה, השואל ידווח מידית למנהל המחסן ויישא באחריות בהתאם לנהלי המוסד.\n5. החזרת הציוד תתבצע במועד שנקבע, במצב תקין ונקי, לרבות כלל האביזרים הנלווים.\n6. אי עמידה בתנאי ההשאלה או במועדי ההחזרה עלולה לגרור חסימה מהשאלות עתידיות ו/או חיוב כספי לפי נהלי המוסד.\n\nבחתימתי מטה אני מאשר/ת שקראתי והבנתי את תנאי ההשאלה, ואני מסכים/ה לפעול לפיהם.\n";
+
+    $consentText = is_file($consentFile) ? (file_get_contents($consentFile) ?: $consentSample) : $consentSample;
+
+    if ($order) {
+        $replacements = [
+            '{order_number}'   => (string)(int)$order['id'],
+            '{borrower_name}'  => (string)$order['borrower_name'],
+            '{equipment_name}' => (string)$order['equipment_name'],
+            '{equipment_code}' => (string)$order['equipment_code'],
+            '{start_date}'     => (string)$order['start_date'],
+            '{end_date}'       => (string)$order['end_date'],
+        ];
+        $consentText = strtr($consentText, $replacements);
+    }
+    ?>
 
     <div class="agreement-text">
-        <p>
-            הנני מתחייב/ת לשמור על הציוד המפורט לעיל (להלן: "הציוד") ולהחזירו תקין ושלם במועד שסוכם,
-            בהתאם לכללים הבאים:
-        </p>
-        <ol>
-            <li>השואל אחראי באופן מלא לשלמות הציוד מרגע יציאתו מהמחסן ועד להחזרתו בפועל.</li>
-            <li>אסור להעביר את הציוד לצד ג' ללא אישור מראש ממנהל המחסן/האחראי.</li>
-            <li>השואל מתחייב להשתמש בציוד בהתאם להנחיות הבטיחות ולמפרט היצרן בלבד.</li>
-            <li>במקרה של נזק, אובדן או גניבה, השואל ידווח מידית למנהל המחסן ויישא באחריות בהתאם לנהלי המוסד.</li>
-            <li>החזרת הציוד תתבצע במועד שנקבע, במצב תקין ונקי, לרבות כלל האביזרים הנלווים.</li>
-            <li>אי עמידה בתנאי ההשאלה או במועדי ההחזרה עלולה לגרור חסימה מהשאלות עתידיות
-                ו/או חיוב כספי לפי נהלי המוסד.</li>
-        </ol>
-        <p>
-            בחתימתי מטה אני מאשר/ת שקראתי והבנתי את תנאי ההשאלה, ואני מסכים/ה לפעול לפיהם.
-        </p>
+        <pre style="white-space: pre-wrap; font-family: inherit; font-size: 0.9rem; color: #111827;">
+<?= htmlspecialchars($consentText, ENT_QUOTES, 'UTF-8') ?>
+        </pre>
     </div>
 
     <div class="signature-blocks">
