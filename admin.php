@@ -159,7 +159,7 @@ $me = current_user();
                         <a href="admin.php">ניהול מערכת</a>
                         <div class="main-nav-sub">
                             <a href="admin_users.php">ניהול משתמשים</a>
-                            <a href="#">ניהול מסמכים</a>
+                            <a href="admin_documents.php">ניהול מסמכים</a>
                             <a href="admin_design.php">עיצוב ממשק</a>
                             <a href="admin_times.php">ניהול זמנים</a>
                         </div>
@@ -195,6 +195,11 @@ $me = current_user();
             <div class="icon">👥</div>
             <h2>ניהול משתמשים</h2>
             <p>הוספת משתמשים, הרשאות, הפעלה והשבתה של חשבונות.</p>
+        </a>
+        <a href="admin_documents.php" class="menu-card">
+            <div class="icon">📄</div>
+            <h2>ניהול מסמכים</h2>
+            <p>ניהול טפסים, הסכמים ומסמכי עזר במערכת.</p>
         </a>
     </div>
 </main>
