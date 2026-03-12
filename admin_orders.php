@@ -1094,7 +1094,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     <div class="date-calendar-header">
                                         <button type="button" id="cal_prev">&lt;</button>
                                         <div id="cal_month_label"></div>
-                                        <button type="button" id="cal_next">&gt;</button>
+                                        <div style="display:flex;align-items:center;gap:4px;">
+                                            <button type="button" id="cal_close" class="icon-btn" title="סגירת לוח שנה">✕</button>
+                                            <button type="button" id="cal_next">&gt;</button>
+                                        </div>
                                     </div>
                                     <div class="date-calendar-weekdays">
                                         <span>א</span><span>ב</span><span>ג</span><span>ד</span><span>ה</span><span>ו</span><span>ש</span>
@@ -1561,6 +1564,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const calMonthLabel = document.getElementById('cal_month_label');
     const calPrev = document.getElementById('cal_prev');
     const calNext = document.getElementById('cal_next');
+    const calClose = document.getElementById('cal_close');
     const calGrid = document.getElementById('cal_grid');
     const toggle = document.getElementById('date_picker_toggle');
     const panel = document.getElementById('date_picker_panel');
@@ -1711,15 +1715,21 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     }
 
     function updateLabels() {
-        startLabel.textContent = startInput.value || '-';
-        endLabel.textContent = endInput.value || '-';
+        const startDateText = startInput.value || '-';
+        const endDateText = endInput.value || '-';
+
+        const startTimeText = startTimeInput && startTimeInput.value ? (' ' + startTimeInput.value) : '';
+        const endTimeText = endTimeInput && endTimeInput.value ? (' ' + endTimeInput.value) : '';
+
+        startLabel.textContent = startDateText === '-' ? '-' : (startDateText + startTimeText);
+        endLabel.textContent = endDateText === '-' ? '-' : (endDateText + endTimeText);
 
         const rangeLabel = document.getElementById('date_range_label');
         if (rangeLabel) {
             if (startInput.value && endInput.value) {
-                rangeLabel.textContent = ' (' + startInput.value + ' עד ' + endInput.value + ')';
+                rangeLabel.textContent = ' (' + startDateText + startTimeText + ' עד ' + endDateText + endTimeText + ')';
             } else if (startInput.value) {
-                rangeLabel.textContent = ' (' + startInput.value + ' - )';
+                rangeLabel.textContent = ' (' + startDateText + startTimeText + ' - )';
             } else {
                 rangeLabel.textContent = '-';
             }
@@ -1843,13 +1853,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         updateEquipmentState();
         renderCalendar();
 
-        const hasStart = !!startInput.value;
-        const hasEnd = !!endInput.value;
-        if (hasStart && hasEnd) {
-            setTimeout(function () {
-                panel.style.display = 'none';
-            }, 1000);
-        }
+        // בוטלה הסגירה האוטומטית של לוח השנה; המשתמש יסגור ידנית עם כפתור ה-✕
     }
 
     function openTimePicker(target, isoDate) {
@@ -1900,6 +1904,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             if (e.target === timeModalBackdrop) {
                 timeModalBackdrop.style.display = 'none';
             }
+        });
+    }
+
+    // סגירת לוח השנה בכפתור X
+    if (calClose && panel) {
+        calClose.addEventListener('click', function () {
+            panel.style.display = 'none';
         });
     }
 
