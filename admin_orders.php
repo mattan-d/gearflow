@@ -1396,13 +1396,6 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                             </form>
                                         <?php endif; ?>
 
-                                        <form method="post" action="admin_orders.php">
-                                            <input type="hidden" name="action" value="duplicate">
-                                            <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                            <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                            <button type="submit" class="icon-btn" title="שכפול">⧉</button>
-                                        </form>
-
                                         <?php
                                         // בחירת סטטוס בהתאם לכללי המעבר:
                                         // מציגים את הסטטוס הנוכחי (כפריט ראשון, מסומן), ועוד את הסטטוס הבא המותר
@@ -1437,6 +1430,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                                 <?php endforeach; ?>
                                             </select>
                                         <?php endif; ?>
+
+                                        <form method="post" action="admin_orders.php">
+                                            <input type="hidden" name="action" value="duplicate">
+                                            <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                            <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                            <button type="submit" class="icon-btn" title="שכפול">⧉</button>
+                                        </form>
                                     </div>
                                 <?php endif;
                             } ?>
