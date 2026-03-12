@@ -40,9 +40,12 @@ foreach ($documents as $key => &$doc) {
 }
 unset($doc);
 
+// איזה מסמך פעיל לעריכה (אם בכלל)
+$currentDocKey = $_POST['doc_key'] ?? ($_GET['doc'] ?? '');
+
 // שמירת מסמך מעורך
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $docKey  = $_POST['doc_key'] ?? '';
+    $docKey  = $currentDocKey;
     $content = (string)($_POST['doc_content'] ?? '');
 
     if (!isset($documents[$docKey])) {
@@ -207,49 +210,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="doc-list">
             <?php foreach ($documents as $key => $doc): ?>
-                <button type="button"
-                        class="doc-pill <?= $key === 'consent_form' ? 'active' : '' ?>"
-                        onclick="selectDocument('<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>')">
+                <a href="admin_documents.php?doc=<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>"
+                   class="doc-pill <?= $key === $currentDocKey ? 'active' : '' ?>">
                     <?= htmlspecialchars($doc['title'], ENT_QUOTES, 'UTF-8') ?>
-                </button>
+                </a>
             <?php endforeach; ?>
         </div>
 
-        <div class="doc-editor">
-            <form method="post" action="admin_documents.php">
-                <input type="hidden" name="doc_key" id="doc_key" value="consent_form">
-                <label for="doc_content" style="display:block; margin-bottom:0.3rem; font-size:0.9rem; font-weight:600;">
-                    תוכן המסמך
-                </label>
-                <textarea id="doc_content" name="doc_content"><?= htmlspecialchars($documents['consent_form']['content'] ?? '', ENT_QUOTES, 'UTF-8') ?></textarea>
-                <p class="muted" style="margin-top:0.4rem;">
-                    שים לב: במסמך "הסכם השאלה" אין לשנות את שמות המשתנים במבנה `{...}` (למשל `{borrower_name}`). אפשר לערוך רק את הטקסט סביבם.
-                </p>
-                <button type="submit" class="btn" style="margin-top:0.6rem;">שמירת מסמך</button>
-            </form>
-        </div>
+        <?php if ($currentDocKey !== '' && isset($documents[$currentDocKey])): ?>
+            <div class="doc-editor">
+                <form method="post" action="admin_documents.php?doc=<?= htmlspecialchars($currentDocKey, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="doc_key" id="doc_key" value="<?= htmlspecialchars($currentDocKey, ENT_QUOTES, 'UTF-8') ?>">
+                    <label for="doc_content" style="display:block; margin-bottom:0.3rem; font-size:0.9rem; font-weight:600;">
+                        תוכן המסמך: <?= htmlspecialchars($documents[$currentDocKey]['title'], ENT_QUOTES, 'UTF-8') ?>
+                    </label>
+                    <textarea id="doc_content" name="doc_content"><?= htmlspecialchars($documents[$currentDocKey]['content'] ?? '', ENT_QUOTES, 'UTF-8') ?></textarea>
+                    <?php if ($currentDocKey === 'consent_form'): ?>
+                        <p class="muted" style="margin-top:0.4rem;">
+                            שים לב: במסמך "הסכם השאלה" אין לשנות את שמות המשתנים במבנה `{...}` (כגון `{borrower_name}`, `{equipment_name}`, `{equipment_code}`, `{start_date}`, `{end_date}`). אפשר לערוך רק את הטקסט סביבם.
+                        </p>
+                    <?php endif; ?>
+                    <button type="submit" class="btn" style="margin-top:0.6rem;">שמירת מסמך</button>
+                </form>
+            </div>
+        <?php endif; ?>
     </div>
-    <script>
-        const documentsData = <?= json_encode(array_map(function ($d) {
-            return ['title' => $d['title'], 'content' => $d['content']];
-        }, $documents), JSON_UNESCAPED_UNICODE) ?>;
-
-        function selectDocument(key) {
-            var pills = document.querySelectorAll('.doc-pill');
-            pills.forEach(function (p) { p.classList.remove('active'); });
-            var active = Array.prototype.find.call(pills, function (p) {
-                return p.getAttribute('onclick') && p.getAttribute('onclick').indexOf(\"selectDocument('\" + key + \"')\") !== -1;
-            });
-            if (active) active.classList.add('active');
-
-            var textarea = document.getElementById('doc_content');
-            var hiddenKey = document.getElementById('doc_key');
-            if (textarea && hiddenKey && documentsData[key]) {
-                hiddenKey.value = key;
-                textarea.value = documentsData[key].content || '';
-            }
-        }
-    </script>
 </main>
 </body>
 </html>
