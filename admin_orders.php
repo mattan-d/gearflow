@@ -63,6 +63,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        // אם המשתמש המחובר הוא סטודנט – לא מאפשרים להחליף שם שואל מהטופס, אלא נועלים אותו על שם המשתמש הנוכחי
+        if ($role === 'student' && $me) {
+            $fn = trim((string)($me['first_name'] ?? ''));
+            $ln = trim((string)($me['last_name'] ?? ''));
+            if ($fn !== '' || $ln !== '') {
+                $borrowerName = trim($fn . ' ' . $ln);
+            } else {
+                $borrowerName = (string)($me['username'] ?? '');
+            }
+        }
+
         if (count($equipmentIds) === 0 || $borrowerName === '' || $startDate === '' || $endDate === '') {
             $error = 'יש למלא ציוד, שם שואל, ותאריכי התחלה וסיום.';
         } else {
@@ -879,12 +890,14 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 $defaultBorrower = (string)($me['username'] ?? '');
                             }
                         }
+                        $isStudent = ($role === 'student');
                         ?>
                         <input
                             type="text"
                             id="borrower_search"
                             autocomplete="off"
                             value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_name'], ENT_QUOTES, 'UTF-8') : htmlspecialchars($defaultBorrower, ENT_QUOTES, 'UTF-8') ?>"
+                            <?= $isStudent ? 'readonly' : '' ?>
                         >
                         <input
                             type="hidden"
@@ -892,7 +905,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             name="borrower_name"
                             value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_name'], ENT_QUOTES, 'UTF-8') : htmlspecialchars($defaultBorrower, ENT_QUOTES, 'UTF-8') ?>"
                         >
-                        <div id="borrower_suggestions" class="suggestions"></div>
+                        <?php if (!$isStudent): ?>
+                            <div id="borrower_suggestions" class="suggestions"></div>
+                        <?php endif; ?>
 
                         <label for="notes">הערות</label>
                         <textarea
