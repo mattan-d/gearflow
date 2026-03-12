@@ -660,6 +660,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             background: linear-gradient(135deg, #4f46e5, #6366f1);
             color: #ffffff;
         }
+        .order-status-select {
+            max-width: 120px;
+            width: auto;
+            font-size: 0.75rem;
+            padding-right: 0.4rem;
+            padding-left: 0.4rem;
+        }
         .icon-btn {
             border: none;
             background: transparent;
