@@ -269,11 +269,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-size: 0.85rem;
             cursor: pointer;
             background: #f9fafb;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
         }
         .doc-pill.active {
             background: #111827;
             color: #f9fafb;
             border-color: #111827;
+        }
+        .doc-pill .doc-pill-title {
+            color: inherit;
+            text-decoration: none;
+        }
+        .doc-pill .doc-pill-delete {
+            border: none;
+            background: transparent;
+            color: inherit;
+            cursor: pointer;
+            padding: 0 0.2rem;
+            font-size: 0.9rem;
+            line-height: 1;
         }
         .doc-editor {
             margin-top: 1rem;
@@ -331,18 +347,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </a>
             <?php endforeach; ?>
             <?php foreach ($customDocs as $c): ?>
-                <form method="post" action="admin_documents.php" style="display:inline;">
-                    <input type="hidden" name="action" value="delete_custom">
-                    <input type="hidden" name="custom_id" value="<?= (int)$c['id'] ?>">
-                    <button type="submit" class="doc-pill" style="background:#fee2e2;color:#b91c1c;border-color:#fecaca;margin-left:0.25rem;"
-                            onclick="return confirm('למחוק את המסמך \"<?= htmlspecialchars($c['title'], ENT_QUOTES, 'UTF-8') ?>\"?');">
-                        ✕
-                    </button>
-                </form>
-                <a href="admin_documents.php?custom_id=<?= (int)$c['id'] ?>"
-                   class="doc-pill <?= $currentCustomId === (int)$c['id'] ? 'active' : '' ?>">
-                    <?= htmlspecialchars($c['title'], ENT_QUOTES, 'UTF-8') ?>
-                </a>
+                <div class="doc-pill <?= $currentCustomId === (int)$c['id'] ? 'active' : '' ?>">
+                    <a href="admin_documents.php?custom_id=<?= (int)$c['id'] ?>"
+                       class="doc-pill-title">
+                        <?= htmlspecialchars($c['title'], ENT_QUOTES, 'UTF-8') ?>
+                    </a>
+                    <form method="post" action="admin_documents.php" style="display:inline; margin:0;">
+                        <input type="hidden" name="action" value="delete_custom">
+                        <input type="hidden" name="custom_id" value="<?= (int)$c['id'] ?>">
+                        <button type="submit" class="doc-pill-delete"
+                                onclick="return confirm('למחוק את המסמך \"<?= htmlspecialchars($c['title'], ENT_QUOTES, 'UTF-8') ?>\"?');">
+                            ✕
+                        </button>
+                    </form>
+                </div>
             <?php endforeach; ?>
         </div>
 
