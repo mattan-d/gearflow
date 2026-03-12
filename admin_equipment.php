@@ -10,6 +10,8 @@ $pdo = get_db();
 $error = '';
 $success = '';
 $editingEquipment = null;
+$componentsEquipment = null;
+$componentsList = [];
 
 // Handle edit mode
 if (isset($_GET['edit_id'])) {
@@ -201,6 +203,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+    } elseif ($action === 'save_components') {
+        $equipmentId = (int)($_POST['equipment_id'] ?? 0);
+        if ($equipmentId > 0) {
+            $names = $_POST['component_name'] ?? [];
+            $qtys  = $_POST['component_qty'] ?? [];
+            if (!is_array($names)) $names = [];
+            if (!is_array($qtys))  $qtys  = [];
+
+            // מוחקים רכיבים קיימים ומכניסים מחדש לפי הטופס
+            $pdo->beginTransaction();
+            try {
+                $del = $pdo->prepare('DELETE FROM equipment_components WHERE equipment_id = :eid');
+                $del->execute([':eid' => $equipmentId]);
+
+                $ins = $pdo->prepare(
+                    'INSERT INTO equipment_components (equipment_id, name, quantity, created_at)
+                     VALUES (:equipment_id, :name, :quantity, :created_at)'
+                );
+                $now = date('Y-m-d H:i:s');
+                foreach ($names as $idx => $nameVal) {
+                    $nameVal = trim((string)$nameVal);
+                    if ($nameVal === '') {
+                        continue;
+                    }
+                    $qtyVal = isset($qtys[$idx]) ? (int)$qtys[$idx] : 1;
+                    if ($qtyVal <= 0) $qtyVal = 1;
+                    $ins->execute([
+                        ':equipment_id' => $equipmentId,
+                        ':name'         => $nameVal,
+                        ':quantity'     => $qtyVal,
+                        ':created_at'   => $now,
+                    ]);
+                }
+                $pdo->commit();
+                $success = 'רכיבי הפריט נשמרו בהצלחה.';
+                header('Location: admin_equipment.php');
+                exit;
+            } catch (PDOException $e) {
+                $pdo->rollBack();
+                $error = 'שגיאה בשמירת רכיבי הפריט.';
+            }
+        }
+    }
+}
+
+// אם נבחר פריט לרכיבים – נטען אותו והרכיבים שלו עבור חלון קופץ
+$componentsEquipmentId = isset($_GET['components_for']) ? (int)$_GET['components_for'] : 0;
+if ($componentsEquipmentId > 0) {
+    $stmtEq = $pdo->prepare('SELECT id, name, code FROM equipment WHERE id = :id');
+    $stmtEq->execute([':id' => $componentsEquipmentId]);
+    $componentsEquipment = $stmtEq->fetch(PDO::FETCH_ASSOC) ?: null;
+    if ($componentsEquipment) {
+        $stmtComp = $pdo->prepare(
+            'SELECT id, name, quantity
+             FROM equipment_components
+             WHERE equipment_id = :eid
+             ORDER BY name ASC'
+        );
+        $stmtComp->execute([':eid' => $componentsEquipmentId]);
+        $componentsList = $stmtComp->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 }
 
@@ -470,10 +532,10 @@ $me = current_user();
         }
         .equipment-filters-inner {
             background: #ffffff;
-            border-radius: 999px;
+            border-radius: 10px;
             padding: 0.4rem 0.75rem;
-            box-shadow: 0 6px 18px rgba(15,23,42,0.08);
-            display: inline-flex;
+            box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+            display: flex;
             align-items: center;
             gap: 0.75rem;
         }
@@ -796,6 +858,70 @@ $me = current_user();
         </form>
     </div>
 
+    <?php $showComponentsModal = $componentsEquipment !== null; ?>
+    <div class="modal-backdrop" id="components_modal" style="display: <?= $showComponentsModal ? 'flex' : 'none' ?>;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2>רכיבי פריט: <?= $componentsEquipment ? htmlspecialchars($componentsEquipment['name'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></h2>
+                <button type="button" class="modal-close" id="components_modal_close" aria-label="סגירת חלון">✕</button>
+            </div>
+
+            <?php if ($error !== '' && $componentsEquipment): ?>
+                <div class="flash error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
+            <?php elseif ($success !== '' && $componentsEquipment): ?>
+                <div class="flash success"><?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?></div>
+            <?php endif; ?>
+
+            <?php if ($componentsEquipment): ?>
+                <form method="post" action="admin_equipment.php?components_for=<?= (int)$componentsEquipment['id'] ?>">
+                    <input type="hidden" name="action" value="save_components">
+                    <input type="hidden" name="equipment_id" value="<?= (int)$componentsEquipment['id'] ?>">
+
+                    <table style="width:100%; border-collapse:collapse; font-size:0.86rem; margin-bottom:0.75rem;">
+                        <thead>
+                        <tr>
+                            <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">שם רכיב</th>
+                            <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb; width:80px;">כמות</th>
+                        </tr>
+                        </thead>
+                        <tbody id="components_table_body">
+                        <?php if (count($componentsList) === 0): ?>
+                            <tr>
+                                <td style="padding:0.35rem 0.5rem;">
+                                    <input type="text" name="component_name[]" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
+                                </td>
+                                <td style="padding:0.35rem 0.25rem;">
+                                    <input type="number" name="component_qty[]" value="1" min="1" style="width:70px;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
+                                </td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach ($componentsList as $comp): ?>
+                                <tr>
+                                    <td style="padding:0.35rem 0.5rem;">
+                                        <input type="text" name="component_name[]" value="<?= htmlspecialchars($comp['name'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                               style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
+                                    </td>
+                                    <td style="padding:0.35rem 0.25rem;">
+                                        <input type="number" name="component_qty[]" value="<?= (int)($comp['quantity'] ?? 1) ?>" min="1"
+                                               style="width:70px;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                        </tbody>
+                    </table>
+
+                    <button type="button" class="btn secondary small" id="components_add_row_btn" style="margin-bottom:0.5rem;">הוסף שורה</button>
+
+                    <div style="display:flex;justify-content:flex-end;gap:0.5rem;">
+                        <button type="submit" class="btn">שמירה</button>
+                        <a href="admin_equipment.php" class="btn secondary">ביטול</a>
+                    </div>
+                </form>
+            <?php endif; ?>
+        </div>
+    </div>
+
     <div class="card">
         <h2>רשימת ציוד במחסן</h2>
         <?php if (count($equipmentList) === 0): ?>
@@ -830,7 +956,7 @@ $me = current_user();
                     <?php foreach ($items as $item): ?>
                         <tr>
                             <td>
-                                <a href="admin_equipment_components.php?equipment_id=<?= (int)$item['id'] ?>"
+                                <a href="admin_equipment.php?components_for=<?= (int)$item['id'] ?>"
                                    class="muted-small"
                                    title="הצגת רכיבי הפריט">
                                     <?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>
@@ -894,6 +1020,10 @@ document.addEventListener('DOMContentLoaded', function () {
     var formClose = document.getElementById('equipment_modal_close');
     var formCancel = document.getElementById('equipment_modal_cancel');
     var importCard = document.getElementById('equipment_import_card');
+    var componentsModal = document.getElementById('components_modal');
+    var componentsClose = document.getElementById('components_modal_close');
+    var addComponentRowBtn = document.getElementById('components_add_row_btn');
+    var componentsTableBody = document.getElementById('components_table_body');
 
     function openEquipmentModal() {
         if (formModal) {
@@ -928,6 +1058,29 @@ document.addEventListener('DOMContentLoaded', function () {
         importBtn.addEventListener('click', function () {
             var isVisible = importCard.style.display !== 'none';
             importCard.style.display = isVisible ? 'none' : 'block';
+        });
+    }
+
+    // חלון רכיבי פריט – סגירה
+    if (componentsClose && componentsModal) {
+        componentsClose.addEventListener('click', function () {
+            componentsModal.style.display = 'none';
+            window.location.href = 'admin_equipment.php';
+        });
+    }
+
+    // הוספת שורת רכיב חדשה
+    if (addComponentRowBtn && componentsTableBody) {
+        addComponentRowBtn.addEventListener('click', function () {
+            var tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td style="padding:0.35rem 0.5rem;">' +
+                '<input type="text" name="component_name[]" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">' +
+                '</td>' +
+                '<td style="padding:0.35rem 0.25rem;">' +
+                '<input type="number" name="component_qty[]" value="1" min="1" style="width:70px;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">' +
+                '</td>';
+            componentsTableBody.appendChild(tr);
         });
     }
 });
