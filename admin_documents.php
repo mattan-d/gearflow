@@ -367,6 +367,8 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
         .hours-table-wrapper {
             overflow-x: auto;
             margin-top: 0.5rem;
+            display: flex;
+            justify-content: center;
         }
         table.hours-table {
             border-collapse: separate;
@@ -374,12 +376,14 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
             width: 100%;
             max-width: 520px;
             font-size: 0.8rem;
+            text-align: center;
         }
         table.hours-table th,
         table.hours-table td {
             text-align: center;
+            vertical-align: middle;
             padding: 0.25rem 0.35rem;
-            border: 1px solid rgba(255,255,255,0.7);
+            border: 1px solid rgba(255,255,255,0.8);
         }
         table.hours-table th {
             background: #111827;
@@ -392,12 +396,12 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
             color: #111827;
         }
         .slot-open {
-            background: #1d4ed8;
-            color: #f9fafb;
+            background: #60a5fa; /* כחול בהיר */
+            color: #0f172a;
         }
         .slot-closed {
-            background: #4b5563;
-            color: #e5e7eb;
+            background: #e5e7eb; /* אפור בהיר */
+            color: #4b5563;
         }
     </style>
 </head>
@@ -533,9 +537,9 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $openMatrix = [];
                             }
                             ?>
-                            <div style="margin-bottom:0.75rem;">
-                                <div class="muted-small" style="margin-bottom:0.25rem;font-size:0.95rem;font-weight:700;">
-                                    <?= htmlspecialchars($warehouseName, ENT_QUOTES, 'UTF-8') ?>
+                            <div style="margin-bottom:0.75rem;text-align:center;">
+                                <div class="muted-small" style="margin-bottom:0.25rem;font-size:1rem;font-weight:700;">
+                                    שעות פתיחת מחסן <?= htmlspecialchars($warehouseName, ENT_QUOTES, 'UTF-8') ?>
                                 </div>
                                 <?php if (!empty($openMatrix)): ?>
                                     <div class="hours-table-wrapper">
