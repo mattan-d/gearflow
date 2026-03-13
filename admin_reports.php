@@ -63,6 +63,33 @@ $me = current_user();
             font-size: 0.9rem;
             color: #4b5563;
         }
+        .reports-tabs {
+            display: inline-flex;
+            gap: 0.5rem;
+            border-bottom: 1px solid #e5e7eb;
+            margin-bottom: 1rem;
+        }
+        .reports-tab {
+            padding: 0.4rem 0.9rem;
+            border-radius: 999px 999px 0 0;
+            font-size: 0.9rem;
+            cursor: pointer;
+            color: #4b5563;
+            background: #f3f4f6;
+            border: 1px solid transparent;
+            border-bottom: none;
+        }
+        .reports-tab.active {
+            background: #ffffff;
+            color: #111827;
+            border-color: #e5e7eb;
+        }
+        .reports-section {
+            display: none;
+        }
+        .reports-section.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -70,11 +97,50 @@ $me = current_user();
 <main>
     <div class="card">
         <h2>דוחות</h2>
-        <p class="muted-small">
-            כאן יוצגו דוחות שימוש, השאלות והחזרות ציוד. בהמשך נוסיף פילטרים וייצוא לקובץ.
-        </p>
+
+        <div class="reports-tabs">
+            <button type="button" class="reports-tab active" data-target="reports-users">דוחות משתמשים</button>
+            <button type="button" class="reports-tab" data-target="reports-orders">דוחות הזמנות</button>
+            <button type="button" class="reports-tab" data-target="reports-equipment">דוחות ציוד</button>
+        </div>
+
+        <div id="reports-users" class="reports-section active">
+            <p class="muted-small">
+                כאן יוצגו דוחות על משתמשים (פעילים, סטודנטים לפי מחסן, כניסות למערכת ועוד).
+            </p>
+        </div>
+
+        <div id="reports-orders" class="reports-section">
+            <p class="muted-small">
+                כאן יוצגו דוחות על הזמנות (השאלות לפי תאריכים, סטטוסים, מחסנים ועוד).
+            </p>
+        </div>
+
+        <div id="reports-equipment" class="reports-section">
+            <p class="muted-small">
+                כאן יוצגו דוחות על ציוד (שימוש בפריטים, תקלות, זמינות ועוד).
+            </p>
+        </div>
     </div>
 </main>
+<script>
+    (function () {
+        var tabs = document.querySelectorAll('.reports-tab');
+        var sections = document.querySelectorAll('.reports-section');
+        if (!tabs.length) return;
+
+        tabs.forEach(function (tab) {
+            tab.addEventListener('click', function () {
+                var targetId = tab.getAttribute('data-target');
+                tabs.forEach(function (t) { t.classList.remove('active'); });
+                sections.forEach(function (s) { s.classList.remove('active'); });
+                tab.classList.add('active');
+                var sec = document.getElementById(targetId);
+                if (sec) sec.classList.add('active');
+            });
+        });
+    })();
+</script>
 </body>
 </html>
 
