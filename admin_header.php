@@ -92,8 +92,13 @@ try {
                     <div class="main-nav-sub">
                         <a href="warehouse_rules.php">נהלי מחסן</a>
                         <?php foreach ($customDocs as $doc): ?>
-                            <a href="document_view.php?id=<?= (int)($doc['id'] ?? 0) ?>">
-                                <?= htmlspecialchars((string)($doc['title'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                            <?php
+                            $docId    = (int)($doc['id'] ?? 0);
+                            $docTitle = trim((string)($doc['title'] ?? ''));
+                            ?>
+                            <a href="document_view.php?id=<?= $docId ?>"
+                               onclick="window.open(this.href, 'doc_popup_<?= $docId ?>', 'width=900,height=700,scrollbars=yes,resizable=yes'); return false;">
+                                <?= htmlspecialchars($docTitle, ENT_QUOTES, 'UTF-8') ?>
                             </a>
                         <?php endforeach; ?>
                     </div>
