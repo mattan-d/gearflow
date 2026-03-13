@@ -679,6 +679,13 @@ $me = current_user();
         .date-picker {
             font-size: 0.85rem;
             position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.3rem 0.6rem;
+            border-radius: 999px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
         }
         .date-picker-toggle {
             display: inline-flex;
@@ -700,7 +707,11 @@ $me = current_user();
             border: 1px solid #e5e7eb;
             background: #ffffff;
             padding: 0.6rem 0.7rem 0.7rem;
-            margin-top: 0.4rem;
+            position: absolute;
+            top: 110%;
+            right: 0;
+            z-index: 40;
+            min-width: 260px;
         }
         .date-mode-toggle {
             display: inline-flex;
@@ -1026,16 +1037,14 @@ $me = current_user();
                                 -
                             <?php endif; ?>
                         </span>
-                        <button type="button"
-                                id="eq_clear_range_btn_outside"
-                                class="clear-range-btn"
-                                style="vertical-align:middle;"
-                                title="נקה טווח">✕</button>
+                        <span id="eq_clear_range_btn_outside"
+                              class="clear-range-btn"
+                              style="vertical-align:middle; cursor: pointer; <?= ($availabilityStartRaw === '' || $availabilityEndRaw === '') ? 'display:none;' : '' ?>"
+                              title="נקה טווח">✕</span>
                     </label>
                     <div class="date-picker">
                         <div class="date-picker-toggle" id="eq_date_picker_toggle">
                             <span class="date-picker-toggle-icon">📅</span>
-                            <span>פתח לוח שנה</span>
                         </div>
                         <div class="date-picker-panel" id="eq_date_picker_panel" style="display: none;">
                             <div class="date-mode-toggle">
@@ -1051,7 +1060,6 @@ $me = current_user();
                                     תאריך החזרה:
                                     <span id="eq_selected_end_label"><?= $availabilityEndRaw !== '' ? htmlspecialchars(substr($availabilityEndRaw, 0, 10), ENT_QUOTES, 'UTF-8') : '-' ?></span>
                                 </div>
-                                <button type="button" class="clear-range-btn" id="eq_clear_range_btn" title="נקה טווח">✕</button>
                             </div>
                             <div class="date-calendar">
                                 <div class="date-calendar-header">
@@ -1466,8 +1474,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 var s = availabilityStartH.value.substring(0, 10);
                 var e = availabilityEndH.value.substring(0, 10);
                 eqRangeLabel.textContent = s + ' - ' + e;
+                if (eqClearBtnOutside) {
+                    eqClearBtnOutside.style.display = 'inline';
+                }
             } else {
                 eqRangeLabel.textContent = '-';
+                if (eqClearBtnOutside) {
+                    eqClearBtnOutside.style.display = 'none';
+                }
             }
         }
 
@@ -1543,10 +1557,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
         eqToggle.addEventListener('click', function () {
             eqPanel.style.display = eqPanel.style.display === 'none' || eqPanel.style.display === '' ? 'block' : 'none';
-        });
-
-        eqCalClose.addEventListener('click', function () {
-            eqPanel.style.display = 'none';
         });
 
         eqModeStartBtn.addEventListener('click', function () {
