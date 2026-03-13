@@ -793,8 +793,8 @@ $me = current_user();
             background: rgba(15, 23, 42, 0.08);
         }
         .date-day.selected {
-            background: #111827;
-            color: #f9fafb;
+            background: #111827 !important;
+            color: #f9fafb !important;
             font-weight: 600;
         }
         .equipment-filters {
@@ -1026,6 +1026,11 @@ $me = current_user();
                                 -
                             <?php endif; ?>
                         </span>
+                        <button type="button"
+                                id="eq_clear_range_btn_outside"
+                                class="clear-range-btn"
+                                style="vertical-align:middle;"
+                                title="נקה טווח">✕</button>
                     </label>
                     <div class="date-picker">
                         <div class="date-picker-toggle" id="eq_date_picker_toggle">
@@ -1566,15 +1571,20 @@ document.addEventListener('DOMContentLoaded', function () {
             buildEqCalendar();
         });
 
+        function clearRange() {
+            availabilityStartH.value = '';
+            availabilityEndH.value = '';
+            eqStartLabel.textContent = '-';
+            eqEndLabel.textContent = '-';
+            updateRangeLabel();
+            buildEqCalendar();
+        }
+
         if (eqClearBtn) {
-            eqClearBtn.addEventListener('click', function () {
-                availabilityStartH.value = '';
-                availabilityEndH.value = '';
-                eqStartLabel.textContent = '-';
-                eqEndLabel.textContent = '-';
-                updateRangeLabel();
-                buildEqCalendar();
-            });
+            eqClearBtn.addEventListener('click', clearRange);
+        }
+        if (eqClearBtnOutside) {
+            eqClearBtnOutside.addEventListener('click', clearRange);
         }
 
         buildEqCalendar();
