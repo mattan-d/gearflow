@@ -173,6 +173,20 @@ function initialize_database(PDO $pdo): void
         )
     ");
 
+    // טבלת שעות פתיחת מחסנים – שורות מייצגות שעות פתוחות בלבד
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS warehouse_hours (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            warehouse TEXT NOT NULL,
+            day_of_week INTEGER NOT NULL,
+            hour INTEGER NOT NULL
+        )
+    ");
+    $pdo->exec("
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_warehouse_hours_unique
+        ON warehouse_hours (warehouse, day_of_week, hour)
+    ");
+
     // Ensure default admin user exists: admin / admin
     $stmt = $pdo->prepare('SELECT COUNT(*) AS cnt FROM users WHERE username = :username');
     $stmt->execute([':username' => 'admin']);

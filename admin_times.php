@@ -3,10 +3,108 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/config.php';
 
-require_admin();
+require_admin_or_warehouse();
 
-$me = current_user();
+$me  = current_user();
+$pdo = get_db();
+
+// קביעת המחסן הנוכחי
+$userWarehouse = trim((string)($me['warehouse'] ?? 'מחסן א'));
+$selectedWarehouse = isset($_GET['warehouse']) ? trim((string)$_GET['warehouse']) : $userWarehouse;
+if ($selectedWarehouse === '') {
+    $selectedWarehouse = 'מחסן א';
+}
+
+// ימים ראשון–חמישי (0–4) ושעות 9–16
+$days  = ['א', 'ב', 'ג', 'ד', 'ה'];
+$hours = range(9, 16);
+
+// טעינת שעות פתוחות מה-DB
+$stmt = $pdo->prepare('SELECT day_of_week, hour FROM warehouse_hours WHERE warehouse = :w');
+$stmt->execute([':w' => $selectedWarehouse]);
+$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$openMatrix = [];
+foreach ($rows as $row) {
+    $d = (int)($row['day_of_week'] ?? 0);
+    $h = (int)($row['hour'] ?? 0);
+    $openMatrix[$d][$h] = true;
+}
+
+// אם אין נתונים למחסן – ברירת מחדל: ראשון–חמישי 9–16 פתוח
+if (empty($rows)) {
+    $pdo->beginTransaction();
+    try {
+        $ins = $pdo->prepare('INSERT OR IGNORE INTO warehouse_hours (warehouse, day_of_week, hour) VALUES (:w, :d, :h)');
+        foreach (array_keys($days) as $d) {
+            foreach ($hours as $h) {
+                $ins->execute([
+                    ':w' => $selectedWarehouse,
+                    ':d' => $d,
+                    ':h' => $h,
+                ]);
+                $openMatrix[$d][$h] = true;
+            }
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+    }
+}
+
+// שמירת עדכונים
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hours_payload'])) {
+    $payload = (string)($_POST['hours_payload'] ?? '');
+    $decoded = json_decode($payload, true);
+    if (is_array($decoded)) {
+        $pdo->beginTransaction();
+        try {
+            $del = $pdo->prepare('DELETE FROM warehouse_hours WHERE warehouse = :w');
+            $del->execute([':w' => $selectedWarehouse]);
+
+            $ins = $pdo->prepare('INSERT OR IGNORE INTO warehouse_hours (warehouse, day_of_week, hour) VALUES (:w, :d, :h)');
+            foreach ($decoded as $d => $hoursRow) {
+                $dInt = (int)$d;
+                if (!is_array($hoursRow)) {
+                    continue;
+                }
+                foreach ($hoursRow as $h => $isOpen) {
+                    if ((int)$isOpen === 1) {
+                        $ins->execute([
+                            ':w' => $selectedWarehouse,
+                            ':d' => $dInt,
+                            ':h' => (int)$h,
+                        ]);
+                    }
+                }
+            }
+            $pdo->commit();
+
+            // רענון המטריצה לאחר שמירה
+            $openMatrix = [];
+            $stmt = $pdo->prepare('SELECT day_of_week, hour FROM warehouse_hours WHERE warehouse = :w');
+            $stmt->execute([':w' => $selectedWarehouse]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $row) {
+                $d = (int)($row['day_of_week'] ?? 0);
+                $h = (int)($row['hour'] ?? 0);
+                $openMatrix[$d][$h] = true;
+            }
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+        }
+    }
+}
+
+// רשימת מחסנים אפשריים – לשימוש פשוט
+$knownWarehouses = ['מחסן א', 'מחסן ב'];
+if (!in_array($userWarehouse, $knownWarehouses, true)) {
+    $knownWarehouses[] = $userWarehouse;
+}
+if (!in_array($selectedWarehouse, $knownWarehouses, true)) {
+    $knownWarehouses[] = $selectedWarehouse;
+}
 
 ?>
 <!DOCTYPE html>
@@ -129,24 +227,179 @@ $me = current_user();
             font-size: 0.8rem;
             border-top: 1px solid #1f2937;
         }
+        .hours-table-wrapper {
+            overflow-x: auto;
+        }
+        table.hours-table {
+            border-collapse: collapse;
+            width: 100%;
+            max-width: 600px;
+            font-size: 0.9rem;
+            margin-top: 0.75rem;
+        }
+        table.hours-table th,
+        table.hours-table td {
+            border: 1px solid #e5e7eb;
+            text-align: center;
+            padding: 0.3rem 0.4rem;
+        }
+        table.hours-table th {
+            background: #f9fafb;
+            font-weight: 600;
+        }
+        .slot-cell {
+            cursor: pointer;
+            user-select: none;
+        }
+        .slot-open {
+            background: #dbeafe;
+            color: #111827;
+        }
+        .slot-closed {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+        .hours-legend {
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: #4b5563;
+        }
+        .hours-actions {
+            margin-top: 0.75rem;
+        }
+        .btn {
+            border-radius: 999px;
+            border: none;
+            background: #111827;
+            color: #f9fafb;
+            padding: 0.4rem 1rem;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+        .btn.secondary {
+            background: #e5e7eb;
+            color: #111827;
+        }
     </style>
 </head>
 <body>
 <?php include __DIR__ . '/admin_header.php'; ?>
 <main>
     <div class="card">
-        <h2>הגדרות זמנים</h2>
+        <h2>קביעת שעות פתיחת מחסן</h2>
+        <form method="get" action="admin_times.php" style="margin-bottom:0.75rem; display:flex;align-items:center;gap:0.5rem;">
+            <label for="warehouse" class="muted-small">בחר מחסן:</label>
+            <select id="warehouse" name="warehouse" onchange="this.form.submit()" style="padding:0.3rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;">
+                <?php foreach ($knownWarehouses as $w): ?>
+                    <option value="<?= htmlspecialchars($w, ENT_QUOTES, 'UTF-8') ?>" <?= $w === $selectedWarehouse ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($w, ENT_QUOTES, 'UTF-8') ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </form>
         <p class="muted-small">
-            בעמוד זה ניתן יהיה להגדיר שעות פעילות המערכת, משך השאלה מקסימלי,
-            חלונות הזמנה (למשל: עד 14 יום מראש) ומגבלות זמנים להזמנות.
+            ברירת המחדל: ימים ראשון–חמישי בין השעות 09:00–16:00 פתוחות. באפשרותך לעדכן שעות פתיחה נפרדות לכל מחסן.
         </p>
-        <p class="muted-small" style="margin-top: 1rem;">
-            פיצ'ר בהמשך: ימים ושעות פתיחה, אורך השאלה ברירת מחדל, חריגות בחגים.
-        </p>
+
+        <form method="post" action="admin_times.php?warehouse=<?= htmlspecialchars($selectedWarehouse, ENT_QUOTES, 'UTF-8') ?>" id="hours_form">
+            <div class="hours-table-wrapper">
+                <table class="hours-table">
+                    <thead>
+                    <tr>
+                        <th>שעה</th>
+                        <?php foreach ($days as $idx => $label): ?>
+                            <th><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></th>
+                        <?php endforeach; ?>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($hours as $h): ?>
+                        <tr>
+                            <td><?= sprintf('%02d:00', $h) ?></td>
+                            <?php foreach (array_keys($days) as $d): ?>
+                                <?php $open = !empty($openMatrix[$d][$h]); ?>
+                                <td class="slot-cell <?= $open ? 'slot-open' : 'slot-closed' ?>"
+                                    data-day="<?= (int)$d ?>"
+                                    data-hour="<?= (int)$h ?>">
+                                    <?= $open ? 'פתוח' : 'סגור' ?>
+                                </td>
+                            <?php endforeach; ?>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <input type="hidden" name="hours_payload" id="hours_payload" value="">
+            <div class="hours-actions">
+                <button type="submit" class="btn">שמירת שעות</button>
+            </div>
+        </form>
+        <div class="hours-legend">
+            כחול בהיר = שעה פתוחה, אפור בהיר = שעה סגורה. ניתן לבחור טווח שעות באותו יום: לחץ על תא ראשון ואז על תא אחר עם מקש Shift לחוץ.
+        </div>
     </div>
 </main>
 <footer>
     © 2026 CentricApp LTD
 </footer>
+<script>
+(function () {
+    var cells = Array.prototype.slice.call(document.querySelectorAll('.slot-cell'));
+    var lastClick = null; // {day, hour}
+
+    function buildMatrix() {
+        var matrix = {};
+        cells.forEach(function (cell) {
+            var day = String(cell.getAttribute('data-day'));
+            var hour = String(cell.getAttribute('data-hour'));
+            if (!matrix[day]) {
+                matrix[day] = {};
+            }
+            var open = cell.classList.contains('slot-open') ? 1 : 0;
+            matrix[day][hour] = open;
+        });
+        return matrix;
+    }
+
+    function toggleCell(cell, makeOpen) {
+        var open = (typeof makeOpen === 'boolean') ? makeOpen : !cell.classList.contains('slot-open');
+        cell.classList.toggle('slot-open', open);
+        cell.classList.toggle('slot-closed', !open);
+        cell.textContent = open ? 'פתוח' : 'סגור';
+    }
+
+    cells.forEach(function (cell) {
+        cell.addEventListener('click', function (ev) {
+            var day = parseInt(cell.getAttribute('data-day'), 10);
+            var hour = parseInt(cell.getAttribute('data-hour'), 10);
+
+            if (ev.shiftKey && lastClick && lastClick.day === day) {
+                var from = Math.min(lastClick.hour, hour);
+                var to = Math.max(lastClick.hour, hour);
+                var baseOpen = !cell.classList.contains('slot-open');
+                cells.forEach(function (c2) {
+                    var d2 = parseInt(c2.getAttribute('data-day'), 10);
+                    var h2 = parseInt(c2.getAttribute('data-hour'), 10);
+                    if (d2 === day && h2 >= from && h2 <= to) {
+                        toggleCell(c2, baseOpen);
+                    }
+                });
+            } else {
+                toggleCell(cell);
+            }
+            lastClick = {day: day, hour: hour};
+        });
+    });
+
+    var form = document.getElementById('hours_form');
+    var payloadInput = document.getElementById('hours_payload');
+    if (form && payloadInput) {
+        form.addEventListener('submit', function () {
+            var matrix = buildMatrix();
+            payloadInput.value = JSON.stringify(matrix);
+        });
+    }
+})();
+</script>
 </body>
 </html>
