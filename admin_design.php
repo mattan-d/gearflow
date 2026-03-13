@@ -8,6 +8,47 @@ require_admin();
 
 $me = current_user();
 
+// קובץ הגדרות עיצוב פשוט (JSON)
+$designFile = __DIR__ . '/design_settings.json';
+$defaultDesign = [
+    'header_bg' => '#111827', // שחור כהה
+    'footer_bg' => '#111827',
+];
+$design = $defaultDesign;
+if (is_file($designFile)) {
+    $json = file_get_contents($designFile);
+    $data = json_decode($json, true);
+    if (is_array($data)) {
+        $design = array_merge($design, $data);
+    }
+}
+
+// אפשרויות צבע כהות
+$colorOptions = [
+    '#111827' => 'שחור כהה',
+    '#1e3a8a' => 'כחול כהה',
+    '#064e3b' => 'ירוק כהה',
+    '#7f1d1d' => 'אדום כהה',
+    '#1f2937' => 'אפור כהה',
+];
+
+$success = '';
+$error   = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $headerColor = $_POST['header_color'] ?? $design['header_bg'];
+    $footerColor = $_POST['footer_color'] ?? $design['footer_bg'];
+
+    if (!isset($colorOptions[$headerColor]) || !isset($colorOptions[$footerColor])) {
+        $error = 'נבחר צבע לא תקין.';
+    } else {
+        $design['header_bg'] = $headerColor;
+        $design['footer_bg'] = $footerColor;
+        file_put_contents($designFile, json_encode($design, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+        $success = 'הגדרות העיצוב נשמרו בהצלחה.';
+    }
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -21,7 +62,7 @@ $me = current_user();
             margin: 0;
         }
         header {
-            background: #111827;
+            background: <?= htmlspecialchars($design['header_bg'], ENT_QUOTES, 'UTF-8') ?>;
             color: #f9fafb;
             padding: 1rem 1.5rem;
             display: flex;
@@ -122,7 +163,7 @@ $me = current_user();
             display: block;
         }
         footer {
-            background: #111827;
+            background: <?= htmlspecialchars($design['footer_bg'], ENT_QUOTES, 'UTF-8') ?>;
             color: #9ca3af;
             text-align: center;
             padding: 0.75rem 1rem;
@@ -136,13 +177,44 @@ $me = current_user();
 <main>
     <div class="card">
         <h2>הגדרות עיצוב</h2>
-        <p class="muted-small">
-            בעמוד זה ניתן יהיה להגדיר ערכת צבעים, לוגו, כותרת המערכת וסגנון הממשק.
-            ההגדרות יישמרו ויוחלו על כל דפי המערכת.
-        </p>
-        <p class="muted-small" style="margin-top: 1rem;">
-            פיצ'ר בהמשך: בחירת נושא (בהיר/כהה), צבע ראשי, גופן ועוד.
-        </p>
+        <?php if ($success !== ''): ?>
+            <div class="flash success" style="margin-bottom: 0.75rem; background:#ecfdf3; color:#166534; padding:0.5rem 0.75rem; border-radius:8px;">
+                <?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?>
+            </div>
+        <?php elseif ($error !== ''): ?>
+            <div class="flash error" style="margin-bottom: 0.75rem; background:#fef2f2; color:#b91c1c; padding:0.5rem 0.75rem; border-radius:8px;">
+                <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?>
+            </div>
+        <?php endif; ?>
+
+        <form method="post" action="admin_design.php" style="display:flex;flex-direction:column;gap:1rem;max-width:420px;">
+            <div>
+                <label for="header_color">צבע Header (תפריט עליון)</label>
+                <select id="header_color" name="header_color">
+                    <?php foreach ($colorOptions as $value => $label): ?>
+                        <option value="<?= htmlspecialchars($value, ENT_QUOTES, 'UTF-8') ?>"
+                            <?= $design['header_bg'] === $value ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div>
+                <label for="footer_color">צבע Footer (תחתית העמוד)</label>
+                <select id="footer_color" name="footer_color">
+                    <?php foreach ($colorOptions as $value => $label): ?>
+                        <option value="<?= htmlspecialchars($value, ENT_QUOTES, 'UTF-8') ?>"
+                            <?= $design['footer_bg'] === $value ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <button type="submit" class="btn">שמירת עיצוב</button>
+            <p class="muted-small">
+                הערה: ניתן לבחור רק צבעים כהים מאוד, כדי לשמור על ניגודיות טובה וקריאות גבוהה.
+            </p>
+        </form>
     </div>
 </main>
 <footer>

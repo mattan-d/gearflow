@@ -7,9 +7,28 @@ if (!function_exists('current_user')) {
 }
 require_once __DIR__ . '/config.php';
 
+// משתמש מחובר
 $me = $me ?? current_user();
 $role = $me['role'] ?? 'student';
 
+// הגדרות עיצוב (צבעי Header/Footer)
+$designFile = __DIR__ . '/design_settings.json';
+$headerBg = '#111827';
+$footerBg = '#111827';
+if (is_file($designFile)) {
+    $json = file_get_contents($designFile);
+    $data = json_decode($json, true);
+    if (is_array($data)) {
+        if (!empty($data['header_bg'])) {
+            $headerBg = (string)$data['header_bg'];
+        }
+        if (!empty($data['footer_bg'])) {
+            $footerBg = (string)$data['footer_bg'];
+        }
+    }
+}
+
+// DB – מסמכים
 $pdo = get_db();
 $customDocs = [];
 try {
@@ -21,6 +40,9 @@ try {
 
 ?>
 <style>
+    :root {
+        --gf-footer-bg: <?= htmlspecialchars($footerBg, ENT_QUOTES, 'UTF-8') ?>;
+    }
     .main-nav {
         margin-top: 0.5rem;
         display: flex;
@@ -66,7 +88,7 @@ try {
         display: block;
     }
 </style>
-<header>
+<header style="background: <?= htmlspecialchars($headerBg, ENT_QUOTES, 'UTF-8') ?>;">
     <div>
         <h1>ניהול מערכת</h1>
         <div class="muted">פלטפורמה לניהול השאלת ציוד</div>
