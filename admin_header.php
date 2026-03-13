@@ -115,7 +115,7 @@ try {
                         <a href="warehouse_rules.php">נהלי מחסן</a>
                         <?php foreach ($customDocs as $doc): ?>
                             <?php $docId = (int)($doc['id'] ?? 0); ?>
-                            <a href="admin_documents.php?custom_id=<?= $docId ?>">
+                            <a href="document_view.php?id=<?= $docId ?>">
                                 <?= htmlspecialchars((string)($doc['title'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                             </a>
                         <?php endforeach; ?>
