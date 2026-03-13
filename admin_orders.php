@@ -552,11 +552,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status = $_POST['status'] ?? 'pending';
 
         if ($id > 0) {
-            // מביאים את הסטטוס הנוכחי כדי לבדוק מעבר חוקי
-            $stmt = $pdo->prepare('SELECT status FROM orders WHERE id = :id');
+            // מביאים את הסטטוס הנוכחי כדי לבדוק מעבר חוקי + שם יוצר ההזמנה
+            $stmt = $pdo->prepare('SELECT status, creator_username FROM orders WHERE id = :id');
             $stmt->execute([':id' => $id]);
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
-            $currentStatus = $row['status'] ?? null;
+            $currentStatus   = $row['status'] ?? null;
+            $creatorUsername = (string)($row['creator_username'] ?? '');
 
             $allowedNext = [];
             if ($currentStatus === 'pending') {
@@ -587,6 +588,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 $success = 'סטטוס ההזמנה עודכן.';
 
+                // התראה לסטודנט על שינוי סטטוס (גם בעדכון מתוך הטבלה)
+                if ($creatorUsername !== '' && $currentStatus !== null && $status !== $currentStatus) {
+                    $userStmt = $pdo->prepare('SELECT id FROM users WHERE username = :u LIMIT 1');
+                    $userStmt->execute([':u' => $creatorUsername]);
+                    $creatorUser = $userStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($creatorUser && (int)$creatorUser['id'] > 0) {
+                        $studentId = (int)$creatorUser['id'];
+                        $statusMsg = '';
+                        if ($status === 'approved') {
+                            $statusMsg = 'הבקשה להזמנה אושרה.';
+                        } elseif ($status === 'rejected') {
+                            $statusMsg = 'הבקשה להזמנה נדחתה.';
+                        } elseif ($status === 'on_loan') {
+                            $statusMsg = 'הציוד יצא להשאלה.';
+                        } elseif ($status === 'returned') {
+                            $statusMsg = 'הציוד הוחזר ונקלט במערכת.';
+                        }
+                        if ($statusMsg !== '') {
+                            create_notification(
+                                $pdo,
+                                $studentId,
+                                null,
+                                $statusMsg,
+                                'admin_orders.php'
+                            );
+                        }
+                    }
+                }
+
                 // ניתוב אחרי שינוי סטטוס:
                 // מ"pending" ל"approved" – נשארים בטאב "ממתין"
                 if ($currentStatus === 'pending' && $status === 'approved') {
@@ -613,10 +643,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     continue;
                 }
 
-                $stmt = $pdo->prepare('SELECT status FROM orders WHERE id = :id');
+                $stmt = $pdo->prepare('SELECT status, creator_username FROM orders WHERE id = :id');
                 $stmt->execute([':id' => $id]);
                 $row = $stmt->fetch(PDO::FETCH_ASSOC);
-                $currentStatus = $row['status'] ?? null;
+                $currentStatus   = $row['status'] ?? null;
+                $creatorUsername = (string)($row['creator_username'] ?? '');
 
                 $allowedNext = [];
                 if ($currentStatus === 'pending') {
@@ -642,6 +673,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':updated_at' => date('Y-m-d H:i:s'),
                     ':id'         => $id,
                 ]);
+
+                // התראה לסטודנט על שינוי סטטוס בעדכון מרובה
+                if ($creatorUsername !== '' && $currentStatus !== null && $status !== $currentStatus) {
+                    $userStmt = $pdo->prepare('SELECT id FROM users WHERE username = :u LIMIT 1');
+                    $userStmt->execute([':u' => $creatorUsername]);
+                    $creatorUser = $userStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($creatorUser && (int)$creatorUser['id'] > 0) {
+                        $studentId = (int)$creatorUser['id'];
+                        $statusMsg = '';
+                        if ($status === 'approved') {
+                            $statusMsg = 'הבקשה להזמנה אושרה.';
+                        } elseif ($status === 'rejected') {
+                            $statusMsg = 'הבקשה להזמנה נדחתה.';
+                        } elseif ($status === 'on_loan') {
+                            $statusMsg = 'הציוד יצא להשאלה.';
+                        } elseif ($status === 'returned') {
+                            $statusMsg = 'הציוד הוחזר ונקלט במערכת.';
+                        }
+                        if ($statusMsg !== '') {
+                            create_notification(
+                                $pdo,
+                                $studentId,
+                                null,
+                                $statusMsg,
+                                'admin_orders.php'
+                            );
+                        }
+                    }
+                }
             }
 
             $success = 'סטטוס ההזמנות עודכן.';
