@@ -36,48 +36,25 @@ if (!$doc) {
     <style>
         body {
             font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: #0f172a;
+            background: #f3f4f6;
             margin: 0;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 1.5rem;
         }
-        .popup-card {
-            background: #ffffff;
-            padding: 1.5rem 1.75rem;
-            border-radius: 12px;
-            box-shadow: 0 18px 45px rgba(15, 23, 42, 0.55);
+        main {
             max-width: 900px;
-            width: 100%;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-sizing: border-box;
+            margin: 2rem auto;
+            padding: 0 1rem 2rem;
         }
-        .popup-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
+        .sheet {
+            background: #ffffff;
+            padding: 1.75rem 2rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(15,23,42,0.08);
         }
-        .popup-header h2 {
+        .sheet h2 {
             margin-top: 0;
             margin-bottom: 1rem;
             font-size: 1.4rem;
             color: #111827;
-        }
-        .popup-close {
-            border: none;
-            background: transparent;
-            cursor: pointer;
-            font-size: 1.1rem;
-            line-height: 1;
-            padding: 0.15rem 0.3rem;
-            border-radius: 999px;
-        }
-        .popup-close:hover {
-            background: #e5e7eb;
         }
         pre {
             white-space: pre-wrap;
@@ -89,13 +66,13 @@ if (!$doc) {
     </style>
 </head>
 <body>
-<div class="popup-card">
-    <div class="popup-header">
+<?php include __DIR__ . '/admin_header.php'; ?>
+<main>
+    <div class="sheet">
         <h2><?= htmlspecialchars($doc['title'] ?? '', ENT_QUOTES, 'UTF-8') ?></h2>
-        <button type="button" class="popup-close" onclick="window.close();" aria-label="סגירת חלון">✕</button>
+        <pre><?= htmlspecialchars($doc['content'] ?? '', ENT_QUOTES, 'UTF-8') ?></pre>
     </div>
-    <pre><?= htmlspecialchars($doc['content'] ?? '', ENT_QUOTES, 'UTF-8') ?></pre>
-</div>
+</main>
 </body>
 </html>
 

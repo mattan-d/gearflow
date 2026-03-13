@@ -34,7 +34,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $category     = trim($_POST['category'] ?? '');
         $location     = trim($_POST['location'] ?? '');
         $status       = $_POST['status'] ?? 'active';
-        $picture      = trim($_POST['picture'] ?? '');
+
+        // ניהול תמונה: שמירה / החלפה של קובץ שהועלה לשרת
+        $picturePath = '';
+        if ($id > 0 && $editingEquipment !== null) {
+            $picturePath = (string)($editingEquipment['picture'] ?? '');
+        }
+        if (isset($_FILES['picture_file']) && is_array($_FILES['picture_file']) && ($_FILES['picture_file']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+            $tmpName = (string)($_FILES['picture_file']['tmp_name'] ?? '');
+            $origName = (string)($_FILES['picture_file']['name'] ?? '');
+            if ($tmpName !== '' && is_uploaded_file($tmpName)) {
+                $uploadDir = __DIR__ . '/equipment_images';
+                if (!is_dir($uploadDir)) {
+                    @mkdir($uploadDir, 0777, true);
+                }
+                $ext = pathinfo($origName, PATHINFO_EXTENSION);
+                $ext = $ext !== '' ? ('.' . strtolower($ext)) : '';
+                try {
+                    $random = bin2hex(random_bytes(4));
+                } catch (Throwable $e) {
+                    $random = (string)mt_rand(1000, 9999);
+                }
+                $fileName = 'eq_' . time() . '_' . $random . $ext;
+                $targetPath = $uploadDir . DIRECTORY_SEPARATOR . $fileName;
+                if (move_uploaded_file($tmpName, $targetPath)) {
+                    // נשמור נתיב יחסי שנטען דרך הווב-סרבר
+                    $picturePath = 'equipment_images/' . $fileName;
+                } else {
+                    $error = $error !== '' ? $error : 'שגיאה בהעלאת התמונה. ניתן לנסות שוב.';
+                }
+            }
+        }
 
         // quantities are now internal only – keep previous values if editing, or default to 1
         if ($id > 0 && $editingEquipment !== null) {
@@ -73,7 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':quantity_total'     => $quantityTotal,
                         ':quantity_available' => $quantityAvailable,
                         ':status'             => $status,
-                        ':picture'            => $picture,
+                        ':picture'            => $picturePath,
                         ':updated_at'         => date('Y-m-d H:i:s'),
                         ':id'                 => $id,
                     ]);
@@ -94,7 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':quantity_total'     => $quantityTotal,
                         ':quantity_available' => $quantityAvailable,
                         ':status'             => $status,
-                        ':picture'            => $picture,
+                        ':picture'            => $picturePath,
                         ':created_at'         => date('Y-m-d H:i:s'),
                     ]);
                     $success = 'הציוד נוסף בהצלחה.';
@@ -272,6 +302,10 @@ $filterStatus    = trim($_GET['filter_status'] ?? '');
 $filterWarehouse = trim($_GET['filter_warehouse'] ?? '');
 $equipmentTab    = trim((string)($_GET['equipment_tab'] ?? 'all'));
 
+// פילטר זמינות לפי טווח תאריכים/שעות (פנוי בין התאריכים)
+$availabilityStartRaw = trim($_GET['availability_start'] ?? '');
+$availabilityEndRaw   = trim($_GET['availability_end'] ?? '');
+
 $sql = 'SELECT id, name, code, description, category, location, quantity_total, quantity_available, status, picture, created_at, updated_at
         FROM equipment';
 $conditions = [];
@@ -305,9 +339,50 @@ if ($conditions) {
 }
 $sql .= ' ORDER BY category ASC, name ASC';
 
+// שליפת כל הציוד לפי פילטרים בסיסיים
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $allEquipment = $stmt->fetchAll();
+
+// במידת הצורך – סינון לפי זמינות בין התאריכים
+$unavailableIds = [];
+if ($availabilityStartRaw !== '' && $availabilityEndRaw !== '') {
+    $startTs = strtotime($availabilityStartRaw);
+    $endTs   = strtotime($availabilityEndRaw);
+
+    if ($startTs !== false && $endTs !== false && $startTs <= $endTs) {
+        $reqStart = date('Y-m-d H:i', $startTs);
+        $reqEnd   = date('Y-m-d H:i', $endTs);
+
+        $sqlUnavailable = "
+            SELECT DISTINCT equipment_id
+            FROM orders
+            WHERE status IN ('pending', 'approved', 'on_loan')
+              AND (
+                    (start_date || ' ' || COALESCE(start_time, '00:00')) <= :req_end
+                AND (end_date   || ' ' || COALESCE(end_time,   '23:59')) >= :req_start
+              )
+        ";
+        $stmtUn = $pdo->prepare($sqlUnavailable);
+        $stmtUn->execute([
+            ':req_start' => $reqStart,
+            ':req_end'   => $reqEnd,
+        ]);
+        $rowsUn = $stmtUn->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rowsUn as $rowUn) {
+            $eid = (int)($rowUn['equipment_id'] ?? 0);
+            if ($eid > 0 && !in_array($eid, $unavailableIds, true)) {
+                $unavailableIds[] = $eid;
+            }
+        }
+
+        if (!empty($unavailableIds)) {
+            $allEquipment = array_values(array_filter($allEquipment, function ($item) use ($unavailableIds) {
+                return !in_array((int)($item['id'] ?? 0), $unavailableIds, true);
+            }));
+        }
+    }
+}
 
 // Unique categories for tabs (empty => "אחר"), sorted; "אחר" last
 $uniqueCategories = [];
@@ -787,6 +862,25 @@ $me = current_user();
                     </div>
                 <?php endif; ?>
                 <div class="filter-group">
+                    <label>פנוי בין התאריכים</label>
+                    <div style="display:flex;flex-direction:column;gap:0.25rem;min-width:220px;">
+                        <div style="display:flex;align-items:center;gap:0.4rem;">
+                            <span class="muted-small">מתאריך</span>
+                            <input type="datetime-local"
+                                   name="availability_start"
+                                   value="<?= htmlspecialchars($availabilityStartRaw ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                   style="max-width: 210px;">
+                        </div>
+                        <div style="display:flex;align-items:center;gap:0.4rem;">
+                            <span class="muted-small">עד תאריך</span>
+                            <input type="datetime-local"
+                                   name="availability_end"
+                                   value="<?= htmlspecialchars($availabilityEndRaw ?? '', ENT_QUOTES, 'UTF-8') ?>"
+                                   style="max-width: 210px;">
+                        </div>
+                    </div>
+                </div>
+                <div class="filter-group">
                     <label style="visibility:hidden;">סינון</label>
                     <button type="submit" class="btn secondary" style="padding: 5px 0.9rem; font-size: 0.8rem; background: #cacaff;">סינון</button>
                 </div>
@@ -811,7 +905,7 @@ $me = current_user();
                 <div class="flash success"><?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?></div>
             <?php endif; ?>
 
-            <form method="post" action="admin_equipment.php<?= $editingEquipment ? '?edit_id=' . (int)$editingEquipment['id'] : '' ?>">
+            <form method="post" action="admin_equipment.php<?= $editingEquipment ? '?edit_id=' . (int)$editingEquipment['id'] : '' ?>" enctype="multipart/form-data">
                 <input type="hidden" name="action" value="save">
                 <input type="hidden" name="id" value="<?= $editingEquipment ? (int)$editingEquipment['id'] : 0 ?>">
 
@@ -828,10 +922,22 @@ $me = current_user();
                         <label for="description">תיאור</label>
                         <textarea id="description" name="description"><?= $editingEquipment ? htmlspecialchars($editingEquipment['description'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
 
-                        <label for="picture">קישור לתמונת ציוד (URL)</label>
-                        <input type="text" id="picture" name="picture"
-                               placeholder="https://example.com/path/to/image.jpg"
-                               value="<?= $editingEquipment ? htmlspecialchars($editingEquipment['picture'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
+                        <label for="picture_file">תמונה</label>
+                        <?php
+                        $existingPicture = $editingEquipment['picture'] ?? '';
+                        $existingPicture = is_string($existingPicture) ? trim($existingPicture) : '';
+                        ?>
+                        <?php if ($editingEquipment && $existingPicture !== ''): ?>
+                            <div class="muted-small" style="margin-bottom:0.35rem;">
+                                <a href="<?= htmlspecialchars($existingPicture, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener">
+                                    הצג תמונה קיימת
+                                </a>
+                            </div>
+                        <?php endif; ?>
+                        <div style="display:flex;align-items:center;gap:0.5rem;">
+                            <button type="button" class="btn secondary small" id="upload_picture_btn">טען תמונה</button>
+                            <input type="file" id="picture_file" name="picture_file" accept="image/*" style="display:none;">
+                        </div>
                     </div>
                     <div>
                         <label for="category">קטגוריה</label>
@@ -965,6 +1071,8 @@ $me = current_user();
             'q' => $searchTerm !== '' ? $searchTerm : null,
             'filter_status' => $filterStatus !== '' ? $filterStatus : null,
             'filter_warehouse' => $filterWarehouse !== '' ? $filterWarehouse : null,
+            'availability_start' => $availabilityStartRaw !== '' ? $availabilityStartRaw : null,
+            'availability_end'   => $availabilityEndRaw !== '' ? $availabilityEndRaw : null,
         ]);
         $tabBaseQuery = http_build_query($tabBaseParams);
         $tabBaseUrl = 'admin_equipment.php' . ($tabBaseQuery !== '' ? '?' . $tabBaseQuery : '');
@@ -1021,7 +1129,15 @@ $me = current_user();
                                          alt="<?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>"
                                          style="max-width: 60px; max-height: 60px; border-radius: 6px; object-fit: cover;">
                                 <?php else: ?>
-                                    <span class="muted-small">ללא תמונה</span>
+                                    <?php
+                                    $uploadParams = array_merge(
+                                        ['edit_id' => (int)$item['id']],
+                                        $tabBaseParams,
+                                        ($equipmentTab !== 'all' && $equipmentTab !== '') ? ['equipment_tab' => $equipmentTab] : []
+                                    );
+                                    ?>
+                                    <a href="admin_equipment.php?<?= http_build_query($uploadParams) ?>"
+                                       class="btn secondary small">טען תמונה</a>
                                 <?php endif; ?>
                             </td>
                             <td>
@@ -1077,6 +1193,14 @@ document.addEventListener('DOMContentLoaded', function () {
     var componentsClose = document.getElementById('components_modal_close');
     var addComponentRowBtn = document.getElementById('components_add_row_btn');
     var componentsTableBody = document.getElementById('components_table_body');
+    var uploadPictureBtn = document.getElementById('upload_picture_btn');
+    var pictureFileInput = document.getElementById('picture_file');
+
+    if (uploadPictureBtn && pictureFileInput) {
+        uploadPictureBtn.addEventListener('click', function () {
+            pictureFileInput.click();
+        });
+    }
 
     function openEquipmentModal() {
         if (formModal) {
