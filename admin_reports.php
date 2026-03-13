@@ -412,22 +412,6 @@ $ordersChartMax = max(
     </div>
 </main>
 <script>
-    (function () {
-        var tabs = document.querySelectorAll('.reports-tab');
-        var sections = document.querySelectorAll('.reports-section');
-        if (!tabs.length) return;
-
-        tabs.forEach(function (tab) {
-            tab.addEventListener('click', function () {
-                var targetId = tab.getAttribute('data-target');
-                tabs.forEach(function (t) { t.classList.remove('active'); });
-                sections.forEach(function (s) { s.classList.remove('active'); });
-                tab.classList.add('active');
-                var sec = document.getElementById(targetId);
-                if (sec) sec.classList.add('active');
-            });
-        });
-    })();
     // לוח שנה לדוחות הזמנות
     (function () {
         var form       = document.getElementById('orders_report_form');
