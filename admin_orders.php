@@ -10,6 +10,35 @@ $me   = current_user();
 $role = $me['role'] ?? 'student';
 
 $pdo      = get_db();
+$nowTs    = time();
+
+/**
+ * יצירת התראה חדשה.
+ *
+ * @param PDO         $pdo
+ * @param int|null    $userId  אם לא null – התראה למשתמש ספציפי
+ * @param string|null $role    אם userId null – התראה לכל בעלי התפקיד הזה
+ * @param string      $message טקסט ההתראה
+ * @param string|null $link    קישור רלוונטי (אופציונלי)
+ */
+function create_notification(PDO $pdo, ?int $userId, ?string $role, string $message, ?string $link = null): void
+{
+    try {
+        $stmt = $pdo->prepare(
+            'INSERT INTO notifications (user_id, role, message, link, is_read, created_at)
+             VALUES (:user_id, :role, :message, :link, 0, :created_at)'
+        );
+        $stmt->execute([
+            ':user_id'    => $userId,
+            ':role'       => $userId === null ? $role : null,
+            ':message'    => $message,
+            ':link'       => $link,
+            ':created_at' => date('Y-m-d H:i:s'),
+        ]);
+    } catch (Throwable $e) {
+        // לא מפילים את הדף במקרה של שגיאת התראה
+    }
+}
 $error    = '';
 $success  = '';
 $editingOrder = null;
@@ -331,6 +360,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 }
                             }
                             $success = $createdCount > 1 ? "נוצרו {$createdCount} הזמנות בהצלחה." : 'הזמנה נוצרה בהצלחה.';
+
+                            // התראה למנהלים על הזמנה מחזורית חדשה שיצר סטודנט
+                            if ($role === 'student') {
+                                $creatorName = (string)($me['username'] ?? ($me['first_name'] ?? 'סטודנט'));
+                                $msg = 'סטודנט ' . $creatorName . ' יצר הזמנה מחזורית חדשה.';
+                                $link = 'admin_orders.php?tab=pending';
+                                create_notification($pdo, null, 'admin', $msg, $link);
+                                create_notification($pdo, null, 'warehouse_manager', $msg, $link);
+                            }
+
                             if ($role === 'student') {
                                 header('Location: admin_orders.php?tab=pending');
                             } else {
@@ -369,6 +408,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ? "נוצרו {$createdCount} הזמנות בהצלחה."
                         : 'הזמנה נוצרה בהצלחה.';
 
+                    // התראה למנהלים על הזמנה חדשה שיצר סטודנט
+                    if ($role === 'student') {
+                        $creatorName = (string)($me['username'] ?? ($me['first_name'] ?? 'סטודנט'));
+                        $msg = 'סטודנט ' . $creatorName . ' יצר הזמנה חדשה.';
+                        $link = 'admin_orders.php?tab=pending';
+                        create_notification($pdo, null, 'admin', $msg, $link);
+                        create_notification($pdo, null, 'warehouse_manager', $msg, $link);
+                    }
+
                     // לאחר יצירת הזמנה – סוגרים את הטופס תמיד ע\"י רענון לדף הרשימה
                     if ($role === 'student') {
                         header('Location: admin_orders.php?tab=pending');
@@ -380,9 +428,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $equipmentId = $equipmentIds[0];
 
                     // אם מנהל שינה את מצב ההזמנה – בודקים שהמעבר חוקי ומעדכנים
-                    $currentStatusRow = $pdo->prepare('SELECT status FROM orders WHERE id = :id');
+                    $currentStatusRow = $pdo->prepare('SELECT status, creator_username FROM orders WHERE id = :id');
                     $currentStatusRow->execute([':id' => $id]);
-                    $currentStatus = $currentStatusRow->fetchColumn() ?: '';
+                    $orderRow = $currentStatusRow->fetch(PDO::FETCH_ASSOC) ?: [];
+                    $currentStatus = (string)($orderRow['status'] ?? '');
+                    $creatorUsername = (string)($orderRow['creator_username'] ?? '');
                     $allowedNext = [];
                     if ($currentStatus === 'pending') {
                         $allowedNext = ['approved', 'rejected'];
@@ -435,6 +485,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
 
                     $success = 'הזמנה עודכנה בהצלחה.';
+
+                    // התראה לסטודנט על שינוי סטטוס הזמנה
+                    if ($creatorUsername !== '' && $newStatus !== $currentStatus) {
+                        $userStmt = $pdo->prepare('SELECT id, role FROM users WHERE username = :username LIMIT 1');
+                        $userStmt->execute([':username' => $creatorUsername]);
+                        $creatorUser = $userStmt->fetch(PDO::FETCH_ASSOC);
+                        if ($creatorUser && (int)$creatorUser['id'] > 0) {
+                            $studentId = (int)$creatorUser['id'];
+                            $statusMsg = '';
+                            if ($newStatus === 'approved') {
+                                $statusMsg = 'הבקשה להזמנה אושרה.';
+                            } elseif ($newStatus === 'rejected') {
+                                $statusMsg = 'הבקשה להזמנה נדחתה.';
+                            } elseif ($newStatus === 'on_loan') {
+                                $statusMsg = 'הציוד יצא להשאלה.';
+                            } elseif ($newStatus === 'returned') {
+                                $statusMsg = 'הציוד הוחזר ונקלט במערכת.';
+                            }
+                            if ($statusMsg !== '') {
+                                create_notification(
+                                    $pdo,
+                                    $studentId,
+                                    null,
+                                    $statusMsg,
+                                    'admin_orders.php'
+                                );
+                            }
+                        }
+                    }
 
                     // ניווט לאחר שמירה לפי הסטטוס המעודכן
                     $today = date('Y-m-d');
