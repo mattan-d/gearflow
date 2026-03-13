@@ -709,7 +709,7 @@ if (isset($_GET['edit_id'])) {
                         id="user_search"
                         name="q"
                         value="<?= htmlspecialchars($nameFilter, ENT_QUOTES, 'UTF-8') ?>"
-                        placeholder="חיפוש לפי שם פרטי / משפחה"
+                        placeholder="חיפוש משתמש"
                         style="min-width:220px;padding:0.35rem 2.1rem 0.35rem 0.6rem;border-radius:999px;border:1px solid #d1d5db;font-size:0.85rem;direction:rtl;"
                         autocomplete="off"
                     >
