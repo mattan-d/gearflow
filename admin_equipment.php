@@ -1516,17 +1516,31 @@ document.addEventListener('DOMContentLoaded', function () {
                         classes.push('selectable');
                         cell.addEventListener('click', function () {
                             var iso = toIso(dateObj);
+
                             if (eqMode === 'start') {
+                                // בחירת תאריך תחילה
                                 availabilityStartH.value = iso + ' 00:00';
+
+                                // לאחר בחירת תאריך התחלה – עבור אוטומטית למצב תאריך סיום
+                                eqMode = 'end';
+                                if (eqModeStartBtn && eqModeEndBtn) {
+                                    eqModeStartBtn.classList.remove('active');
+                                    eqModeEndBtn.classList.add('active');
+                                }
                             } else {
+                                // בחירת תאריך סיום
                                 availabilityEndH.value = iso + ' 23:59';
                             }
+
                             eqStartLabel.textContent = availabilityStartH.value ? availabilityStartH.value.substring(0, 10) : '-';
                             eqEndLabel.textContent = availabilityEndH.value ? availabilityEndH.value.substring(0, 10) : '-';
                             updateRangeLabel();
 
+                            // בנייה מחדש של הלוח כדי לצבוע את היום / הטווח הנבחר בשחור
+                            buildEqCalendar();
+
                             // אם נבחר תאריך החזרה – סגור את הלוח לאחר שנייה
-                            if (eqMode === 'end') {
+                            if (eqMode === 'end' && availabilityEndH.value) {
                                 setTimeout(function () {
                                     eqPanel.style.display = 'none';
                                 }, 1000);
