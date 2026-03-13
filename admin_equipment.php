@@ -1024,8 +1024,11 @@ $me = current_user();
                     </div>
                 <?php endif; ?>
                 <div class="filter-group">
-                    <label>
-                        פנוי בין התאריכים
+                    <label>פנוי בין התאריכים</label>
+                    <div class="date-picker">
+                        <div class="date-picker-toggle" id="eq_date_picker_toggle">
+                            <span class="date-picker-toggle-icon">📅</span>
+                        </div>
                         <span id="eq_date_range_label" class="muted-small">
                             <?php if ($availabilityStartRaw !== '' && $availabilityEndRaw !== ''): ?>
                                 <?php
@@ -1039,13 +1042,9 @@ $me = current_user();
                         </span>
                         <span id="eq_clear_range_btn_outside"
                               class="clear-range-btn"
-                              style="vertical-align:middle; cursor: pointer; <?= ($availabilityStartRaw === '' || $availabilityEndRaw === '') ? 'display:none;' : '' ?>"
+                              style="cursor: pointer; <?= ($availabilityStartRaw === '' || $availabilityEndRaw === '') ? 'display:none;' : '' ?>"
                               title="נקה טווח">✕</span>
-                    </label>
-                    <div class="date-picker">
-                        <div class="date-picker-toggle" id="eq_date_picker_toggle">
-                            <span class="date-picker-toggle-icon">📅</span>
-                        </div>
+
                         <div class="date-picker-panel" id="eq_date_picker_panel" style="display: none;">
                             <div class="date-mode-toggle">
                                 <button type="button" id="eq_mode_start" class="date-mode-btn active">השאלה</button>
@@ -1435,6 +1434,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var eqCalClose = document.getElementById('eq_cal_close');
     var eqCalGrid = document.getElementById('eq_cal_grid');
     var eqClearBtn = document.getElementById('eq_clear_range_btn');
+    var eqClearBtnOutside = document.getElementById('eq_clear_range_btn_outside');
     var availabilityStartH = document.getElementById('availability_start_h');
     var availabilityEndH = document.getElementById('availability_end_h');
 
@@ -1558,6 +1558,12 @@ document.addEventListener('DOMContentLoaded', function () {
         eqToggle.addEventListener('click', function () {
             eqPanel.style.display = eqPanel.style.display === 'none' || eqPanel.style.display === '' ? 'block' : 'none';
         });
+
+        if (eqCalClose) {
+            eqCalClose.addEventListener('click', function () {
+                eqPanel.style.display = 'none';
+            });
+        }
 
         eqModeStartBtn.addEventListener('click', function () {
             eqMode = 'start';
