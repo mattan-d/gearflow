@@ -22,6 +22,35 @@ if (!$doc) {
     echo 'Document not found.';
     exit;
 }
+
+// זיהוי מסמך "שעות פתיחת מחסן" והבאת שעות פתיחה מטבלת warehouse_hours
+$title      = trim((string)($doc['title'] ?? ''));
+$isHoursDoc = ($title === 'שעות פתיחת מחסן');
+$warehouse  = trim((string)($me['warehouse'] ?? 'מחסן א'));
+$days       = ['א', 'ב', 'ג', 'ד', 'ה']; // ראשון–חמישי
+$hours      = range(9, 16);             // 09:00–16:00
+$openMatrix = [];
+
+if ($isHoursDoc) {
+    $stmtHours = $pdo->prepare('SELECT day_of_week, hour FROM warehouse_hours WHERE warehouse = :w');
+    $stmtHours->execute([':w' => $warehouse]);
+    $rows = $stmtHours->fetchAll(PDO::FETCH_ASSOC);
+
+    if ($rows) {
+        foreach ($rows as $row) {
+            $d = (int)($row['day_of_week'] ?? 0);
+            $h = (int)($row['hour'] ?? 0);
+            $openMatrix[$d][$h] = true;
+        }
+    } else {
+        // ברירת מחדל – אם לא הוגדרו שעות: ראשון–חמישי 9–16 פתוח
+        foreach (array_keys($days) as $d) {
+            foreach ($hours as $h) {
+                $openMatrix[$d][$h] = true;
+            }
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -121,7 +150,42 @@ if (!$doc) {
 <main>
     <div class="sheet">
         <h2><?= htmlspecialchars($doc['title'] ?? '', ENT_QUOTES, 'UTF-8') ?></h2>
-        <pre><?= htmlspecialchars($doc['content'] ?? '', ENT_QUOTES, 'UTF-8') ?></pre>
+
+        <?php if ($isHoursDoc): ?>
+            <p style="font-size:0.9rem;color:#4b5563;margin-top:0;">
+                שעות פתיחת <?= htmlspecialchars($warehouse, ENT_QUOTES, 'UTF-8') ?>.
+            </p>
+            <div class="hours-table-wrapper">
+                <table class="hours-table">
+                    <thead>
+                    <tr>
+                        <th>שעה</th>
+                        <?php foreach ($days as $label): ?>
+                            <th><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></th>
+                        <?php endforeach; ?>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($hours as $h): ?>
+                        <tr>
+                            <td><?= sprintf('%02d:00', $h) ?></td>
+                            <?php foreach (array_keys($days) as $d): ?>
+                                <?php $open = !empty($openMatrix[$d][$h]); ?>
+                                <td class="<?= $open ? 'slot-open' : 'slot-closed' ?>">
+                                    <?= $open ? 'פתוח' : 'סגור' ?>
+                                </td>
+                            <?php endforeach; ?>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <div class="hours-legend">
+                כחול בהיר = שעה פתוחה, אפור בהיר = שעה סגורה.
+            </div>
+        <?php else: ?>
+            <pre><?= htmlspecialchars($doc['content'] ?? '', ENT_QUOTES, 'UTF-8') ?></pre>
+        <?php endif; ?>
     </div>
 </main>
 </body>
