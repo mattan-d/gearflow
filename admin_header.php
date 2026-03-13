@@ -73,6 +73,9 @@ try {
         <nav class="main-nav">
             <div class="main-nav-primary">
                 <?php if ($role === 'admin' || $role === 'warehouse_manager'): ?>
+                    <a href="admin_equipment.php">ניהול ציוד</a>
+                    <a href="admin_orders.php">ניהול הזמנות</a>
+                    <a href="admin_users.php">ניהול משתמשים</a>
                     <div class="main-nav-item-wrapper">
                         <a href="admin.php">ניהול מערכת</a>
                         <div class="main-nav-sub">
@@ -81,9 +84,6 @@ try {
                             <a href="admin_times.php">ניהול זמנים</a>
                         </div>
                     </div>
-                    <a href="admin_users.php">ניהול משתמשים</a>
-                    <a href="admin_orders.php">ניהול הזמנות</a>
-                    <a href="admin_equipment.php">ניהול ציוד</a>
                 <?php else: ?>
                     <a href="admin_orders.php">ניהול הזמנות</a>
                 <?php endif; ?>
