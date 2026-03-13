@@ -89,18 +89,19 @@ try {
     }
 </style>
 <header style="background: <?= htmlspecialchars($headerBg, ENT_QUOTES, 'UTF-8') ?>;">
-    <div style="display:flex;align-items:center;gap:0.75rem;">
-        <div style="width:36px;height:36px;border-radius:10px;background:#f9fafb;display:flex;align-items:center;justify-content:center;color:#111827;font-weight:700;font-size:0.85rem;box-shadow:0 4px 10px rgba(0,0,0,0.25);">
-            GF
+    <div>
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+            <div style="width:36px;height:36px;border-radius:10px;background:#f9fafb;display:flex;align-items:center;justify-content:center;color:#111827;font-weight:700;font-size:0.85rem;box-shadow:0 4px 10px rgba(0,0,0,0.25);">
+                GF
+            </div>
+            <div>
+                <h1 style="margin:0;font-size:1.3rem;">
+                    <?= ($role === 'admin' || $role === 'warehouse_manager') ? 'מערכת הזמנות ומלאי' : 'מערכת הזמנות' ?>
+                </h1>
+                <div class="muted">פלטפורמה לניהול השאלת ציוד</div>
+            </div>
         </div>
-        <div>
-            <h1 style="margin:0;font-size:1.3rem;">
-                <?= ($role === 'admin' || $role === 'warehouse_manager') ? 'מערכת הזמנות ומלאי' : 'מערכת הזמנות' ?>
-            </h1>
-            <div class="muted">פלטפורמה לניהול השאלת ציוד</div>
-        </div>
-    </div>
-    <nav class="main-nav">
+        <nav class="main-nav">
             <div class="main-nav-primary">
                 <?php if ($role === 'admin' || $role === 'warehouse_manager'): ?>
                     <a href="admin_equipment.php">ניהול ציוד</a>
@@ -131,6 +132,7 @@ try {
                 </div>
             </div>
         </nav>
+    </div>
     <div class="user-info">
         מחובר כ־<?= htmlspecialchars($me['username'] ?? '', ENT_QUOTES, 'UTF-8') ?>
         (<?= $role === 'admin' ? 'אדמין' : ($role === 'warehouse_manager' ? 'מנהל מחסן' : 'סטודנט') ?>)

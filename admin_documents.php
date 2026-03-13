@@ -350,7 +350,7 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
             justify-content: center;
         }
         .edit-toggle-btn.inactive {
-            color: #9ca3af;
+            filter: grayscale(1);
         }
         .edit-toggle-btn.active {
             color: #facc15;
