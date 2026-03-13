@@ -677,10 +677,6 @@ $me = current_user();
             gap: 0.5rem;
         }
         .date-picker {
-            background: #f9fafb;
-            border-radius: 10px;
-            padding: 0.75rem 0.9rem;
-            border: 1px solid #e5e7eb;
             font-size: 0.85rem;
             position: relative;
         }
@@ -690,14 +686,10 @@ $me = current_user();
             gap: 0.3rem;
             cursor: pointer;
             font-size: 0.85rem;
-            color: #374151;
-            margin-bottom: 0.6rem;
         }
         .date-picker-toggle-icon {
-            width: 18px;
-            height: 18px;
-            border-radius: 4px;
-            border: 1px solid #9ca3af;
+            width: 20px;
+            height: 20px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
