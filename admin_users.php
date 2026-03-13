@@ -280,7 +280,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$usersStmt = $pdo->query('SELECT id, username, role, is_active, first_name, last_name, warehouse, email, phone FROM users ORDER BY id ASC');
+$nameFilter = trim((string)($_GET['q'] ?? ''));
+$usersSql   = 'SELECT id, username, role, is_active, first_name, last_name, warehouse, email, phone FROM users';
+$usersParams = [];
+if ($nameFilter !== '') {
+    // תומך גם ברשימת אותיות מופרדת בפסיקים (למשל "א,ב")
+    $letters = array_filter(array_map('trim', explode(',', $nameFilter)), static function ($v) {
+        return $v !== '';
+    });
+    if (empty($letters)) {
+        $letters = [$nameFilter];
+    }
+    $whereParts = [];
+    foreach ($letters as $idx => $letter) {
+        $paramFirst = ':fn' . $idx;
+        $paramLast  = ':ln' . $idx;
+        $usersParams[$paramFirst] = $letter . '%';
+        $usersParams[$paramLast]  = $letter . '%';
+        $whereParts[] = "(first_name LIKE $paramFirst OR last_name LIKE $paramLast)";
+    }
+    if (!empty($whereParts)) {
+        $usersSql .= ' WHERE ' . implode(' OR ', $whereParts);
+    }
+}
+$usersSql .= ' ORDER BY id ASC';
+$usersStmt = $pdo->prepare($usersSql);
+$usersStmt->execute($usersParams);
 $users = $usersStmt->fetchAll();
 
 // יצוא משתמשים ל-CSV
@@ -674,9 +699,20 @@ if (isset($_GET['edit_id'])) {
     </div>
 
     <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:0.75rem;gap:1rem;">
             <h2 style="margin-bottom:0;">רשימת משתמשים</h2>
-          
+            <form method="get" action="admin_users.php" style="display:flex;align-items:center;gap:0.5rem;">
+                <label for="user_search" style="margin:0;font-size:0.85rem;color:#374151;">סינון לפי שם פרטי / משפחה:</label>
+                <input
+                    type="text"
+                    id="user_search"
+                    name="q"
+                    value="<?= htmlspecialchars($nameFilter, ENT_QUOTES, 'UTF-8') ?>"
+                    placeholder="לדוגמה: א,ב או 'מיקי'"
+                    style="min-width:180px;padding:0.35rem 0.6rem;border-radius:999px;border:1px solid #d1d5db;font-size:0.85rem;"
+                >
+                <button type="submit" class="btn secondary" style="margin-top:0;">חיפוש</button>
+            </form>
         </div>
         <table>
             <thead>
