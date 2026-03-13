@@ -264,6 +264,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             height: 100%;
             object-fit: contain;
         }
+        .logo-upload-label {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.35rem 0.9rem;
+            border-radius: 999px;
+            border: 1px solid #d1d5db;
+            background: #e5e7eb;
+            font-size: 0.8rem;
+            color: #111827;
+            cursor: pointer;
+        }
+        .logo-remove-x {
+            font-size: 0.9rem;
+            color: #6b7280;
+            cursor: pointer;
+        }
         footer {
             background: <?= htmlspecialchars($design['footer_bg'], ENT_QUOTES, 'UTF-8') ?>;
             color: #9ca3af;
@@ -337,10 +354,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <form method="post" action="admin_design.php" enctype="multipart/form-data" style="display:flex;align-items:center;gap:0.5rem;">
                     <input type="hidden" name="upload_logo" value="1">
-                    <input type="file" name="logo_file" accept="image/*" onchange="this.form.submit()">
+                    <input type="file" id="logo_file" name="logo_file" accept="image/*" style="display:none;" onchange="this.form.submit()">
+                    <label for="logo_file" class="logo-upload-label">טעינת לוגו</label>
                     <?php if (!empty($design['logo_path'])): ?>
-                        <button type="submit" name="remove_logo" value="1" class="btn secondary" style="padding:0.25rem 0.7rem;font-size:0.8rem;">
-                            הסרת לוגו
+                        <button type="submit" name="remove_logo" value="1" class="logo-remove-x" title="הסר לוגו">
+                            ✕
                         </button>
                     <?php endif; ?>
                 </form>

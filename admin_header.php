@@ -95,7 +95,7 @@ try {
 <header style="background: <?= htmlspecialchars($headerBg, ENT_QUOTES, 'UTF-8') ?>;">
     <div>
         <div style="display:flex;align-items:center;gap:0.75rem;">
-            <div style="min-width:36px;height:36px;border-radius:10px;background:#f9fafb;display:flex;align-items:center;justify-content:center;color:#111827;font-weight:700;font-size:0.85rem;box-shadow:0 4px 10px rgba(0,0,0,0.25);overflow:hidden;">
+            <div style="min-width:36px;height:36px;border-radius:10px;background:transparent;display:flex;align-items:center;justify-content:center;color:#f9fafb;font-weight:700;font-size:0.85rem;box-shadow:0 4px 10px rgba(0,0,0,0.25);overflow:hidden;">
                 <?php if ($logoPath !== ''): ?>
                     <img src="<?= htmlspecialchars($logoPath, ENT_QUOTES, 'UTF-8') ?>" alt="לוגו" style="height:100%;width:auto;object-fit:contain;">
                 <?php else: ?>
