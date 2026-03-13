@@ -344,6 +344,27 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $allEquipment = $stmt->fetchAll();
 
+// חישוב קוד זיהוי מוצע חדש (מספר סידורי הבא)
+$nextCode = '';
+if (!empty($allEquipment)) {
+    $maxNumeric = 0;
+    foreach ($allEquipment as $row) {
+        $codeVal = isset($row['code']) ? trim((string)$row['code']) : '';
+        if ($codeVal === '') {
+            continue;
+        }
+        if (ctype_digit($codeVal)) {
+            $num = (int)$codeVal;
+            if ($num > $maxNumeric) {
+                $maxNumeric = $num;
+            }
+        }
+    }
+    if ($maxNumeric > 0) {
+        $nextCode = (string)($maxNumeric + 1);
+    }
+}
+
 // במידת הצורך – סינון לפי זמינות בין התאריכים
 $unavailableIds = [];
 if ($availabilityStartRaw !== '' && $availabilityEndRaw !== '') {
@@ -917,7 +938,9 @@ $me = current_user();
 
                         <label for="code">קוד זיהוי / ברקוד</label>
                         <input type="text" id="code" name="code" required
-                               value="<?= $editingEquipment ? htmlspecialchars($editingEquipment['code'], ENT_QUOTES, 'UTF-8') : '' ?>">
+                               value="<?= $editingEquipment
+                                   ? htmlspecialchars($editingEquipment['code'], ENT_QUOTES, 'UTF-8')
+                                   : htmlspecialchars($nextCode, ENT_QUOTES, 'UTF-8') ?>">
 
                         <label for="description">תיאור</label>
                         <textarea id="description" name="description"><?= $editingEquipment ? htmlspecialchars($editingEquipment['description'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
