@@ -164,6 +164,11 @@ try {
     <meta charset="UTF-8">
     <title>הגדרות מערכת - מערכת השאלת ציוד</title>
     <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #f3f4f6;
+            margin: 0;
+        }
         main.settings-main {
             max-width: 900px;
             margin: 1.5rem auto 2rem;
@@ -182,6 +187,10 @@ try {
             font-size: 1.3rem;
             color: #111827;
             margin-bottom: 1rem;
+        }
+        .muted {
+            color: #9ca3af;
+            font-size: 0.8rem;
         }
         .muted-small {
             font-size: 0.9rem;
