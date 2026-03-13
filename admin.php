@@ -158,13 +158,13 @@ $me = current_user();
         <nav class="main-nav">
             <div class="main-nav-primary">
                 <?php if ($role === 'admin' || $role === 'warehouse_manager'): ?>
-                    <a href="admin.php">הגדרות</a>
                     <a href="admin_users.php">ניהול משתמשים</a>
                     <a href="admin_orders.php">ניהול הזמנות</a>
                     <a href="admin_equipment.php">ניהול ציוד</a>
                     <div class="main-nav-item-wrapper">
                         <a href="#">ניהול מערכת</a>
                         <div class="main-nav-sub">
+                            <a href="admin_settings.php">הגדרות</a>
                             <a href="admin_documents.php">מסמכים</a>
                             <a href="admin_design.php">עיצוב ממשק</a>
                             <a href="admin_times.php">ניהול זמנים</a>
@@ -191,6 +191,11 @@ $me = current_user();
 <main>
     <h2 class="menu-title">תפריט ניהול מערכת</h2>
     <div class="menu-grid">
+        <a href="admin_settings.php" class="menu-card">
+            <div class="icon">⚙️</div>
+            <h2>הגדרות מערכת</h2>
+            <p>הגדרות כלליות של המערכת: מגבלות, אבטחה, ברירות מחדל ועוד.</p>
+        </a>
         <a href="admin_design.php" class="menu-card">
             <div class="icon">🎨</div>
             <h2>עיצוב ממשק</h2>
