@@ -10,15 +10,24 @@ require_admin();
 $me  = current_user();
 $pdo = get_db();
 
-// טאב פעיל בדוחות (ברירת מחדל: דוחות משתמשים)
-$activeTab = isset($_GET['tab']) ? (string)$_GET['tab'] : 'users';
-if (!in_array($activeTab, ['users', 'orders', 'equipment'], true)) {
-    $activeTab = 'users';
+// טאב פעיל בדוחות (ברירת מחדל: דוחות הזמנות)
+$activeTab = isset($_GET['tab']) ? (string)$_GET['tab'] : 'orders';
+if (!in_array($activeTab, ['orders', 'equipment'], true)) {
+    $activeTab = 'orders';
 }
 
 // פרמטרי טווח תאריכים לדוחות הזמנות
 $reportStart = isset($_GET['orders_start']) ? trim((string)$_GET['orders_start']) : '';
 $reportEnd   = isset($_GET['orders_end']) ? trim((string)$_GET['orders_end']) : '';
+
+// בחירת סטודנטים לדוח הזמנות (לפי username של יוצר ההזמנה)
+$selectedStudentsRaw = isset($_GET['orders_students']) ? (string)$_GET['orders_students'] : '';
+$selectedStudents = array_values(array_filter(array_map('trim', explode(',', $selectedStudentsRaw)), static function ($v) {
+    return $v !== '';
+}));
+
+// קטגוריית ציוד לדוח הזמנות
+$reportCategory = isset($_GET['orders_category']) ? trim((string)$_GET['orders_category']) : '';
 
 $ordersReport = [
     'has_range'        => false,
@@ -36,8 +45,8 @@ $ordersReport = [
 
 if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
     $ordersReport['has_range'] = true;
-    $stmt = $pdo->prepare(
-        "SELECT
+
+    $sql = "SELECT
              COUNT(*) AS total,
              SUM(CASE WHEN status = 'pending'  THEN 1 ELSE 0 END) AS pending_count,
              SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved_count,
@@ -46,13 +55,32 @@ if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
              SUM(CASE WHEN status = 'returned' THEN 1 ELSE 0 END) AS returned_count,
              SUM(CASE WHEN status = 'approved' AND DATE(end_date) < DATE('now') THEN 1 ELSE 0 END) AS not_picked_count,
              SUM(CASE WHEN status = 'on_loan'  AND DATE(end_date) < DATE('now') THEN 1 ELSE 0 END) AS not_returned_late_count
-         FROM orders
-         WHERE DATE(start_date) BETWEEN :start AND :end"
-    );
-    $stmt->execute([
+         FROM orders o
+         JOIN equipment e ON e.id = o.equipment_id
+         WHERE DATE(o.start_date) BETWEEN :start AND :end";
+
+    $params = [
         ':start' => $reportStart,
         ':end'   => $reportEnd,
-    ]);
+    ];
+
+    if (!empty($selectedStudents)) {
+        $placeholders = [];
+        foreach ($selectedStudents as $idx => $u) {
+            $ph = ':u' . $idx;
+            $placeholders[] = $ph;
+            $params[$ph] = $u;
+        }
+        $sql .= ' AND o.creator_username IN (' . implode(',', $placeholders) . ')';
+    }
+
+    if ($reportCategory !== '') {
+        $sql .= ' AND TRIM(COALESCE(e.category, '''')) = :cat';
+        $params[':cat'] = $reportCategory;
+    }
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
     $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
     $ordersReport['total']             = (int)($row['total'] ?? 0);
     $ordersReport['pending']           = (int)($row['pending_count'] ?? 0);
@@ -76,6 +104,28 @@ $ordersChartMax = max(
     $ordersReport['not_picked'],
     $ordersReport['not_returned_late']
 );
+
+// רשימת סטודנטים לבחירה (כמו במסך הזמנות)
+$students = [];
+$studentsStmt = $pdo->prepare(
+    "SELECT username, first_name, last_name
+     FROM users
+     WHERE role = 'student' AND is_active = 1
+     ORDER BY username ASC"
+);
+$studentsStmt->execute();
+$students = $studentsStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+
+// רשימת קטגוריות ציוד לדוחות (נלקחת מטבלת equipment)
+$reportCategories = [];
+$catRows = $pdo->query("SELECT DISTINCT category FROM equipment WHERE category IS NOT NULL AND TRIM(category) != '' ORDER BY category ASC")
+    ->fetchAll(PDO::FETCH_COLUMN);
+foreach ($catRows as $cName) {
+    $cName = trim((string)$cName);
+    if ($cName !== '') {
+        $reportCategories[] = $cName;
+    }
+}
 
 ?>
 <!DOCTYPE html>
@@ -265,27 +315,6 @@ $ordersChartMax = max(
             text-align: left;
             color: #111827;
         }
-        .reports-tabs {
-            display: inline-flex;
-            gap: 0.5rem;
-            border-bottom: 1px solid #e5e7eb;
-            margin-bottom: 1rem;
-        }
-        .reports-tab {
-            padding: 0.4rem 0.9rem;
-            border-radius: 999px 999px 0 0;
-            font-size: 0.9rem;
-            cursor: pointer;
-            color: #4b5563;
-            background: #f3f4f6;
-            border: 1px solid transparent;
-            border-bottom: none;
-        }
-        .reports-tab.active {
-            background: #ffffff;
-            color: #111827;
-            border-color: #e5e7eb;
-        }
         .reports-section {
             display: none;
         }
@@ -301,20 +330,13 @@ $ordersChartMax = max(
         <h2>דוחות</h2>
 
         <div class="tabs">
-            <a href="admin_reports.php?tab=users" class="<?= $activeTab === 'users' ? 'active' : '' ?>">דוחות משתמשים</a>
             <a href="admin_reports.php?tab=orders" class="<?= $activeTab === 'orders' ? 'active' : '' ?>">דוחות הזמנות</a>
             <a href="admin_reports.php?tab=equipment" class="<?= $activeTab === 'equipment' ? 'active' : '' ?>">דוחות ציוד</a>
         </div>
 
-        <div id="reports-users" class="reports-section<?= $activeTab === 'users' ? ' active' : '' ?>">
-            <p class="muted-small">
-                כאן יוצגו דוחות על משתמשים (פעילים, סטודנטים לפי מחסן, כניסות למערכת ועוד).
-            </p>
-        </div>
-
         <div id="reports-orders" class="reports-section<?= $activeTab === 'orders' ? ' active' : '' ?>">
             <p class="muted-small" style="margin-bottom:0.5rem;">
-                בחר טווח תאריכים כדי להציג סיכום סטטוסים להזמנות.
+                בחר טווח תאריכים וסטודנטים כדי להציג סיכום סטטוסים להזמנות.
             </p>
             <form method="get" action="admin_reports.php" id="orders_report_form">
                 <input type="hidden" name="tab" value="orders">
@@ -336,6 +358,39 @@ $ordersChartMax = max(
                     <div id="orders_calendar_panel" class="calendar-panel" style="display:none;">
                         <div class="calendar-grid" id="orders_calendar_grid"></div>
                     </div>
+                </div>
+
+                <div style="margin-top:0.5rem;display:flex;flex-wrap:wrap;gap:0.75rem;align-items:flex-end;">
+                    <div>
+                        <label class="muted-small" for="orders_category">קטגוריית ציוד:</label>
+                        <select name="orders_category" id="orders_category"
+                                style="margin-top:0.25rem;min-width:180px;padding:0.35rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
+                            <option value="">כל הקטגוריות</option>
+                            <?php foreach ($reportCategories as $cat): ?>
+                                <option value="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>"
+                                    <?= $reportCategory === $cat ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-top:0.5rem;">
+                    <label class="muted-small" for="orders_student_search">סינון לפי סטודנטים:</label>
+                    <input type="hidden" name="orders_students" id="orders_students"
+                           value="<?= htmlspecialchars($selectedStudentsRaw, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="text"
+                           id="orders_student_search"
+                           placeholder="הקלד שם פרטי / משפחה כדי להוסיף לרשימה"
+                           style="margin-top:0.25rem;width:100%;max-width:320px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;direction:rtl;">
+                    <div id="orders_student_suggestions"
+                         style="position:relative;max-width:320px;">
+                        <div id="orders_student_suggestions_inner"
+                             style="position:absolute;top:0.15rem;right:0;background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 10px 25px rgba(15,23,42,0.15);z-index:30;display:none;max-height:220px;overflow-y:auto;font-size:0.85rem;"></div>
+                    </div>
+                    <div id="orders_selected_students"
+                         style="margin-top:0.5rem;display:flex;flex-wrap:wrap;gap:0.35rem;font-size:0.85rem;"></div>
                 </div>
             </form>
 
@@ -524,6 +579,87 @@ $ordersChartMax = max(
             endBtn.classList.add('active');
             panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
             buildCalendar();
+        });
+    })();
+    // בחירת סטודנטים לדוח הזמנות
+    (function () {
+        var students = <?= json_encode($students, JSON_UNESCAPED_UNICODE) ?>;
+        var hidden = document.getElementById('orders_students');
+        var input = document.getElementById('orders_student_search');
+        var suggestionsWrap = document.getElementById('orders_student_suggestions_inner');
+        var selectedWrap = document.getElementById('orders_selected_students');
+        if (!hidden || !input || !suggestionsWrap || !selectedWrap || !Array.isArray(students)) return;
+
+        function parseSelected() {
+            var raw = hidden.value || '';
+            return raw.split(',').map(function (s) { return s.trim(); }).filter(function (s) { return s; });
+        }
+        function updateHidden(usernames) {
+            hidden.value = usernames.join(',');
+        }
+        function renderSelected() {
+            var sel = parseSelected();
+            selectedWrap.innerHTML = '';
+            sel.forEach(function (uname) {
+                var s = students.find(function (u) { return (u.username || '') === uname; });
+                var label = uname;
+                if (s) {
+                    var full = [s.first_name, s.last_name].filter(Boolean).join(' ');
+                    if (full) label = full + ' (' + uname + ')';
+                }
+                var pill = document.createElement('span');
+                pill.textContent = label + ' ✕';
+                pill.style.background = '#e5e7eb';
+                pill.style.borderRadius = '999px';
+                pill.style.padding = '0.2rem 0.7rem';
+                pill.style.cursor = 'pointer';
+                pill.addEventListener('click', function () {
+                    var current = parseSelected().filter(function (u) { return u !== uname; });
+                    updateHidden(current);
+                    renderSelected();
+                });
+                selectedWrap.appendChild(pill);
+            });
+        }
+
+        renderSelected();
+
+        input.addEventListener('input', function () {
+            var q = input.value.trim();
+            suggestionsWrap.innerHTML = '';
+            suggestionsWrap.style.display = 'none';
+            if (!q) return;
+            var qLower = q.toLowerCase();
+            var current = parseSelected();
+            var matches = students.filter(function (u) {
+                var full = ((u.first_name || '') + ' ' + (u.last_name || '') + ' ' + (u.username || '')).trim();
+                return full.toLowerCase().indexOf(qLower) !== -1 && current.indexOf(u.username) === -1;
+            }).slice(0, 20);
+            if (!matches.length) return;
+            matches.forEach(function (u) {
+                var fullName = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.username;
+                var item = document.createElement('div');
+                item.textContent = fullName + ' (' + u.username + ')';
+                item.style.padding = '0.25rem 0.5rem';
+                item.style.cursor = 'pointer';
+                item.addEventListener('mouseover', function () {
+                    item.style.background = '#f3f4f6';
+                });
+                item.addEventListener('mouseout', function () {
+                    item.style.background = 'transparent';
+                });
+                item.addEventListener('click', function () {
+                    var cur = parseSelected();
+                    cur.push(u.username);
+                    updateHidden(cur);
+                    renderSelected();
+                    input.value = '';
+                    suggestionsWrap.innerHTML = '';
+                    suggestionsWrap.style.display = 'none';
+                });
+                suggestionsWrap.appendChild(item);
+            });
+            suggestionsWrap.style.display = 'block';
         });
     })();
 </script>
