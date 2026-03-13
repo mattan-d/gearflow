@@ -13,6 +13,7 @@ $designFile = __DIR__ . '/design_settings.json';
 $defaultDesign = [
     'header_bg' => '#111827', // שחור כהה
     'footer_bg' => '#111827',
+    'logo_path' => '',
 ];
 $design = $defaultDesign;
 if (is_file($designFile)) {
@@ -36,16 +37,57 @@ $success = '';
 $error   = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $headerColor = $_POST['header_color'] ?? $design['header_bg'];
-    $footerColor = $_POST['footer_color'] ?? $design['footer_bg'];
+    // בחירת צבעים ע"י כפתורי הצבע
+    if (isset($_POST['header_color']) || isset($_POST['footer_color'])) {
+        $headerColor = $_POST['header_color'] ?? $design['header_bg'];
+        $footerColor = $_POST['footer_color'] ?? $design['footer_bg'];
 
-    if (!isset($colorOptions[$headerColor]) || !isset($colorOptions[$footerColor])) {
-        $error = 'נבחר צבע לא תקין.';
-    } else {
-        $design['header_bg'] = $headerColor;
-        $design['footer_bg'] = $footerColor;
+        if (!isset($colorOptions[$headerColor]) || !isset($colorOptions[$footerColor])) {
+            $error = 'נבחר צבע לא תקין.';
+        } else {
+            $design['header_bg'] = $headerColor;
+            $design['footer_bg'] = $footerColor;
+            file_put_contents($designFile, json_encode($design, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+            $success = 'הגדרות העיצוב נשמרו בהצלחה.';
+        }
+    }
+
+    // הסרת לוגו
+    if (isset($_POST['remove_logo']) && (string)$_POST['remove_logo'] === '1') {
+        $design['logo_path'] = '';
         file_put_contents($designFile, json_encode($design, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
-        $success = 'הגדרות העיצוב נשמרו בהצלחה.';
+        $success = 'הלוגו הוסר. יוצג לוגו ברירת המחדל (GF).';
+    }
+
+    // טעינת לוגו חדש
+    if (isset($_POST['upload_logo']) && isset($_FILES['logo_file']) && is_array($_FILES['logo_file']) && (($_FILES['logo_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE)) {
+        $file = $_FILES['logo_file'];
+        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+            $tmp = (string)($file['tmp_name'] ?? '');
+            $name = (string)($file['name'] ?? '');
+            if ($tmp !== '' && is_uploaded_file($tmp)) {
+                $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+                if (!in_array($ext, ['png', 'jpg', 'jpeg', 'gif', 'webp'], true)) {
+                    $error = 'יש להעלות קובץ תמונה בפורמט רגיל (png/jpg/gif/webp).';
+                } else {
+                    $logoDir = __DIR__ . '/logos';
+                    if (!is_dir($logoDir)) {
+                        @mkdir($logoDir, 0777, true);
+                    }
+                    $fileName = 'logo_' . date('Ymd_His') . '.' . $ext;
+                    $target = $logoDir . DIRECTORY_SEPARATOR . $fileName;
+                    if (move_uploaded_file($tmp, $target)) {
+                        $design['logo_path'] = 'logos/' . $fileName;
+                        file_put_contents($designFile, json_encode($design, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+                        $success = 'לוגו עודכן בהצלחה.';
+                    } else {
+                        $error = 'שגיאה בהעלאת קובץ הלוגו.';
+                    }
+                }
+            }
+        } else {
+            $error = 'שגיאה בהעלאת הקובץ.';
+        }
     }
 }
 
@@ -201,6 +243,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: #4b5563;
             margin-top: 0.15rem;
         }
+        .logo-section {
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e5e7eb;
+        }
+        .logo-preview {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: #f9fafb;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+        }
+        .logo-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
         footer {
             background: <?= htmlspecialchars($design['footer_bg'], ENT_QUOTES, 'UTF-8') ?>;
             color: #9ca3af;
@@ -262,7 +325,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </form>
         </div>
 
-        <p class="muted-small">
+        <div class="logo-section">
+            <label>לוגו (36×36 פיקסלים)</label>
+            <div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.4rem;">
+                <div class="logo-preview">
+                    <?php if (!empty($design['logo_path'])): ?>
+                        <img src="<?= htmlspecialchars($design['logo_path'], ENT_QUOTES, 'UTF-8') ?>" alt="לוגו מערכת">
+                    <?php else: ?>
+                        <span style="font-size:0.8rem;color:#4b5563;">GF</span>
+                    <?php endif; ?>
+                </div>
+                <form method="post" action="admin_design.php" enctype="multipart/form-data" style="display:flex;align-items:center;gap:0.5rem;">
+                    <input type="hidden" name="upload_logo" value="1">
+                    <input type="file" name="logo_file" accept="image/*" onchange="this.form.submit()">
+                    <?php if (!empty($design['logo_path'])): ?>
+                        <button type="submit" name="remove_logo" value="1" class="btn secondary" style="padding:0.25rem 0.7rem;font-size:0.8rem;">
+                            הסרת לוגו
+                        </button>
+                    <?php endif; ?>
+                </form>
+            </div>
+            <p class="muted-small" style="margin-top:0.4rem;">
+            מומלץ להעלות תמונת לוגו בגובה 36 פיקסלים (הרוחב יתאים אוטומטית לפי הפרופורציה).
+            </p>
+        </div>
+
+        <p class="muted-small" style="margin-top:1rem;">
             הערה: ניתן לבחור רק צבעים כהים מאוד, כדי לשמור על ניגודיות טובה וקריאות גבוהה.
         </p>
     </div>

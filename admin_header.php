@@ -15,6 +15,7 @@ $role = $me['role'] ?? 'student';
 $designFile = __DIR__ . '/design_settings.json';
 $headerBg = '#111827';
 $footerBg = '#111827';
+$logoPath = '';
 if (is_file($designFile)) {
     $json = file_get_contents($designFile);
     $data = json_decode($json, true);
@@ -24,6 +25,9 @@ if (is_file($designFile)) {
         }
         if (!empty($data['footer_bg'])) {
             $footerBg = (string)$data['footer_bg'];
+        }
+        if (!empty($data['logo_path'])) {
+            $logoPath = (string)$data['logo_path'];
         }
     }
 }
@@ -91,8 +95,12 @@ try {
 <header style="background: <?= htmlspecialchars($headerBg, ENT_QUOTES, 'UTF-8') ?>;">
     <div>
         <div style="display:flex;align-items:center;gap:0.75rem;">
-            <div style="width:36px;height:36px;border-radius:10px;background:#f9fafb;display:flex;align-items:center;justify-content:center;color:#111827;font-weight:700;font-size:0.85rem;box-shadow:0 4px 10px rgba(0,0,0,0.25);">
-                GF
+            <div style="min-width:36px;height:36px;border-radius:10px;background:#f9fafb;display:flex;align-items:center;justify-content:center;color:#111827;font-weight:700;font-size:0.85rem;box-shadow:0 4px 10px rgba(0,0,0,0.25);overflow:hidden;">
+                <?php if ($logoPath !== ''): ?>
+                    <img src="<?= htmlspecialchars($logoPath, ENT_QUOTES, 'UTF-8') ?>" alt="לוגו" style="height:100%;width:auto;object-fit:contain;">
+                <?php else: ?>
+                    GF
+                <?php endif; ?>
             </div>
             <div>
                 <h1 style="margin:0;font-size:1.3rem;">
