@@ -158,17 +158,18 @@ $me = current_user();
         <nav class="main-nav">
             <div class="main-nav-primary">
                 <?php if ($role === 'admin' || $role === 'warehouse_manager'): ?>
+                    <a href="admin.php">הגדרות</a>
+                    <a href="admin_users.php">ניהול משתמשים</a>
+                    <a href="admin_orders.php">ניהול הזמנות</a>
+                    <a href="admin_equipment.php">ניהול ציוד</a>
                     <div class="main-nav-item-wrapper">
-                        <a href="admin.php">ניהול מערכת</a>
+                        <a href="#">ניהול מערכת</a>
                         <div class="main-nav-sub">
-                            <a href="admin_documents.php">ניהול מסמכים</a>
+                            <a href="admin_documents.php">מסמכים</a>
                             <a href="admin_design.php">עיצוב ממשק</a>
                             <a href="admin_times.php">ניהול זמנים</a>
                         </div>
                     </div>
-                    <a href="admin_users.php">ניהול משתמשים</a>
-                    <a href="admin_orders.php">ניהול הזמנות</a>
-                    <a href="admin_equipment.php">ניהול ציוד</a>
                 <?php else: ?>
                     <a href="admin_orders.php">ניהול הזמנות</a>
                 <?php endif; ?>

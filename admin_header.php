@@ -112,11 +112,12 @@ try {
         <nav class="main-nav">
             <div class="main-nav-primary">
                 <?php if ($role === 'admin' || $role === 'warehouse_manager'): ?>
+                    <a href="admin.php">הגדרות</a>
                     <a href="admin_equipment.php">ניהול ציוד</a>
                     <a href="admin_orders.php">ניהול הזמנות</a>
                     <a href="admin_users.php">ניהול משתמשים</a>
                     <div class="main-nav-item-wrapper">
-                        <a href="admin.php">ניהול מערכת</a>
+                        <a href="#">ניהול מערכת</a>
                         <div class="main-nav-sub">
                             <a href="admin_documents.php">מסמכים</a>
                             <a href="admin_design.php">עיצוב ממשק</a>
