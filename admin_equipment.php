@@ -532,7 +532,7 @@ $me = current_user();
         .equipment-filters-inner {
             background: #ffffff;
             border-radius: 10px;
-            padding: 10px 10px 12px
+            padding: 10px 10px 12px;
             box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
             display: flex;
             align-items: center;
