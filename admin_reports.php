@@ -48,13 +48,13 @@ if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
 
     $sql = "SELECT
              COUNT(*) AS total,
-             SUM(CASE WHEN status = 'pending'  THEN 1 ELSE 0 END) AS pending_count,
-             SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved_count,
-             SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected_count,
-             SUM(CASE WHEN status = 'on_loan'  THEN 1 ELSE 0 END) AS on_loan_count,
-             SUM(CASE WHEN status = 'returned' THEN 1 ELSE 0 END) AS returned_count,
-             SUM(CASE WHEN status = 'approved' AND DATE(end_date) < DATE('now') THEN 1 ELSE 0 END) AS not_picked_count,
-             SUM(CASE WHEN status = 'on_loan'  AND DATE(end_date) < DATE('now') THEN 1 ELSE 0 END) AS not_returned_late_count
+             SUM(CASE WHEN o.status = 'pending'  THEN 1 ELSE 0 END) AS pending_count,
+             SUM(CASE WHEN o.status = 'approved' THEN 1 ELSE 0 END) AS approved_count,
+             SUM(CASE WHEN o.status = 'rejected' THEN 1 ELSE 0 END) AS rejected_count,
+             SUM(CASE WHEN o.status = 'on_loan'  THEN 1 ELSE 0 END) AS on_loan_count,
+             SUM(CASE WHEN o.status = 'returned' THEN 1 ELSE 0 END) AS returned_count,
+             SUM(CASE WHEN o.status = 'approved' AND DATE(o.end_date) < DATE('now') THEN 1 ELSE 0 END) AS not_picked_count,
+             SUM(CASE WHEN o.status = 'on_loan'  AND DATE(o.end_date) < DATE('now') THEN 1 ELSE 0 END) AS not_returned_late_count
          FROM orders o
          JOIN equipment e ON e.id = o.equipment_id
          WHERE DATE(o.start_date) BETWEEN :start AND :end";
@@ -75,7 +75,7 @@ if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
     }
 
     if ($reportCategory !== '') {
-        $sql .= ' AND TRIM(COALESCE(e.category, '''')) = :cat';
+        $sql .= " AND TRIM(COALESCE(e.category, '')) = :cat";
         $params[':cat'] = $reportCategory;
     }
 
