@@ -459,7 +459,6 @@ $me = current_user();
             border: 1px solid #d1d5db;
             font-size: 0.9rem;
             box-sizing: border-box;
-            margin-bottom: 0.7rem;
         }
         textarea {
             min-height: 70px;
@@ -528,12 +527,12 @@ $me = current_user();
             gap: 0.5rem;
         }
         .equipment-filters {
-            margin-bottom: 1rem;
+            margin-bottom: 3px;
         }
         .equipment-filters-inner {
             background: #ffffff;
             border-radius: 10px;
-            padding: 0.4rem 0.75rem;
+            padding: 10px 10px 12px
             box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
             display: flex;
             align-items: center;
@@ -546,7 +545,8 @@ $me = current_user();
             align-items: center;
         }
         .equipment-filters label {
-            margin-bottom: 0.1rem;
+            margin-bottom: 5px;
+            margin-right: 5px;
             font-size: 0.78rem;
             color: #4b5563;
         }
@@ -562,6 +562,7 @@ $me = current_user();
             border: 1px solid #e5e7eb;
             font-size: 0.8rem;
             background: #f9fafb;
+            padding: 5px;
         }
         .equipment-filters .filter-title-pill {
             border-radius: 999px;
@@ -713,7 +714,6 @@ $me = current_user();
 
     <div class="equipment-filters">
         <div class="equipment-filters-inner">
-            <span class="filter-title-pill">סינון</span>
             <form method="get" action="admin_equipment.php">
                 <div class="filter-group">
                     <label for="filter_q">חיפוש לפי שם ציוד</label>
@@ -752,7 +752,7 @@ $me = current_user();
                 <?php endif; ?>
                 <div class="filter-group">
                     <label style="visibility:hidden;">סינון</label>
-                    <button type="submit" class="btn secondary" style="padding:0.25rem 0.9rem;font-size:0.8rem;">סינון</button>
+                    <button type="submit" class="btn secondary" style="padding: 5px 0.9rem; font-size: 0.8rem; background: #cacaff;">סינון</button>
                 </div>
             </form>
         </div>
