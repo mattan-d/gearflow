@@ -1505,14 +1505,29 @@ document.addEventListener('DOMContentLoaded', function () {
                             eqStartLabel.textContent = availabilityStartH.value ? availabilityStartH.value.substring(0, 10) : '-';
                             eqEndLabel.textContent = availabilityEndH.value ? availabilityEndH.value.substring(0, 10) : '-';
                             updateRangeLabel();
+
+                            // אם נבחר תאריך החזרה – סגור את הלוח לאחר שנייה
+                            if (eqMode === 'end') {
+                                setTimeout(function () {
+                                    eqPanel.style.display = 'none';
+                                }, 1000);
+                            }
                         });
                     }
 
-                    if (selectedStartDate && dateObj.getTime() === selectedStartDate.getTime()) {
-                        classes.push('selected');
-                    }
-                    if (selectedEndDate && dateObj.getTime() === selectedEndDate.getTime()) {
-                        classes.push('selected');
+                    // סימון בטווח שנבחר (מתאריך התחלה ועד תאריך סיום) בצבע שחור
+                    if (selectedStartDate && selectedEndDate) {
+                        if (dateObj >= selectedStartDate && dateObj <= selectedEndDate) {
+                            classes.push('selected');
+                        }
+                    } else if (selectedStartDate && !selectedEndDate) {
+                        if (dateObj.getTime() === selectedStartDate.getTime()) {
+                            classes.push('selected');
+                        }
+                    } else if (!selectedStartDate && selectedEndDate) {
+                        if (dateObj.getTime() === selectedEndDate.getTime()) {
+                            classes.push('selected');
+                        }
                     }
 
                     cell.className = classes.join(' ');
