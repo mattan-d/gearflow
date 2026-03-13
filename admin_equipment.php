@@ -268,9 +268,9 @@ if ($componentsEquipmentId > 0) {
 
 // Reload list after changes + סינון
 $searchTerm      = trim($_GET['q'] ?? '');
-$filterCategory  = trim($_GET['filter_category'] ?? '');
 $filterStatus    = trim($_GET['filter_status'] ?? '');
 $filterWarehouse = trim($_GET['filter_warehouse'] ?? '');
+$equipmentTab    = trim((string)($_GET['equipment_tab'] ?? 'all'));
 
 $sql = 'SELECT id, name, code, description, category, location, quantity_total, quantity_available, status, picture, created_at, updated_at
         FROM equipment';
@@ -280,10 +280,6 @@ $params     = [];
 if ($searchTerm !== '') {
     $conditions[]        = 'name LIKE :search';
     $params[':search']   = $searchTerm . '%';
-}
-if ($filterCategory !== '') {
-    $conditions[]        = 'category = :cat';
-    $params[':cat']      = $filterCategory;
 }
 if ($filterStatus !== '') {
     $conditions[]        = 'status = :st';
@@ -311,7 +307,35 @@ $sql .= ' ORDER BY category ASC, name ASC';
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
-$equipmentList = $stmt->fetchAll();
+$allEquipment = $stmt->fetchAll();
+
+// Unique categories for tabs (empty => "אחר"), sorted; "אחר" last
+$uniqueCategories = [];
+foreach ($allEquipment as $item) {
+    $cat = trim((string)($item['category'] ?? ''));
+    $cat = $cat === '' ? 'אחר' : $cat;
+    $uniqueCategories[$cat] = true;
+}
+$uniqueCategories = array_keys($uniqueCategories);
+sort($uniqueCategories, SORT_LOCALE_STRING);
+if (in_array('אחר', $uniqueCategories, true)) {
+    $uniqueCategories = array_diff($uniqueCategories, ['אחר']);
+    $uniqueCategories[] = 'אחר';
+}
+
+// Filter by selected category tab
+if ($equipmentTab === '' || $equipmentTab === 'all') {
+    $equipmentList = $allEquipment;
+} else {
+    $equipmentList = [];
+    foreach ($allEquipment as $item) {
+        $cat = trim((string)($item['category'] ?? ''));
+        $cat = $cat === '' ? 'אחר' : $cat;
+        if ($cat === $equipmentTab) {
+            $equipmentList[] = $item;
+        }
+    }
+}
 
 // יצוא רשימת ציוד ל-CSV
 if (isset($_GET['export']) && $_GET['export'] === '1') {
