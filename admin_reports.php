@@ -132,25 +132,22 @@ $ordersChartMax = max(
             font-size: 0.9rem;
             color: #4b5563;
         }
-        .reports-tabs {
+        .tabs {
             display: inline-flex;
             border-radius: 999px;
             background: #e5e7eb;
             padding: 0.2rem;
             margin-bottom: 1rem;
         }
-        .reports-tab {
+        .tabs a {
             padding: 0.35rem 1.1rem;
             border-radius: 999px;
             font-size: 0.82rem;
-            cursor: pointer;
-            color: #374151;
-            background: transparent;
-            border: none;
             text-decoration: none;
+            color: #374151;
             transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
         }
-        .reports-tab.active {
+        .tabs a.active {
             background: #111827;
             color: #f9fafb;
             font-weight: 600;
@@ -303,10 +300,10 @@ $ordersChartMax = max(
     <div class="card">
         <h2>דוחות</h2>
 
-        <div class="reports-tabs">
-            <button type="button" class="reports-tab<?= $activeTab === 'users' ? ' active' : '' ?>" data-target="reports-users">דוחות משתמשים</button>
-            <button type="button" class="reports-tab<?= $activeTab === 'orders' ? ' active' : '' ?>" data-target="reports-orders">דוחות הזמנות</button>
-            <button type="button" class="reports-tab<?= $activeTab === 'equipment' ? ' active' : '' ?>" data-target="reports-equipment">דוחות ציוד</button>
+        <div class="tabs">
+            <a href="admin_reports.php?tab=users" class="<?= $activeTab === 'users' ? 'active' : '' ?>">דוחות משתמשים</a>
+            <a href="admin_reports.php?tab=orders" class="<?= $activeTab === 'orders' ? 'active' : '' ?>">דוחות הזמנות</a>
+            <a href="admin_reports.php?tab=equipment" class="<?= $activeTab === 'equipment' ? 'active' : '' ?>">דוחות ציוד</a>
         </div>
 
         <div id="reports-users" class="reports-section<?= $activeTab === 'users' ? ' active' : '' ?>">
