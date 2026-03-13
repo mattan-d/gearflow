@@ -66,15 +66,14 @@ if (!$doc) {
     <main>
         <div class="sheet">
             <h2><?= htmlspecialchars($doc['title'] ?? '', ENT_QUOTES, 'UTF-8') ?></h2>
-            <pre><?= htmlspecialchars($doc['content'] ?? '', ENT_QUOTES, 'UTF-8') ?></pre>
+            <pre><?= $doc['content'] ?? '' ?></pre>
         </div>
     </main>
 <?php else: ?>
     <main>
         <div class="sheet">
             <h2><?= htmlspecialchars($doc['title'] ?? '', ENT_QUOTES, 'UTF-8') ?></h2>
-            <pre><?= htmlspecialchars($doc['content'] ?? '', ENT_QUOTES, 'UTF-8') ?></pre>
-        </div>
+            <pre><?= $doc['content'] ?? '' ?></pre>
     </main>
 <?php endif; ?>
 </body>
