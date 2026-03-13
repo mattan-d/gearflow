@@ -882,6 +882,43 @@ $ordersStmt = $pdo->prepare($ordersSql);
 $ordersStmt->execute($params);
 $orders = $ordersStmt->fetchAll();
 
+// רכיבי ציוד – נטען לכל הציוד שמופיע ברשימת ההזמנות (לטובת טאב "היום")
+$orderEquipmentIds = [];
+foreach ($orders as $row) {
+    if (isset($row['equipment_code']) && $row['equipment_code'] !== null) {
+        // נזהה לפי code, אחר כך נמצא id
+        $orderEquipmentIds[] = (string)$row['equipment_code'];
+    }
+}
+$orderEquipmentIds = array_values(array_unique($orderEquipmentIds));
+
+$equipmentComponentsByCode = [];
+if (!empty($orderEquipmentIds)) {
+    $placeholders = implode(',', array_fill(0, count($orderEquipmentIds), '?'));
+    $stmtEqForComp = $pdo->prepare(
+        "SELECT e.code AS equipment_code, c.name, c.quantity
+         FROM equipment_components c
+         JOIN equipment e ON e.id = c.equipment_id
+         WHERE e.code IN ($placeholders)
+         ORDER BY c.name ASC"
+    );
+    $stmtEqForComp->execute($orderEquipmentIds);
+    $rowsComp = $stmtEqForComp->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rowsComp as $cRow) {
+        $code = (string)($cRow['equipment_code'] ?? '');
+        if ($code === '') {
+            continue;
+        }
+        if (!isset($equipmentComponentsByCode[$code])) {
+            $equipmentComponentsByCode[$code] = [];
+        }
+        $equipmentComponentsByCode[$code][] = [
+            'name'     => (string)($cRow['name'] ?? ''),
+            'quantity' => (int)($cRow['quantity'] ?? 1),
+        ];
+    }
+}
+
 // רשימת סטודנטים (משתתפים) לשדה החיפוש של "שם שואל"
 // רשימת סטודנטים לבחירה של אדמין / מנהל מחסן בלבד (כולל פרטי קשר)
 $students = [];
@@ -1884,10 +1921,29 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             <?php endif; ?>
                         </td>
                         <td>
-                            <?= htmlspecialchars($order['equipment_name'], ENT_QUOTES, 'UTF-8') ?><br>
+                            <?php
+                            $code = (string)($order['equipment_code'] ?? '');
+                            $components = $equipmentComponentsByCode[$code] ?? [];
+                            $hasComponents = !empty($components);
+                            ?>
+                            <?php if ($hasComponents): ?>
+                                <a href="#"
+                                   class="equipment-components-link"
+                                   data-equipment-code="<?= htmlspecialchars($code, ENT_QUOTES, 'UTF-8') ?>">
+                                    <?= htmlspecialchars($order['equipment_name'], ENT_QUOTES, 'UTF-8') ?>
+                                </a>
+                            <?php else: ?>
+                                <?= htmlspecialchars($order['equipment_name'], ENT_QUOTES, 'UTF-8') ?>
+                            <?php endif; ?>
+                            <br>
                             <span class="muted-small">
-                                <?= htmlspecialchars($order['equipment_code'], ENT_QUOTES, 'UTF-8') ?>
+                                <?= htmlspecialchars($code, ENT_QUOTES, 'UTF-8') ?>
                             </span>
+                            <?php if ($hasComponents): ?>
+                                <script type="application/json" data-components-for="<?= htmlspecialchars($code, ENT_QUOTES, 'UTF-8') ?>">
+                                    <?= json_encode($components, JSON_UNESCAPED_UNICODE) ?>
+                                </script>
+                            <?php endif; ?>
                         </td>
                         <td>
                             <?php
@@ -2931,6 +2987,141 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     updateSelectedEquipmentSummary();
     renderCalendar();
 })();
+</script>
+<script>
+    // מודאל לרכיבי פריט (צ'ק ליסט)
+    (function () {
+        var links = document.querySelectorAll('.equipment-components-link');
+        if (!links.length) return;
+
+        var modal = document.getElementById('order_components_modal');
+        var backdrop, card, listContainer, closeBtn;
+
+        function ensureModal() {
+            if (modal) return;
+            backdrop = document.createElement('div');
+            backdrop.id = 'order_components_modal';
+            backdrop.style.position = 'fixed';
+            backdrop.style.inset = '0';
+            backdrop.style.background = 'rgba(15,23,42,0.45)';
+            backdrop.style.display = 'flex';
+            backdrop.style.alignItems = 'center';
+            backdrop.style.justifyContent = 'center';
+            backdrop.style.zIndex = '60';
+
+            card = document.createElement('div');
+            card.style.background = '#ffffff';
+            card.style.borderRadius = '16px';
+            card.style.boxShadow = '0 25px 60px rgba(15,23,42,0.45)';
+            card.style.maxWidth = '480px';
+            card.style.width = '95%';
+            card.style.maxHeight = '80vh';
+            card.style.overflowY = 'auto';
+            card.style.padding = '1.25rem 1.5rem 1.25rem';
+
+            var header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
+            header.style.alignItems = 'center';
+            header.style.marginBottom = '0.75rem';
+
+            var title = document.createElement('h2');
+            title.textContent = 'רכיבי פריט';
+            title.style.margin = '0';
+            title.style.fontSize = '1.1rem';
+            header.appendChild(title);
+
+            closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.textContent = '✕';
+            closeBtn.style.border = 'none';
+            closeBtn.style.background = 'transparent';
+            closeBtn.style.cursor = 'pointer';
+            closeBtn.style.fontSize = '1.1rem';
+            header.appendChild(closeBtn);
+
+            card.appendChild(header);
+
+            listContainer = document.createElement('div');
+            card.appendChild(listContainer);
+
+            backdrop.appendChild(card);
+            document.body.appendChild(backdrop);
+
+            function hide() {
+                backdrop.style.display = 'none';
+            }
+
+            closeBtn.addEventListener('click', hide);
+            backdrop.addEventListener('click', function (e) {
+                if (e.target === backdrop) hide();
+            });
+
+            modal = backdrop;
+            modal._listContainer = listContainer;
+        }
+
+        function openModalForCode(code) {
+            ensureModal();
+            var container = modal._listContainer;
+            container.innerHTML = '';
+
+            var dataEl = document.querySelector('script[data-components-for="' + code + '"]');
+            if (!dataEl) {
+                var p = document.createElement('p');
+                p.textContent = 'אין רכיבים מוגדרים לפריט זה.';
+                container.appendChild(p);
+            } else {
+                try {
+                    var components = JSON.parse(dataEl.textContent || '[]') || [];
+                    if (!components.length) {
+                        var p2 = document.createElement('p');
+                        p2.textContent = 'אין רכיבים מוגדרים לפריט זה.';
+                        container.appendChild(p2);
+                    } else {
+                        var ul = document.createElement('ul');
+                        ul.style.listStyle = 'none';
+                        ul.style.padding = '0';
+                        ul.style.margin = '0';
+                        components.forEach(function (c) {
+                            var li = document.createElement('li');
+                            li.style.display = 'flex';
+                            li.style.alignItems = 'center';
+                            li.style.marginBottom = '0.25rem';
+
+                            var cb = document.createElement('input');
+                            cb.type = 'checkbox';
+                            cb.style.marginLeft = '0.4rem';
+
+                            var label = document.createElement('span');
+                            var qty = c.quantity && c.quantity > 1 ? ' (' + c.quantity + ')' : '';
+                            label.textContent = c.name + qty;
+
+                            li.appendChild(cb);
+                            li.appendChild(label);
+                            ul.appendChild(li);
+                        });
+                        container.appendChild(ul);
+                    }
+                } catch (e) {
+                    var p3 = document.createElement('p');
+                    p3.textContent = 'שגיאה בטעינת רכיבי הפריט.';
+                    container.appendChild(p3);
+                }
+            }
+
+            modal.style.display = 'flex';
+        }
+
+        links.forEach(function (link) {
+            link.addEventListener('click', function (e) {
+                e.preventDefault();
+                var code = link.getAttribute('data-equipment-code');
+                if (!code) return;
+                openModalForCode(code);
+            });
+        });
+    })();
 </script>
 <footer>
     © 2026 CentricApp LTD
