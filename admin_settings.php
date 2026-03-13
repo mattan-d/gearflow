@@ -157,19 +157,11 @@ try {
     $statusLabels = [];
 }
 
+require_once __DIR__ . '/admin_header.php';
+
 ?>
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <title>הגדרות מערכת - מערכת השאלת ציוד</title>
-    <style>
-        body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: #f3f4f6;
-            margin: 0;
-        }
-        main {
+<style>
+        main.settings-main {
             max-width: 900px;
             margin: 1.5rem auto 2rem;
             padding: 0 1rem;
@@ -283,10 +275,8 @@ try {
             font-weight: 600;
         }
     </style>
-</head>
-<body>
-<?php include __DIR__ . '/admin_header.php'; ?>
-<main>
+
+<main class="settings-main">
     <div class="card">
         <h2>הגדרות מערכת</h2>
         <?php if ($success !== ''): ?>
