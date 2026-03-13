@@ -130,13 +130,13 @@ if ($userId > 0) {
         border: none;
         background: transparent;
         cursor: pointer;
-        color: #9ca3af;
+        filter: grayscale(1);
         font-size: 1.1rem;
         position: relative;
         padding: 0;
     }
     .notif-bell-btn.has-unread {
-        color: #f97316;
+        color:rgb(201, 0, 0);
     }
     .notif-badge {
         position: absolute;
