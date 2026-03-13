@@ -115,24 +115,27 @@ if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
         }
         .reports-tabs {
             display: inline-flex;
-            gap: 0.5rem;
-            border-bottom: 1px solid #e5e7eb;
+            border-radius: 999px;
+            background: #e5e7eb;
+            padding: 0.2rem;
             margin-bottom: 1rem;
         }
         .reports-tab {
-            padding: 0.4rem 0.9rem;
-            border-radius: 999px 999px 0 0;
-            font-size: 0.9rem;
+            padding: 0.35rem 1.1rem;
+            border-radius: 999px;
+            font-size: 0.82rem;
             cursor: pointer;
-            color: #4b5563;
-            background: #f3f4f6;
-            border: 1px solid transparent;
-            border-bottom: none;
+            color: #374151;
+            background: transparent;
+            border: none;
+            text-decoration: none;
+            transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
         }
         .reports-tab.active {
-            background: #ffffff;
-            color: #111827;
-            border-color: #e5e7eb;
+            background: #111827;
+            color: #f9fafb;
+            font-weight: 600;
+            box-shadow: 0 4px 10px rgba(15,23,42,0.25);
         }
         .reports-section {
             display: none;
