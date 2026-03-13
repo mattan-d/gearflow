@@ -466,6 +466,27 @@ $me = current_user();
             font-weight: 600;
             color: #111827;
         }
+        .tabs {
+            display: inline-flex;
+            border-radius: 999px;
+            background: #e5e7eb;
+            padding: 0.2rem;
+            margin-bottom: 1rem;
+        }
+        .tabs a {
+            padding: 0.35rem 1.1rem;
+            border-radius: 999px;
+            font-size: 0.82rem;
+            text-decoration: none;
+            color: #374151;
+            transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .tabs a.active {
+            background: #111827;
+            color: #f9fafb;
+            font-weight: 600;
+            box-shadow: 0 4px 10px rgba(15,23,42,0.25);
+        }
         label {
             display: block;
             margin-bottom: 0.3rem;
@@ -739,21 +760,12 @@ $me = current_user();
     <div class="equipment-filters">
         <div class="equipment-filters-inner">
             <form method="get" action="admin_equipment.php">
+                <input type="hidden" name="equipment_tab" value="<?= htmlspecialchars($equipmentTab === 'all' ? '' : $equipmentTab, ENT_QUOTES, 'UTF-8') ?>">
                 <div class="filter-group">
                     <label for="filter_q">חיפוש לפי שם ציוד</label>
                     <input type="text" id="filter_q" name="q"
                            value="<?= htmlspecialchars($searchTerm ?? '', ENT_QUOTES, 'UTF-8') ?>"
                            placeholder="הקלד תחילת שם הציוד">
-                </div>
-                <div class="filter-group">
-                    <label for="filter_category">קטגוריה</label>
-                    <select id="filter_category" name="filter_category">
-                        <option value="">כל הקטגוריות</option>
-                        <option value="מצלמה"   <?= ($filterCategory ?? '') === 'מצלמה'   ? 'selected' : '' ?>>מצלמה</option>
-                        <option value="מיקרופון" <?= ($filterCategory ?? '') === 'מיקרופון' ? 'selected' : '' ?>>מיקרופון</option>
-                        <option value="חצובה"   <?= ($filterCategory ?? '') === 'חצובה'   ? 'selected' : '' ?>>חצובה</option>
-                        <option value="תאורה"   <?= ($filterCategory ?? '') === 'תאורה'   ? 'selected' : '' ?>>תאורה</option>
-                    </select>
                 </div>
                 <div class="filter-group">
                     <label for="filter_status">סטטוס</label>
@@ -948,23 +960,32 @@ $me = current_user();
 
     <div class="card">
         <h2>רשימת ציוד במחסן</h2>
-        <?php if (count($equipmentList) === 0): ?>
+        <?php
+        $tabBaseParams = array_filter([
+            'q' => $searchTerm !== '' ? $searchTerm : null,
+            'filter_status' => $filterStatus !== '' ? $filterStatus : null,
+            'filter_warehouse' => $filterWarehouse !== '' ? $filterWarehouse : null,
+        ]);
+        $tabBaseQuery = http_build_query($tabBaseParams);
+        $tabBaseUrl = 'admin_equipment.php' . ($tabBaseQuery !== '' ? '?' . $tabBaseQuery : '');
+        ?>
+        <?php if (count($allEquipment) === 0): ?>
             <p class="muted-small">עדיין לא הוגדר ציוד במערכת.</p>
         <?php else: ?>
-            <?php
-            $groupedByCategory = [];
-            foreach ($equipmentList as $item) {
-                $cat = trim((string)($item['category'] ?? 'אחר'));
-                if ($cat === '') {
-                    $cat = 'אחר';
-                }
-                $groupedByCategory[$cat][] = $item;
-            }
-            ?>
-            <?php foreach ($groupedByCategory as $categoryName => $items): ?>
-                <div class="category-title">
-                    קטגוריה: <?= htmlspecialchars($categoryName, ENT_QUOTES, 'UTF-8') ?>
-                </div>
+            <div class="tabs">
+                <a href="<?= htmlspecialchars($tabBaseUrl, ENT_QUOTES, 'UTF-8') ?>"
+                   class="<?= ($equipmentTab === 'all' || $equipmentTab === '') ? 'active' : '' ?>">הכל</a>
+                <?php foreach ($uniqueCategories as $catName): ?>
+                    <?php
+                    $tabUrl = $tabBaseUrl . (strpos($tabBaseUrl, '?') !== false ? '&' : '?') . 'equipment_tab=' . rawurlencode($catName);
+                    ?>
+                    <a href="<?= htmlspecialchars($tabUrl, ENT_QUOTES, 'UTF-8') ?>"
+                       class="<?= $equipmentTab === $catName ? 'active' : '' ?>"><?= htmlspecialchars($catName, ENT_QUOTES, 'UTF-8') ?></a>
+                <?php endforeach; ?>
+            </div>
+            <?php if (count($equipmentList) === 0): ?>
+                <p class="muted-small">אין פריטים בקטגוריה זו.</p>
+            <?php else: ?>
                 <table>
                     <thead>
                     <tr>
@@ -977,10 +998,17 @@ $me = current_user();
                     </tr>
                     </thead>
                     <tbody>
-                    <?php foreach ($items as $item): ?>
+                    <?php foreach ($equipmentList as $item): ?>
                         <tr>
                             <td>
-                                <a href="admin_equipment.php?components_for=<?= (int)$item['id'] ?>"
+                                <?php
+                                $linkParams = array_merge(
+                                    ['components_for' => (int)$item['id']],
+                                    $tabBaseParams,
+                                    ($equipmentTab !== 'all' && $equipmentTab !== '') ? ['equipment_tab' => $equipmentTab] : []
+                                );
+                                ?>
+                                <a href="admin_equipment.php?<?= http_build_query($linkParams) ?>"
                                    class="muted-small"
                                    title="הצגת רכיבי הפריט">
                                     <?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>
@@ -1015,7 +1043,8 @@ $me = current_user();
                             </td>
                             <td>
                                 <div class="row-actions">
-                                    <a href="admin_equipment.php?edit_id=<?= (int)$item['id'] ?>" class="icon-btn" title="עריכה">
+                                    <?php $editParams = array_merge(['edit_id' => (int)$item['id']], $tabBaseParams, ($equipmentTab !== 'all' && $equipmentTab !== '') ? ['equipment_tab' => $equipmentTab] : []); ?>
+                                    <a href="admin_equipment.php?<?= http_build_query($editParams) ?>" class="icon-btn" title="עריכה">
                                         ✏️
                                     </a>
                                     <form method="post" action="admin_equipment.php" onsubmit="return confirm('למחוק את הפריט הזה?');">
@@ -1029,7 +1058,7 @@ $me = current_user();
                     <?php endforeach; ?>
                     </tbody>
                 </table>
-            <?php endforeach; ?>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 </main>
