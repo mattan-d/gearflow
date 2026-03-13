@@ -35,10 +35,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $location     = trim($_POST['location'] ?? '');
         $status       = $_POST['status'] ?? 'active';
 
-        // ניהול תמונה: שמירה / החלפה של קובץ שהועלה לשרת
+        // ניהול תמונה: שמירה / מחיקה / החלפה של קובץ שהועלה לשרת
         $picturePath = '';
         if ($id > 0 && $editingEquipment !== null) {
             $picturePath = (string)($editingEquipment['picture'] ?? '');
+        }
+        // מחיקת תמונה קיימת לפי בקשת המשתמש
+        $deletePicture = isset($_POST['delete_picture']) && $_POST['delete_picture'] === '1';
+        if ($deletePicture && $picturePath !== '') {
+            $fullOld = __DIR__ . '/' . ltrim($picturePath, '/\\');
+            if (is_file($fullOld)) {
+                @unlink($fullOld);
+            }
+            $picturePath = '';
         }
         if (isset($_FILES['picture_file']) && is_array($_FILES['picture_file']) && ($_FILES['picture_file']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
             $tmpName = (string)($_FILES['picture_file']['tmp_name'] ?? '');
@@ -951,11 +960,13 @@ $me = current_user();
                         $existingPicture = is_string($existingPicture) ? trim($existingPicture) : '';
                         ?>
                         <?php if ($editingEquipment && $existingPicture !== ''): ?>
-                            <div class="muted-small" style="margin-bottom:0.35rem;">
+                            <div class="muted-small" id="existing_picture_row" style="margin-bottom:0.35rem;display:flex;align-items:center;gap:0.4rem;">
                                 <a href="<?= htmlspecialchars($existingPicture, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener">
                                     הצג תמונה קיימת
                                 </a>
+                                <button type="button" class="icon-btn" id="delete_picture_btn" title="מחיקת התמונה">✕</button>
                             </div>
+                            <input type="hidden" name="delete_picture" id="delete_picture" value="0">
                         <?php endif; ?>
                         <div style="display:flex;align-items:center;gap:0.5rem;">
                             <button type="button" class="btn secondary small" id="upload_picture_btn">טען תמונה</button>
@@ -1218,10 +1229,22 @@ document.addEventListener('DOMContentLoaded', function () {
     var componentsTableBody = document.getElementById('components_table_body');
     var uploadPictureBtn = document.getElementById('upload_picture_btn');
     var pictureFileInput = document.getElementById('picture_file');
+    var deletePictureBtn = document.getElementById('delete_picture_btn');
+    var deletePictureInput = document.getElementById('delete_picture');
+    var existingPictureRow = document.getElementById('existing_picture_row');
 
     if (uploadPictureBtn && pictureFileInput) {
         uploadPictureBtn.addEventListener('click', function () {
             pictureFileInput.click();
+        });
+    }
+
+    if (deletePictureBtn && deletePictureInput) {
+        deletePictureBtn.addEventListener('click', function () {
+            deletePictureInput.value = '1';
+            if (existingPictureRow) {
+                existingPictureRow.style.display = 'none';
+            }
         });
     }
 
