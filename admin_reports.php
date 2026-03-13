@@ -64,6 +64,19 @@ if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
     $ordersReport['not_returned_late'] = (int)($row['not_returned_late_count'] ?? 0);
 }
 
+// מקסימום לערכי גרף (למניעת חלוקה ב-0)
+$ordersChartMax = max(
+    1,
+    $ordersReport['total'],
+    $ordersReport['pending'],
+    $ordersReport['approved'],
+    $ordersReport['rejected'],
+    $ordersReport['on_loan'],
+    $ordersReport['returned'],
+    $ordersReport['not_picked'],
+    $ordersReport['not_returned_late']
+);
+
 ?>
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -224,6 +237,37 @@ if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
             padding: 0.35rem 0.5rem;
             text-align: right;
         }
+        .orders-report-bars {
+            margin-top: 1rem;
+            max-width: 520px;
+        }
+        .orders-report-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.4rem;
+            font-size: 0.85rem;
+        }
+        .orders-report-bar-label {
+            min-width: 140px;
+            color: #374151;
+        }
+        .orders-report-bar-track {
+            flex: 1;
+            background: #e5e7eb;
+            border-radius: 999px;
+            overflow: hidden;
+            height: 0.65rem;
+        }
+        .orders-report-bar-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #4f46e5, #6366f1);
+        }
+        .orders-report-bar-value {
+            min-width: 36px;
+            text-align: left;
+            color: #111827;
+        }
         .reports-tabs {
             display: inline-flex;
             gap: 0.5rem;
@@ -335,6 +379,31 @@ if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
                     </tr>
                     </tbody>
                 </table>
+                <div class="orders-report-bars">
+                    <?php
+                    $bars = [
+                        'כמות הזמנות (סה״כ)' => $ordersReport['total'],
+                        'ממתין'              => $ordersReport['pending'],
+                        'מאושר'              => $ordersReport['approved'],
+                        'נדחה'               => $ordersReport['rejected'],
+                        'בהשאלה'             => $ordersReport['on_loan'],
+                        'עבר'                => $ordersReport['returned'],
+                        'הוזמנו ולא נלקחו'   => $ordersReport['not_picked'],
+                        'לא הושבו בזמן'      => $ordersReport['not_returned_late'],
+                    ];
+                    foreach ($bars as $label => $val):
+                        $val = (int)$val;
+                        $pct = $ordersChartMax > 0 ? max(2, ($val / $ordersChartMax) * 100) : 0;
+                    ?>
+                        <div class="orders-report-bar">
+                            <div class="orders-report-bar-label"><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></div>
+                            <div class="orders-report-bar-track">
+                                <div class="orders-report-bar-fill" style="width: <?= $pct ?>%;"></div>
+                            </div>
+                            <div class="orders-report-bar-value"><?= $val ?></div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
             <?php endif; ?>
         </div>
 
