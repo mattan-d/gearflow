@@ -4,13 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 
-// נהלים גלויים רק למשתמש מחובר (סטודנט / מנהל)
-$me = current_user();
-if ($me === null) {
-    header('Location: login.php');
-    exit;
-}
-
+// מנסים לזהות משתמש מחובר – אבל גם בלי התחברות עדיין מציגים את המסמך
+$me  = current_user();
 $pdo = get_db();
 
 $id  = isset($_GET['id']) ? (int)$_GET['id'] : 0;
@@ -66,13 +61,22 @@ if (!$doc) {
     </style>
 </head>
 <body>
-<?php include __DIR__ . '/admin_header.php'; ?>
-<main>
-    <div class="sheet">
-        <h2><?= htmlspecialchars($doc['title'] ?? '', ENT_QUOTES, 'UTF-8') ?></h2>
-        <pre><?= htmlspecialchars($doc['content'] ?? '', ENT_QUOTES, 'UTF-8') ?></pre>
-    </div>
-</main>
+<?php if ($me !== null): ?>
+    <?php include __DIR__ . '/admin_header.php'; ?>
+    <main>
+        <div class="sheet">
+            <h2><?= htmlspecialchars($doc['title'] ?? '', ENT_QUOTES, 'UTF-8') ?></h2>
+            <pre><?= htmlspecialchars($doc['content'] ?? '', ENT_QUOTES, 'UTF-8') ?></pre>
+        </div>
+    </main>
+<?php else: ?>
+    <main>
+        <div class="sheet">
+            <h2><?= htmlspecialchars($doc['title'] ?? '', ENT_QUOTES, 'UTF-8') ?></h2>
+            <pre><?= htmlspecialchars($doc['content'] ?? '', ENT_QUOTES, 'UTF-8') ?></pre>
+        </div>
+    </main>
+<?php endif; ?>
 </body>
 </html>
 
