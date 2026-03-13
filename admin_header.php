@@ -99,7 +99,8 @@ try {
             </h1>
             <div class="muted">פלטפורמה לניהול השאלת ציוד</div>
         </div>
-        <nav class="main-nav">
+    </div>
+    <nav class="main-nav">
             <div class="main-nav-primary">
                 <?php if ($role === 'admin' || $role === 'warehouse_manager'): ?>
                     <a href="admin_equipment.php">ניהול ציוד</a>
@@ -130,7 +131,6 @@ try {
                 </div>
             </div>
         </nav>
-    </div>
     <div class="user-info">
         מחובר כ־<?= htmlspecialchars($me['username'] ?? '', ENT_QUOTES, 'UTF-8') ?>
         (<?= $role === 'admin' ? 'אדמין' : ($role === 'warehouse_manager' ? 'מנהל מחסן' : 'סטודנט') ?>)

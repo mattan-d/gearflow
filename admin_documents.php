@@ -344,6 +344,10 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
             font-size: 1rem;
             padding: 0.2rem;
             border-radius: 999px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
         }
         .edit-toggle-btn.inactive {
             color: #9ca3af;
