@@ -701,17 +701,19 @@ if (isset($_GET['edit_id'])) {
     <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:0.75rem;gap:1rem;">
             <h2 style="margin-bottom:0;">רשימת משתמשים</h2>
-            <form method="get" action="admin_users.php" style="display:flex;align-items:center;gap:0.5rem;">
-                <label for="user_search" style="margin:0;font-size:0.85rem;color:#374151;">סינון לפי שם פרטי / משפחה:</label>
-                <input
-                    type="text"
-                    id="user_search"
-                    name="q"
-                    value="<?= htmlspecialchars($nameFilter, ENT_QUOTES, 'UTF-8') ?>"
-                    placeholder="לדוגמה: א,ב או 'מיקי'"
-                    style="min-width:180px;padding:0.35rem 0.6rem;border-radius:999px;border:1px solid #d1d5db;font-size:0.85rem;"
-                >
-                <button type="submit" class="btn secondary" style="margin-top:0;">חיפוש</button>
+            <form method="get" action="admin_users.php" id="user_search_form" style="margin:0;">
+                <div style="position:relative;">
+                    <span style="position:absolute;left:0.6rem;top:50%;transform:translateY(-50%);font-size:0.9rem;color:#9ca3af;">🔍</span>
+                    <input
+                        type="text"
+                        id="user_search"
+                        name="q"
+                        value="<?= htmlspecialchars($nameFilter, ENT_QUOTES, 'UTF-8') ?>"
+                        placeholder="חיפוש לפי שם פרטי / משפחה"
+                        style="min-width:220px;padding:0.35rem 2.1rem 0.35rem 0.6rem;border-radius:999px;border:1px solid #d1d5db;font-size:0.85rem;direction:rtl;"
+                        autocomplete="off"
+                    >
+                </div>
             </form>
         </div>
         <table>
@@ -842,6 +844,23 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 });
+
+    // חיפוש משתמשים – דיליי של חצי שנייה אחרי הקלדה
+    (function () {
+        var searchInput = document.getElementById('user_search');
+        var form = document.getElementById('user_search_form');
+        if (!searchInput || !form) return;
+
+        var timerId = null;
+        searchInput.addEventListener('input', function () {
+            if (timerId !== null) {
+                clearTimeout(timerId);
+            }
+            timerId = setTimeout(function () {
+                form.submit();
+            }, 500);
+        });
+    })();
 </script>
 </body>
 </html>
