@@ -39,6 +39,7 @@ $daysLabels = [
 $success = '';
 $error   = '';
 
+// עדכון שעות ברירת מחדל
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['default_hours_submit'])) {
     try {
         $pdo->beginTransaction();
@@ -64,6 +65,96 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['default_hours_submit'
         $pdo->rollBack();
         $error = 'שגיאה בשמירת שעות ברירת המחדל.';
     }
+}
+
+// קטגוריות ציוד – קריאה ועריכה
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['category_action'])) {
+    $catAction = $_POST['category_action'];
+    if ($catAction === 'add') {
+        $newName = trim((string)($_POST['new_category_name'] ?? ''));
+        if ($newName === '') {
+            $error = $error ?: 'יש להזין שם קטגוריה חדש.';
+        } else {
+            try {
+                $stmtAdd = $pdo->prepare('INSERT OR IGNORE INTO equipment_categories (name) VALUES (:n)');
+                $stmtAdd->execute([':n' => $newName]);
+                $success = 'הקטגוריה נוספה בהצלחה.';
+            } catch (Throwable $e) {
+                $error = 'שגיאה בהוספת קטגוריה.';
+            }
+        }
+    } elseif ($catAction === 'rename') {
+        $id      = (int)($_POST['category_id'] ?? 0);
+        $oldName = trim((string)($_POST['old_name'] ?? ''));
+        $newName = trim((string)($_POST['category_name'] ?? ''));
+        if ($id <= 0 || $oldName === '' || $newName === '') {
+            $error = $error ?: 'יש להזין שם חדש תקין לקטגוריה.';
+        } else {
+            try {
+                $pdo->beginTransaction();
+                $stmtUp = $pdo->prepare('UPDATE equipment_categories SET name = :n WHERE id = :id');
+                $stmtUp->execute([':n' => $newName, ':id' => $id]);
+                // עדכון בציוד קיים
+                $stmtEq = $pdo->prepare('UPDATE equipment SET category = :new WHERE category = :old');
+                $stmtEq->execute([':new' => $newName, ':old' => $oldName]);
+                $pdo->commit();
+                $success = 'שם הקטגוריה עודכן בהצלחה.';
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                $error = 'שגיאה בעדכון שם הקטגוריה.';
+            }
+        }
+    } elseif ($catAction === 'delete') {
+        $id   = (int)($_POST['category_id'] ?? 0);
+        $name = trim((string)($_POST['old_name'] ?? ''));
+        if ($id > 0 && $name !== '') {
+            try {
+                $pdo->beginTransaction();
+                $stmtDel = $pdo->prepare('DELETE FROM equipment_categories WHERE id = :id');
+                $stmtDel->execute([':id' => $id]);
+                // ניקוי ערך הקטגוריה בציוד
+                $stmtEq = $pdo->prepare('UPDATE equipment SET category = NULL WHERE category = :name');
+                $stmtEq->execute([':name' => $name]);
+                $pdo->commit();
+                $success = 'הקטגוריה נמחקה בהצלחה.';
+            } catch (Throwable $e) {
+                $pdo->rollBack();
+                $error = 'שגיאה במחיקת קטגוריה.';
+            }
+        }
+    }
+}
+
+// קריאת קטגוריות
+$categories = [];
+try {
+    $stmtCats = $pdo->query('SELECT id, name FROM equipment_categories ORDER BY name ASC');
+    $categories = $stmtCats->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Throwable $e) {
+    $categories = [];
+}
+
+// סטטוסי הזמנה – קריאה ועריכה
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['status_action']) && $_POST['status_action'] === 'rename_status') {
+    $code    = trim((string)($_POST['status_code'] ?? ''));
+    $newLabel = trim((string)($_POST['status_label'] ?? ''));
+    if ($code !== '' && $newLabel !== '') {
+        try {
+            $stmtS = $pdo->prepare('INSERT OR REPLACE INTO order_status_labels (status, label_he) VALUES (:s, :l)');
+            $stmtS->execute([':s' => $code, ':l' => $newLabel]);
+            $success = 'שם הסטטוס עודכן בהצלחה.';
+        } catch (Throwable $e) {
+            $error = 'שגיאה בעדכון שם הסטטוס.';
+        }
+    }
+}
+
+$statusLabels = [];
+try {
+    $stmtSL = $pdo->query('SELECT status, label_he FROM order_status_labels ORDER BY status ASC');
+    $statusLabels = $stmtSL->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Throwable $e) {
+    $statusLabels = [];
 }
 
 ?>
@@ -146,6 +237,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['default_hours_submit'
             cursor: pointer;
             margin-top: 0.75rem;
         }
+        .btn.small {
+            padding: 0.25rem 0.7rem;
+            font-size: 0.8rem;
+            margin-top: 0;
+        }
+        .category-section {
+            margin-top: 1.75rem;
+        }
+        table.category-table {
+            width: 100%;
+            max-width: 520px;
+            border-collapse: collapse;
+            margin-top: 0.5rem;
+        }
+        table.category-table th,
+        table.category-table td {
+            border: 1px solid #e5e7eb;
+            padding: 0.35rem 0.5rem;
+            font-size: 0.9rem;
+            text-align: right;
+        }
+        table.category-table th {
+            background: #f9fafb;
+            font-weight: 600;
+        }
+        .status-section {
+            margin-top: 1.75rem;
+        }
+        table.status-table {
+            width: 100%;
+            max-width: 520px;
+            border-collapse: collapse;
+            margin-top: 0.5rem;
+        }
+        table.status-table th,
+        table.status-table td {
+            border: 1px solid #e5e7eb;
+            padding: 0.35rem 0.5rem;
+            font-size: 0.9rem;
+            text-align: right;
+        }
+        table.status-table th {
+            background: #f9fafb;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -193,6 +329,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['default_hours_submit'
             </table>
             <button type="submit" class="btn" name="default_hours_submit" value="1">שמירת שעות ברירת מחדל</button>
         </form>
+
+        <div class="category-section">
+            <h3 style="margin-top:1.5rem;margin-bottom:0.5rem;font-size:1.05rem;">קטגוריות ציוד</h3>
+            <p class="muted-small">
+                רשימת קטגוריות הציוד הזמינות בטפסים. ניתן לשנות שם לקטגוריה, להוסיף קטגוריה חדשה או למחוק קטגוריה קיימת.
+            </p>
+
+            <table class="category-table">
+                <thead>
+                <tr>
+                    <th style="width:60%;">שם קטגוריה</th>
+                    <th>פעולות</th>
+                </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($categories as $cat): ?>
+                    <tr>
+                        <td>
+                            <form method="post" action="admin_settings.php" style="display:flex;align-items:center;gap:0.4rem;margin:0;">
+                                <input type="hidden" name="category_action" value="rename">
+                                <input type="hidden" name="category_id" value="<?= (int)($cat['id'] ?? 0) ?>">
+                                <input type="hidden" name="old_name" value="<?= htmlspecialchars((string)($cat['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                <input type="text"
+                                       name="category_name"
+                                       value="<?= htmlspecialchars((string)($cat['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                       style="flex:1;padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;">
+                                <button type="submit" class="btn small">שמור</button>
+                            </form>
+                        </td>
+                        <td style="text-align:center;">
+                            <form method="post" action="admin_settings.php" style="margin:0;"
+                                  onsubmit="return confirm('למחוק את הקטגוריה \"<?= htmlspecialchars((string)($cat['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>\"? ציוד המשויך אליה יאבד את שיוך הקטגוריה.');">
+                                <input type="hidden" name="category_action" value="delete">
+                                <input type="hidden" name="category_id" value="<?= (int)($cat['id'] ?? 0) ?>">
+                                <input type="hidden" name="old_name" value="<?= htmlspecialchars((string)($cat['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                <button type="submit" class="btn small" style="background:#f87171;">מחיקה</button>
+                            </form>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                <tr>
+                    <td colspan="2">
+                        <form method="post" action="admin_settings.php" style="display:flex;align-items:center;gap:0.4rem;margin:0;">
+                            <input type="hidden" name="category_action" value="add">
+                            <input type="text" name="new_category_name"
+                                   placeholder="שם קטגוריה חדש"
+                                   style="flex:1;padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;">
+                            <button type="submit" class="btn small">הוספת קטגוריה</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 </main>
 </body>

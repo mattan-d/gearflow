@@ -222,6 +222,48 @@ function initialize_database(PDO $pdo): void
         }
     }
 
+    // טבלת קטגוריות ציוד
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS equipment_categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE
+        )
+    ");
+    $catRows = $pdo->query("SELECT COUNT(*) AS cnt FROM equipment_categories")->fetch(PDO::FETCH_ASSOC);
+    if ((int)($catRows['cnt'] ?? 0) === 0) {
+        // מילוי ראשוני מקטגוריות קיימות בציוד
+        $existingCats = $pdo->query("SELECT DISTINCT category FROM equipment WHERE category IS NOT NULL AND TRIM(category) != '' ORDER BY category ASC")->fetchAll(PDO::FETCH_COLUMN);
+        $insertCat = $pdo->prepare("INSERT OR IGNORE INTO equipment_categories (name) VALUES (:n)");
+        foreach ($existingCats as $cName) {
+            $insertCat->execute([':n' => (string)$cName]);
+        }
+        // ואם אין כלום – נוסיף קטגוריות בסיסיות
+        if (empty($existingCats)) {
+            foreach (['מצלמה', 'מיקרופון', 'חצובה', 'תאורה'] as $baseCat) {
+                $insertCat->execute([':n' => $baseCat]);
+            }
+        }
+    }
+
+    // טבלת תוויות סטטוסי הזמנה (לשינוי שם בעברית מבלי לפגוע בקוד)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS order_status_labels (
+            status TEXT PRIMARY KEY,
+            label_he TEXT NOT NULL
+        )
+    ");
+    $statusDefaults = [
+        'pending'     => 'ממתין',
+        'approved'    => 'מאושר',
+        'on_loan'     => 'בהשאלה',
+        'returned'    => 'עבר',
+        'rejected'    => 'נדחה',
+    ];
+    foreach ($statusDefaults as $code => $label) {
+        $stmt = $pdo->prepare('INSERT OR IGNORE INTO order_status_labels (status, label_he) VALUES (:s, :l)');
+        $stmt->execute([':s' => $code, ':l' => $label]);
+    }
+
     // Ensure default admin user exists: admin / admin
     $stmt = $pdo->prepare('SELECT COUNT(*) AS cnt FROM users WHERE username = :username');
     $stmt->execute([':username' => 'admin']);

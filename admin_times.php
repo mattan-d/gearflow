@@ -32,19 +32,33 @@ foreach ($rows as $row) {
     $openMatrix[$d][$h] = true;
 }
 
-// אם אין נתונים למחסן – ברירת מחדל: ראשון–חמישי 9–16 פתוח
+// אם אין נתונים למחסן – ברירת מחדל לפי default_hours (או 9–16)
 if (empty($rows)) {
     $pdo->beginTransaction();
     try {
+        // קריאת שעות ברירת מחדל
+        $def = [];
+        $stmtDef = $pdo->query('SELECT day_of_week, open_time, close_time FROM default_hours ORDER BY day_of_week ASC');
+        foreach ($stmtDef->fetchAll(PDO::FETCH_ASSOC) as $rowDef) {
+            $d = (int)($rowDef['day_of_week'] ?? 0);
+            $openT  = (string)($rowDef['open_time'] ?? '09:00');
+            $closeT = (string)($rowDef['close_time'] ?? '16:00');
+            $def[$d] = ['open' => $openT, 'close' => $closeT];
+        }
+
         $ins = $pdo->prepare('INSERT OR IGNORE INTO warehouse_hours (warehouse, day_of_week, hour) VALUES (:w, :d, :h)');
         foreach (array_keys($days) as $d) {
+            $openH  = isset($def[$d]) ? (int)substr($def[$d]['open'], 0, 2) : 9;
+            $closeH = isset($def[$d]) ? (int)substr($def[$d]['close'], 0, 2) : 16;
             foreach ($hours as $h) {
-                $ins->execute([
-                    ':w' => $selectedWarehouse,
-                    ':d' => $d,
-                    ':h' => $h,
-                ]);
-                $openMatrix[$d][$h] = true;
+                if ($h >= $openH && $h <= $closeH) {
+                    $ins->execute([
+                        ':w' => $selectedWarehouse,
+                        ':d' => $d,
+                        ':h' => $h,
+                    ]);
+                    $openMatrix[$d][$h] = true;
+                }
             }
         }
         $pdo->commit();
