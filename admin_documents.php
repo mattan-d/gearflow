@@ -457,7 +457,76 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $currentCustom = $stmtView->fetch(PDO::FETCH_ASSOC) ?: null;
             ?>
             <?php if ($currentCustom): ?>
-                <?php if ($canEdit && $editMode): ?>
+                <?php
+                $isHoursDoc = trim((string)($currentCustom['title'] ?? '')) === 'שעות פתיחת מחסן';
+                ?>
+                <?php if ($isHoursDoc): ?>
+                    <?php
+                    // טבלת שעות פתיחה לפי מחסן – כמו ב-document_view
+                    $warehouse  = trim((string)($me['warehouse'] ?? 'מחסן א'));
+                    $days       = ['א', 'ב', 'ג', 'ד', 'ה']; // ראשון–חמישי
+                    $hours      = range(9, 16);             // 09:00–16:00
+                    $openMatrix = [];
+                    try {
+                        $stmtH = $pdo->prepare('SELECT day_of_week, hour FROM warehouse_hours WHERE warehouse = :w');
+                        $stmtH->execute([':w' => $warehouse]);
+                        $rowsH = $stmtH->fetchAll(PDO::FETCH_ASSOC);
+                        if ($rowsH) {
+                            foreach ($rowsH as $rowH) {
+                                $d = (int)($rowH['day_of_week'] ?? 0);
+                                $h = (int)($rowH['hour'] ?? 0);
+                                $openMatrix[$d][$h] = true;
+                            }
+                        } else {
+                            foreach (array_keys($days) as $d) {
+                                foreach ($hours as $h) {
+                                    $openMatrix[$d][$h] = true;
+                                }
+                            }
+                        }
+                    } catch (Throwable $e) {
+                        // במקרה של שגיאה בטעינת שעות – פשוט לא מציגים טבלה
+                        $openMatrix = [];
+                    }
+                    ?>
+                    <div class="doc-view">
+                        <div class="muted-small" style="margin-bottom:0.5rem;">
+                            שעות פתיחת <?= htmlspecialchars($warehouse, ENT_QUOTES, 'UTF-8') ?>.
+                        </div>
+                        <?php if (!empty($openMatrix)): ?>
+                            <div class="hours-table-wrapper">
+                                <table class="hours-table">
+                                    <thead>
+                                    <tr>
+                                        <th>שעה</th>
+                                        <?php foreach ($days as $label): ?>
+                                            <th><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></th>
+                                        <?php endforeach; ?>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    <?php foreach ($hours as $h): ?>
+                                        <tr>
+                                            <td><?= sprintf('%02d:00', $h) ?></td>
+                                            <?php foreach (array_keys($days) as $d): ?>
+                                                <?php $open = !empty($openMatrix[$d][$h]); ?>
+                                                <td class="<?= $open ? 'slot-open' : 'slot-closed' ?>">
+                                                    <?= $open ? 'פתוח' : 'סגור' ?>
+                                                </td>
+                                            <?php endforeach; ?>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="hours-legend">
+                                כחול בהיר = שעה פתוחה, אפור בהיר = שעה סגורה.
+                            </div>
+                        <?php else: ?>
+                            <div class="muted-small">לא נמצאו הגדרות שעות פתיחה למחסן זה.</div>
+                        <?php endif; ?>
+                    </div>
+                <?php elseif ($canEdit && $editMode): ?>
                     <div class="doc-editor">
                         <form method="post" action="admin_documents.php?custom_id=<?= (int)$currentCustom['id'] ?>">
                             <input type="hidden" name="action" value="update_custom">
