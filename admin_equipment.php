@@ -694,7 +694,6 @@ $me = current_user();
             align-items: center;
             justify-content: center;
             font-size: 0.8rem;
-            background: #f3f4f6;
         }
         .date-picker-panel {
             border-radius: 10px;
