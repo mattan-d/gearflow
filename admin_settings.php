@@ -157,10 +157,13 @@ try {
     $statusLabels = [];
 }
 
-require_once __DIR__ . '/admin_header.php';
-
 ?>
-<style>
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>הגדרות מערכת - מערכת השאלת ציוד</title>
+    <style>
         main.settings-main {
             max-width: 900px;
             margin: 1.5rem auto 2rem;
@@ -275,7 +278,9 @@ require_once __DIR__ . '/admin_header.php';
             font-weight: 600;
         }
     </style>
-
+</head>
+<body>
+<?php include __DIR__ . '/admin_header.php'; ?>
 <main class="settings-main">
     <div class="card">
         <h2>הגדרות מערכת</h2>
