@@ -364,6 +364,41 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
             font-size: 0.9rem;
             white-space: pre-wrap;
         }
+        .hours-table-wrapper {
+            overflow-x: auto;
+            margin-top: 0.5rem;
+        }
+        table.hours-table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+            max-width: 520px;
+            font-size: 0.8rem;
+        }
+        table.hours-table th,
+        table.hours-table td {
+            text-align: center;
+            padding: 0.25rem 0.35rem;
+            border: 1px solid rgba(255,255,255,0.7);
+        }
+        table.hours-table th {
+            background: #111827;
+            color: #f9fafb;
+            font-weight: 700;
+        }
+        table.hours-table td:first-child {
+            background: #e5e7eb;
+            font-weight: 600;
+            color: #111827;
+        }
+        .slot-open {
+            background: #1d4ed8;
+            color: #f9fafb;
+        }
+        .slot-closed {
+            background: #4b5563;
+            color: #e5e7eb;
+        }
     </style>
 </head>
 <body>
@@ -463,68 +498,79 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 <?php if ($isHoursDoc): ?>
                     <?php
                     // טבלת שעות פתיחה לפי מחסן – כמו ב-document_view
-                    $warehouse  = trim((string)($me['warehouse'] ?? 'מחסן א'));
-                    $days       = ['א', 'ב', 'ג', 'ד', 'ה']; // ראשון–חמישי
-                    $hours      = range(9, 16);             // 09:00–16:00
-                    $openMatrix = [];
-                    try {
-                        $stmtH = $pdo->prepare('SELECT day_of_week, hour FROM warehouse_hours WHERE warehouse = :w');
-                        $stmtH->execute([':w' => $warehouse]);
-                        $rowsH = $stmtH->fetchAll(PDO::FETCH_ASSOC);
-                        if ($rowsH) {
-                            foreach ($rowsH as $rowH) {
-                                $d = (int)($rowH['day_of_week'] ?? 0);
-                                $h = (int)($rowH['hour'] ?? 0);
-                                $openMatrix[$d][$h] = true;
-                            }
-                        } else {
-                            foreach (array_keys($days) as $d) {
-                                foreach ($hours as $h) {
-                                    $openMatrix[$d][$h] = true;
-                                }
-                            }
-                        }
-                    } catch (Throwable $e) {
-                        // במקרה של שגיאה בטעינת שעות – פשוט לא מציגים טבלה
-                        $openMatrix = [];
+                    $days  = ['א', 'ב', 'ג', 'ד', 'ה']; // ראשון–חמישי
+                    $hours = range(9, 16);             // 09:00–16:00
+
+                    $warehousesToShow = [];
+                    if ($role === 'admin') {
+                        $warehousesToShow = ['מחסן א', 'מחסן ב'];
+                    } else {
+                        $warehousesToShow = [trim((string)($me['warehouse'] ?? 'מחסן א'))];
                     }
                     ?>
                     <div class="doc-view">
-                        <div class="muted-small" style="margin-bottom:0.5rem;">
-                            שעות פתיחת <?= htmlspecialchars($warehouse, ENT_QUOTES, 'UTF-8') ?>.
-                        </div>
-                        <?php if (!empty($openMatrix)): ?>
-                            <div class="hours-table-wrapper">
-                                <table class="hours-table">
-                                    <thead>
-                                    <tr>
-                                        <th>שעה</th>
-                                        <?php foreach ($days as $label): ?>
-                                            <th><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></th>
-                                        <?php endforeach; ?>
-                                    </tr>
-                                    </thead>
-                                    <tbody>
-                                    <?php foreach ($hours as $h): ?>
-                                        <tr>
-                                            <td><?= sprintf('%02d:00', $h) ?></td>
-                                            <?php foreach (array_keys($days) as $d): ?>
-                                                <?php $open = !empty($openMatrix[$d][$h]); ?>
-                                                <td class="<?= $open ? 'slot-open' : 'slot-closed' ?>">
-                                                    <?= $open ? 'פתוח' : 'סגור' ?>
-                                                </td>
+                        <?php foreach ($warehousesToShow as $warehouseName): ?>
+                            <?php
+                            $openMatrix = [];
+                            try {
+                                $stmtH = $pdo->prepare('SELECT day_of_week, hour FROM warehouse_hours WHERE warehouse = :w');
+                                $stmtH->execute([':w' => $warehouseName]);
+                                $rowsH = $stmtH->fetchAll(PDO::FETCH_ASSOC);
+                                if ($rowsH) {
+                                    foreach ($rowsH as $rowH) {
+                                        $d = (int)($rowH['day_of_week'] ?? 0);
+                                        $h = (int)($rowH['hour'] ?? 0);
+                                        $openMatrix[$d][$h] = true;
+                                    }
+                                } else {
+                                    foreach (array_keys($days) as $d) {
+                                        foreach ($hours as $h) {
+                                            $openMatrix[$d][$h] = true;
+                                        }
+                                    }
+                                }
+                            } catch (Throwable $e) {
+                                $openMatrix = [];
+                            }
+                            ?>
+                            <div style="margin-bottom:0.75rem;">
+                                <div class="muted-small" style="margin-bottom:0.25rem;font-size:0.95rem;font-weight:700;">
+                                    <?= htmlspecialchars($warehouseName, ENT_QUOTES, 'UTF-8') ?>
+                                </div>
+                                <?php if (!empty($openMatrix)): ?>
+                                    <div class="hours-table-wrapper">
+                                        <table class="hours-table">
+                                            <thead>
+                                            <tr>
+                                                <th>שעה</th>
+                                                <?php foreach ($days as $label): ?>
+                                                    <th><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></th>
+                                                <?php endforeach; ?>
+                                            </tr>
+                                            </thead>
+                                            <tbody>
+                                            <?php foreach ($hours as $h): ?>
+                                                <tr>
+                                                    <td><?= sprintf('%02d:00', $h) ?></td>
+                                                    <?php foreach (array_keys($days) as $d): ?>
+                                                        <?php $open = !empty($openMatrix[$d][$h]); ?>
+                                                        <td class="<?= $open ? 'slot-open' : 'slot-closed' ?>">
+                                                            <?= $open ? 'פתוח' : 'סגור' ?>
+                                                        </td>
+                                                    <?php endforeach; ?>
+                                                </tr>
                                             <?php endforeach; ?>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                    </tbody>
-                                </table>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                <?php else: ?>
+                                    <div class="muted-small">לא נמצאו הגדרות שעות פתיחה למחסן זה.</div>
+                                <?php endif; ?>
                             </div>
-                            <div class="hours-legend">
-                                כחול בהיר = שעה פתוחה, אפור בהיר = שעה סגורה.
-                            </div>
-                        <?php else: ?>
-                            <div class="muted-small">לא נמצאו הגדרות שעות פתיחה למחסן זה.</div>
-                        <?php endif; ?>
+                        <?php endforeach; ?>
+                        <div class="hours-legend">
+                            כחול = שעה פתוחה, אפור כהה = שעה סגורה.
+                        </div>
                     </div>
                 <?php elseif ($canEdit && $editMode): ?>
                     <div class="doc-editor">
