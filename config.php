@@ -202,6 +202,26 @@ function initialize_database(PDO $pdo): void
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications (user_id, is_read, created_at)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_notifications_role_read ON notifications (role, is_read, created_at)");
 
+    // טבלת שעות ברירת מחדל לפתיחת מחסנים
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS default_hours (
+            day_of_week INTEGER PRIMARY KEY,
+            open_time TEXT NOT NULL,
+            close_time TEXT NOT NULL
+        )
+    ");
+    $rows = $pdo->query("SELECT COUNT(*) AS cnt FROM default_hours")->fetch(PDO::FETCH_ASSOC);
+    if ((int)($rows['cnt'] ?? 0) === 0) {
+        $ins = $pdo->prepare("INSERT INTO default_hours (day_of_week, open_time, close_time) VALUES (:d, :o, :c)");
+        for ($d = 0; $d <= 4; $d++) {
+            $ins->execute([
+                ':d' => $d,
+                ':o' => '09:00',
+                ':c' => '16:00',
+            ]);
+        }
+    }
+
     // Ensure default admin user exists: admin / admin
     $stmt = $pdo->prepare('SELECT COUNT(*) AS cnt FROM users WHERE username = :username');
     $stmt->execute([':username' => 'admin']);
