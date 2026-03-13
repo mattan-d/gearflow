@@ -573,6 +573,7 @@ if (isset($_GET['edit_id'])) {
 <body>
 <?php include __DIR__ . '/admin_header.php'; ?>
 <main>
+    <h2 style="margin-top:0; margin-bottom:1rem; font-size:1.4rem;">ניהול משתמשים</h2>
     <?php if ($success !== ''): ?>
         <div class="flash success" style="margin-bottom: 1rem;"><?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?></div>
     <?php endif; ?>

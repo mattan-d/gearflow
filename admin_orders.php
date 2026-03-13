@@ -1275,6 +1275,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 <body>
 <?php include __DIR__ . '/admin_header.php'; ?>
 <main>
+    <h2 style="margin-top:0; margin-bottom:1rem; font-size:1.4rem;">ניהול הזמנות</h2>
     <div class="toolbar">
         <div></div>
         <button type="button" class="btn" id="open_order_modal_btn">הזמנה חדשה</button>

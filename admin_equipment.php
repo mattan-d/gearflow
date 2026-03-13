@@ -986,6 +986,7 @@ $me = current_user();
 <body>
 <?php include __DIR__ . '/admin_header.php'; ?>
 <main>
+    <h2 style="margin-top:0; margin-bottom:1rem; font-size:1.4rem;">ניהול ציוד</h2>
     <div class="toolbar-top">
         <div class="toolbar-buttons">
             <button type="button" class="btn" id="toggle_add_equipment_btn">הוספת פריט ציוד</button>
