@@ -702,18 +702,15 @@ if (isset($_GET['edit_id'])) {
         <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:0.75rem;gap:1rem;">
             <h2 style="margin-bottom:0;">רשימת משתמשים</h2>
             <form method="get" action="admin_users.php" id="user_search_form" style="margin:0;">
-                <div style="position:relative;">
-                    <span style="position:absolute;left:0.6rem;top:50%;transform:translateY(-50%);font-size:0.9rem;color:#9ca3af;">🔍</span>
-                    <input
-                        type="text"
-                        id="user_search"
-                        name="q"
-                        value="<?= htmlspecialchars($nameFilter, ENT_QUOTES, 'UTF-8') ?>"
-                        placeholder="חיפוש משתמש"
-                        style="min-width:220px;padding:0.35rem 2.1rem 0.35rem 0.6rem;border-radius:999px;border:1px solid #d1d5db;font-size:0.85rem;direction:rtl;"
-                        autocomplete="off"
-                    >
-                </div>
+                <input
+                    type="text"
+                    id="user_search"
+                    name="q"
+                    value="<?= htmlspecialchars($nameFilter, ENT_QUOTES, 'UTF-8') ?>"
+                    placeholder="חיפוש משתמש"
+                    style="min-width:220px;padding:0.35rem 0.6rem;border-radius:999px;border:1px solid #d1d5db;font-size:0.85rem;direction:rtl;"
+                    autocomplete="off"
+                >
             </form>
         </div>
         <table>
