@@ -676,6 +676,136 @@ $me = current_user();
             display: flex;
             gap: 0.5rem;
         }
+        .date-picker {
+            background: #f9fafb;
+            border-radius: 10px;
+            padding: 0.75rem 0.9rem;
+            border: 1px solid #e5e7eb;
+            font-size: 0.85rem;
+            position: relative;
+        }
+        .date-picker-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            cursor: pointer;
+            font-size: 0.85rem;
+            color: #374151;
+            margin-bottom: 0.6rem;
+        }
+        .date-picker-toggle-icon {
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            border: 1px solid #9ca3af;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            background: #f3f4f6;
+        }
+        .date-picker-panel {
+            border-radius: 10px;
+            border: 1px solid #e5e7eb;
+            background: #ffffff;
+            padding: 0.6rem 0.7rem 0.7rem;
+            margin-top: 0.4rem;
+        }
+        .date-mode-toggle {
+            display: inline-flex;
+            border-radius: 999px;
+            background: #e5e7eb;
+            padding: 0.15rem;
+            margin-bottom: 0.4rem;
+        }
+        .date-mode-btn {
+            border: none;
+            background: transparent;
+            padding: 0.15rem 0.7rem;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            color: #374151;
+        }
+        .date-mode-btn.active {
+            background: #111827;
+            color: #f9fafb;
+        }
+        .date-selected {
+            display: flex;
+            justify-content: space-between;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            align-items: center;
+        }
+        .date-selected span {
+            font-weight: 600;
+        }
+        .date-selected .clear-range-btn {
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 0.9rem;
+            padding: 0.1rem 0.3rem;
+            border-radius: 999px;
+        }
+        .date-selected .clear-range-btn:hover {
+            background: #e5e7eb;
+        }
+        .date-calendar {
+            border-radius: 8px;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            padding: 0.5rem;
+        }
+        .date-calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.4rem;
+            font-size: 0.85rem;
+        }
+        .date-calendar-header button {
+            border: none;
+            background: #e5e7eb;
+            border-radius: 999px;
+            width: 22px;
+            height: 22px;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+        .date-calendar-weekdays,
+        .date-calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            text-align: center;
+            font-size: 0.75rem;
+        }
+        .date-calendar-weekdays span {
+            font-weight: 600;
+            color: #6b7280;
+            padding: 0.15rem 0;
+        }
+        .date-day {
+            padding: 0.25rem 0;
+            border-radius: 999px;
+            margin: 1px 0;
+        }
+        .date-day.disabled {
+            color: #d1d5db;
+            cursor: not-allowed;
+        }
+        .date-day.selectable {
+            cursor: pointer;
+        }
+        .date-day.selectable:hover {
+            background: rgba(15, 23, 42, 0.08);
+        }
+        .date-day.selected {
+            background: #111827;
+            color: #f9fafb;
+            font-weight: 600;
+        }
         .equipment-filters {
             margin-bottom: 3px;
         }
@@ -892,22 +1022,61 @@ $me = current_user();
                     </div>
                 <?php endif; ?>
                 <div class="filter-group">
-                    <label>פנוי בין התאריכים</label>
-                    <div style="display:flex;flex-direction:column;gap:0.25rem;min-width:220px;">
-                        <div style="display:flex;align-items:center;gap:0.4rem;">
-                            <span class="muted-small">מתאריך</span>
-                            <input type="datetime-local"
-                                   name="availability_start"
-                                   value="<?= htmlspecialchars($availabilityStartRaw ?? '', ENT_QUOTES, 'UTF-8') ?>"
-                                   style="max-width: 210px;">
+                    <label>
+                        פנוי בין התאריכים
+                        <span id="eq_date_range_label" class="muted-small">
+                            <?php if ($availabilityStartRaw !== '' && $availabilityEndRaw !== ''): ?>
+                                <?php
+                                $labelStart = substr($availabilityStartRaw, 0, 10);
+                                $labelEnd   = substr($availabilityEndRaw, 0, 10);
+                                ?>
+                                <?= htmlspecialchars($labelStart . ' - ' . $labelEnd, ENT_QUOTES, 'UTF-8') ?>
+                            <?php else: ?>
+                                -
+                            <?php endif; ?>
+                        </span>
+                    </label>
+                    <div class="date-picker">
+                        <div class="date-picker-toggle" id="eq_date_picker_toggle">
+                            <span class="date-picker-toggle-icon">📅</span>
+                            <span>פתח לוח שנה</span>
                         </div>
-                        <div style="display:flex;align-items:center;gap:0.4rem;">
-                            <span class="muted-small">עד תאריך</span>
-                            <input type="datetime-local"
-                                   name="availability_end"
-                                   value="<?= htmlspecialchars($availabilityEndRaw ?? '', ENT_QUOTES, 'UTF-8') ?>"
-                                   style="max-width: 210px;">
+                        <div class="date-picker-panel" id="eq_date_picker_panel" style="display: none;">
+                            <div class="date-mode-toggle">
+                                <button type="button" id="eq_mode_start" class="date-mode-btn active">השאלה</button>
+                                <button type="button" id="eq_mode_end" class="date-mode-btn">החזרה</button>
+                            </div>
+                            <div class="date-selected">
+                                <div>
+                                    תאריך השאלה:
+                                    <span id="eq_selected_start_label"><?= $availabilityStartRaw !== '' ? htmlspecialchars(substr($availabilityStartRaw, 0, 10), ENT_QUOTES, 'UTF-8') : '-' ?></span>
+                                </div>
+                                <div>
+                                    תאריך החזרה:
+                                    <span id="eq_selected_end_label"><?= $availabilityEndRaw !== '' ? htmlspecialchars(substr($availabilityEndRaw, 0, 10), ENT_QUOTES, 'UTF-8') : '-' ?></span>
+                                </div>
+                                <button type="button" class="clear-range-btn" id="eq_clear_range_btn" title="נקה טווח">✕</button>
+                            </div>
+                            <div class="date-calendar">
+                                <div class="date-calendar-header">
+                                    <button type="button" id="eq_cal_prev">&lt;</button>
+                                    <div id="eq_cal_month_label"></div>
+                                    <div style="display:flex;align-items:center;gap:4px;">
+                                        <button type="button" id="eq_cal_close" class="icon-btn" title="סגירת לוח שנה">✕</button>
+                                        <button type="button" id="eq_cal_next">&gt;</button>
+                                    </div>
+                                </div>
+                                <div class="date-calendar-weekdays">
+                                    <span>א</span><span>ב</span><span>ג</span><span>ד</span><span>ה</span><span>ו</span><span>ש</span>
+                                </div>
+                                <div class="date-calendar-grid" id="eq_cal_grid"></div>
+                            </div>
+                            <div class="muted-small" style="margin-top: 0.5rem;">
+                                ימים שעברו וימי שישי/שבת מסומנים כלא זמינים.
+                            </div>
                         </div>
+                        <input type="hidden" name="availability_start" id="availability_start_h" value="<?= htmlspecialchars($availabilityStartRaw ?? '', ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="availability_end" id="availability_end_h" value="<?= htmlspecialchars($availabilityEndRaw ?? '', ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                 </div>
                 <div class="filter-group">
@@ -1246,6 +1415,164 @@ document.addEventListener('DOMContentLoaded', function () {
                 existingPictureRow.style.display = 'none';
             }
         });
+    }
+
+    // לוח שנה לפילטר "פנוי בין התאריכים"
+    var eqToggle = document.getElementById('eq_date_picker_toggle');
+    var eqPanel = document.getElementById('eq_date_picker_panel');
+    var eqModeStartBtn = document.getElementById('eq_mode_start');
+    var eqModeEndBtn = document.getElementById('eq_mode_end');
+    var eqStartLabel = document.getElementById('eq_selected_start_label');
+    var eqEndLabel = document.getElementById('eq_selected_end_label');
+    var eqRangeLabel = document.getElementById('eq_date_range_label');
+    var eqCalMonthLabel = document.getElementById('eq_cal_month_label');
+    var eqCalPrev = document.getElementById('eq_cal_prev');
+    var eqCalNext = document.getElementById('eq_cal_next');
+    var eqCalClose = document.getElementById('eq_cal_close');
+    var eqCalGrid = document.getElementById('eq_cal_grid');
+    var eqClearBtn = document.getElementById('eq_clear_range_btn');
+    var availabilityStartH = document.getElementById('availability_start_h');
+    var availabilityEndH = document.getElementById('availability_end_h');
+
+    if (eqToggle && eqPanel && eqModeStartBtn && eqModeEndBtn && eqCalGrid && eqCalMonthLabel && availabilityStartH && availabilityEndH) {
+        var eqMode = 'start';
+        var eqViewDate = new Date();
+
+        function pad(n) {
+            return n < 10 ? '0' + n : '' + n;
+        }
+
+        function toIso(d) {
+            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+        }
+
+        function parseDate(value) {
+            if (!value) return null;
+            var parts = value.split(' ')[0].split('-');
+            if (parts.length !== 3) return null;
+            var year = parseInt(parts[0], 10);
+            var month = parseInt(parts[1], 10) - 1;
+            var day = parseInt(parts[2], 10);
+            var d = new Date(year, month, day);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        function isDisabledDay(date) {
+            var today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (date < today) return true;
+            var day = date.getDay(); // 0=ראשון ... 6=שבת
+            return day === 5 || day === 6;
+        }
+
+        function updateRangeLabel() {
+            if (availabilityStartH.value && availabilityEndH.value) {
+                var s = availabilityStartH.value.substring(0, 10);
+                var e = availabilityEndH.value.substring(0, 10);
+                eqRangeLabel.textContent = s + ' - ' + e;
+            } else {
+                eqRangeLabel.textContent = '-';
+            }
+        }
+
+        function buildEqCalendar() {
+            eqCalGrid.innerHTML = '';
+            var year = eqViewDate.getFullYear();
+            var month = eqViewDate.getMonth();
+            eqCalMonthLabel.textContent = year + '-' + pad(month + 1);
+
+            var first = new Date(year, month, 1);
+            var startWeekday = first.getDay(); // 0=ראשון
+            var daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            for (var i = 0; i < startWeekday; i++) {
+                var emptyCell = document.createElement('div');
+                eqCalGrid.appendChild(emptyCell);
+            }
+
+            var selectedStartDate = parseDate(availabilityStartH.value);
+            var selectedEndDate = parseDate(availabilityEndH.value);
+
+            for (var day = 1; day <= daysInMonth; day++) {
+                (function (dNum) {
+                    var cell = document.createElement('div');
+                    cell.textContent = dNum;
+                    var dateObj = new Date(year, month, dNum);
+
+                    var classes = ['date-day'];
+                    if (isDisabledDay(dateObj)) {
+                        classes.push('disabled');
+                    } else {
+                        classes.push('selectable');
+                        cell.addEventListener('click', function () {
+                            var iso = toIso(dateObj);
+                            if (eqMode === 'start') {
+                                availabilityStartH.value = iso + ' 00:00';
+                            } else {
+                                availabilityEndH.value = iso + ' 23:59';
+                            }
+                            eqStartLabel.textContent = availabilityStartH.value ? availabilityStartH.value.substring(0, 10) : '-';
+                            eqEndLabel.textContent = availabilityEndH.value ? availabilityEndH.value.substring(0, 10) : '-';
+                            updateRangeLabel();
+                        });
+                    }
+
+                    if (selectedStartDate && dateObj.getTime() === selectedStartDate.getTime()) {
+                        classes.push('selected');
+                    }
+                    if (selectedEndDate && dateObj.getTime() === selectedEndDate.getTime()) {
+                        classes.push('selected');
+                    }
+
+                    cell.className = classes.join(' ');
+                    eqCalGrid.appendChild(cell);
+                })(day);
+            }
+        }
+
+        eqToggle.addEventListener('click', function () {
+            eqPanel.style.display = eqPanel.style.display === 'none' || eqPanel.style.display === '' ? 'block' : 'none';
+        });
+
+        eqCalClose.addEventListener('click', function () {
+            eqPanel.style.display = 'none';
+        });
+
+        eqModeStartBtn.addEventListener('click', function () {
+            eqMode = 'start';
+            eqModeStartBtn.classList.add('active');
+            eqModeEndBtn.classList.remove('active');
+        });
+
+        eqModeEndBtn.addEventListener('click', function () {
+            eqMode = 'end';
+            eqModeEndBtn.classList.add('active');
+            eqModeStartBtn.classList.remove('active');
+        });
+
+        eqCalPrev.addEventListener('click', function () {
+            eqViewDate = new Date(eqViewDate.getFullYear(), eqViewDate.getMonth() - 1, 1);
+            buildEqCalendar();
+        });
+
+        eqCalNext.addEventListener('click', function () {
+            eqViewDate = new Date(eqViewDate.getFullYear(), eqViewDate.getMonth() + 1, 1);
+            buildEqCalendar();
+        });
+
+        if (eqClearBtn) {
+            eqClearBtn.addEventListener('click', function () {
+                availabilityStartH.value = '';
+                availabilityEndH.value = '';
+                eqStartLabel.textContent = '-';
+                eqEndLabel.textContent = '-';
+                updateRangeLabel();
+                buildEqCalendar();
+            });
+        }
+
+        buildEqCalendar();
+        updateRangeLabel();
     }
 
     function openEquipmentModal() {
