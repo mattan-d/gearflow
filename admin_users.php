@@ -561,7 +561,7 @@ if (isset($_GET['edit_id'])) {
             line-height: 1;
         }
         footer {
-            background: #111827;
+            background: var(--gf-footer-bg, #111827);
             color: #9ca3af;
             text-align: center;
             padding: 0.75rem 1rem;

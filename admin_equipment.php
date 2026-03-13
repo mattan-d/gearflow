@@ -974,7 +974,7 @@ $me = current_user();
             display: block;
         }
         footer {
-            background: #111827;
+            background: var(--gf-footer-bg, #111827);
             color: #9ca3af;
             text-align: center;
             padding: 0.75rem 1rem;
