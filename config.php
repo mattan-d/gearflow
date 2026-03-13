@@ -187,6 +187,21 @@ function initialize_database(PDO $pdo): void
         ON warehouse_hours (warehouse, day_of_week, hour)
     ");
 
+    // טבלת התראות
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            role TEXT,
+            message TEXT NOT NULL,
+            link TEXT,
+            is_read INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        )
+    ");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications (user_id, is_read, created_at)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_notifications_role_read ON notifications (role, is_read, created_at)");
+
     // Ensure default admin user exists: admin / admin
     $stmt = $pdo->prepare('SELECT COUNT(*) AS cnt FROM users WHERE username = :username');
     $stmt->execute([':username' => 'admin']);

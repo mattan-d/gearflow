@@ -42,6 +42,37 @@ try {
     $customDocs = [];
 }
 
+// התראות – קריאה / מחיקה
+$userId = isset($me['id']) ? (int)$me['id'] : 0;
+if ($userId > 0 && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['notif_action'])) {
+    $action = $_POST['notif_action'];
+    if ($action === 'delete' && isset($_POST['notif_id'])) {
+        $nid = (int)$_POST['notif_id'];
+        $stmtDel = $pdo->prepare('DELETE FROM notifications WHERE id = :id AND (user_id = :uid OR (user_id IS NULL AND role = :role))');
+        $stmtDel->execute([':id' => $nid, ':uid' => $userId, ':role' => $role]);
+    } elseif ($action === 'delete_all') {
+        $stmtDelAll = $pdo->prepare('DELETE FROM notifications WHERE user_id = :uid OR (user_id IS NULL AND role = :role)');
+        $stmtDelAll->execute([':uid' => $userId, ':role' => $role]);
+    }
+    // לאחר פעולה נחזור לאותו דף כדי למנוע שליחת טופס חוזרת
+    header('Location: ' . ($_SERVER['REQUEST_URI'] ?? 'admin.php'));
+    exit;
+}
+
+// טעינת התראות להצגה
+$notifications = [];
+$unreadCount   = 0;
+if ($userId > 0) {
+    $stmtN = $pdo->prepare('SELECT id, message, link, is_read, created_at FROM notifications WHERE (user_id = :uid OR (user_id IS NULL AND role = :role)) ORDER BY created_at DESC LIMIT 20');
+    $stmtN->execute([':uid' => $userId, ':role' => $role]);
+    $notifications = $stmtN->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    foreach ($notifications as $n) {
+        if ((int)($n['is_read'] ?? 0) === 0) {
+            $unreadCount++;
+        }
+    }
+}
+
 ?>
 <style>
     :root {
@@ -90,6 +121,98 @@ try {
     }
     .main-nav-item-wrapper:hover .main-nav-sub {
         display: block;
+    }
+    .notif-wrapper {
+        position: relative;
+        margin-left: 0.75rem;
+    }
+    .notif-bell-btn {
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        color: #9ca3af;
+        font-size: 1.1rem;
+        position: relative;
+        padding: 0;
+    }
+    .notif-bell-btn.has-unread {
+        color: #f97316;
+    }
+    .notif-badge {
+        position: absolute;
+        top: -0.25rem;
+        right: -0.35rem;
+        background: #ef4444;
+        color: #f9fafb;
+        border-radius: 999px;
+        font-size: 0.65rem;
+        padding: 0 0.25rem;
+        line-height: 1.3;
+    }
+    .notif-menu {
+        position: absolute;
+        right: -0.5rem;
+        top: 130%;
+        background: #111827;
+        color: #f9fafb;
+        min-width: 260px;
+        max-width: 320px;
+        border-radius: 10px;
+        box-shadow: 0 14px 35px rgba(0,0,0,0.55);
+        padding: 0.5rem 0;
+        z-index: 40;
+        display: none;
+    }
+    .notif-menu.visible {
+        display: block;
+    }
+    .notif-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.25rem 0.75rem 0.4rem;
+        border-bottom: 1px solid #374151;
+        font-size: 0.85rem;
+    }
+    .notif-header button {
+        border: none;
+        background: transparent;
+        color: #9ca3af;
+        cursor: pointer;
+        font-size: 0.75rem;
+    }
+    .notif-list {
+        max-height: 260px;
+        overflow-y: auto;
+    }
+    .notif-item {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.8rem;
+        border-bottom: 1px solid #1f2937;
+        display: flex;
+        justify-content: space-between;
+        gap: 0.4rem;
+        align-items: flex-start;
+    }
+    .notif-item:last-child {
+        border-bottom: none;
+    }
+    .notif-item a {
+        color: #e5e7eb;
+        text-decoration: none;
+    }
+    .notif-item a:hover {
+        text-decoration: underline;
+    }
+    .notif-item form {
+        margin: 0;
+    }
+    .notif-item button {
+        border: none;
+        background: transparent;
+        color: #9ca3af;
+        cursor: pointer;
+        font-size: 0.8rem;
     }
 </style>
 <header style="background: <?= htmlspecialchars($headerBg, ENT_QUOTES, 'UTF-8') ?>;">
@@ -143,9 +266,60 @@ try {
         </nav>
     </div>
     <div class="user-info">
-        מחובר כ־<?= htmlspecialchars($me['username'] ?? '', ENT_QUOTES, 'UTF-8') ?>
-        (<?= $role === 'admin' ? 'אדמין' : ($role === 'warehouse_manager' ? 'מנהל מחסן' : 'סטודנט') ?>)
-        <a href="logout.php">התנתק</a>
+        <div style="display:flex;align-items:center;gap:0.5rem;">
+            <div class="notif-wrapper">
+                <button type="button"
+                        class="notif-bell-btn <?= $unreadCount > 0 ? 'has-unread' : '' ?>"
+                        onclick="var m=document.getElementById('notif_menu'); if(m){m.classList.toggle('visible');}">
+                    🔔
+                    <?php if ($unreadCount > 0): ?>
+                        <span class="notif-badge"><?= (int)$unreadCount ?></span>
+                    <?php endif; ?>
+                </button>
+                <div id="notif_menu" class="notif-menu">
+                    <div class="notif-header">
+                        <span>התראות</span>
+                        <?php if ($unreadCount > 0 || !empty($notifications)): ?>
+                            <form method="post" action="" style="margin:0;">
+                                <input type="hidden" name="notif_action" value="delete_all">
+                                <button type="submit">מחק את כל ההתראות</button>
+                            </form>
+                        <?php endif; ?>
+                    </div>
+                    <div class="notif-list">
+                        <?php if (empty($notifications)): ?>
+                            <div class="notif-item">
+                                <span>אין התראות חדשות.</span>
+                            </div>
+                        <?php else: ?>
+                            <?php foreach ($notifications as $n): ?>
+                                <div class="notif-item">
+                                    <div>
+                                        <?php if (!empty($n['link'])): ?>
+                                            <a href="<?= htmlspecialchars($n['link'], ENT_QUOTES, 'UTF-8') ?>">
+                                                <?= htmlspecialchars($n['message'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                                            </a>
+                                        <?php else: ?>
+                                            <?= htmlspecialchars($n['message'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                                        <?php endif; ?>
+                                    </div>
+                                    <form method="post" action="">
+                                        <input type="hidden" name="notif_action" value="delete">
+                                        <input type="hidden" name="notif_id" value="<?= (int)($n['id'] ?? 0) ?>">
+                                        <button type="submit" title="מחיקת התראה">✕</button>
+                                    </form>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+            <span>
+                מחובר כ־<?= htmlspecialchars($me['username'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                (<?= $role === 'admin' ? 'אדמין' : ($role === 'warehouse_manager' ? 'מנהל מחסן' : 'סטודנט') ?>)
+            </span>
+            <a href="logout.php">התנתק</a>
+        </div>
     </div>
 </header>
 
