@@ -383,6 +383,41 @@ try {
                 </tbody>
             </table>
         </div>
+
+        <div class="status-section">
+            <h3 style="margin-top:1.5rem;margin-bottom:0.5rem;font-size:1.05rem;">סטטוסי הזמנה</h3>
+            <p class="muted-small">
+                ניתן לשנות את שם הסטטוס שמוצג למשתמשים (הקוד הפנימי של הסטטוס נשאר קבוע לצורכי המערכת).
+            </p>
+            <table class="status-table">
+                <thead>
+                <tr>
+                    <th>קוד סטטוס</th>
+                    <th>שם מוצג</th>
+                    <th>שמירה</th>
+                </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($statusLabels as $st): ?>
+                    <tr>
+                        <td style="font-family:monospace;direction:ltr;"><?= htmlspecialchars((string)($st['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td>
+                            <form method="post" action="admin_settings.php" style="display:flex;align-items:center;gap:0.4rem;margin:0;">
+                                <input type="hidden" name="status_action" value="rename_status">
+                                <input type="hidden" name="status_code" value="<?= htmlspecialchars((string)($st['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                <input type="text"
+                                       name="status_label"
+                                       value="<?= htmlspecialchars((string)($st['label_he'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                       style="flex:1;padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;">
+                                <button type="submit" class="btn small">שמור</button>
+                            </form>
+                        </td>
+                        <td></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
     </div>
 </main>
 </body>
