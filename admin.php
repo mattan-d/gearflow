@@ -148,46 +148,7 @@ $me = current_user();
     </style>
 </head>
 <body>
-<header>
-    <div>
-        <h1>ניהול מערכת</h1>
-        <div class="muted">פלטפורמה לניהול השאלת ציוד</div>
-        <?php
-        $role = $me['role'] ?? 'student';
-        ?>
-        <nav class="main-nav">
-            <div class="main-nav-primary">
-                <?php if ($role === 'admin' || $role === 'warehouse_manager'): ?>
-                    <a href="admin_users.php">ניהול משתמשים</a>
-                    <a href="admin_orders.php">ניהול הזמנות</a>
-                    <a href="admin_equipment.php">ניהול ציוד</a>
-                    <div class="main-nav-item-wrapper">
-                        <a href="#">ניהול מערכת</a>
-                        <div class="main-nav-sub">
-                            <a href="admin_settings.php">הגדרות</a>
-                            <a href="admin_documents.php">מסמכים</a>
-                            <a href="admin_design.php">עיצוב ממשק</a>
-                            <a href="admin_times.php">ניהול זמנים</a>
-                        </div>
-                    </div>
-                <?php else: ?>
-                    <a href="admin_orders.php">ניהול הזמנות</a>
-                <?php endif; ?>
-                <div class="main-nav-item-wrapper">
-                    <a href="#">נהלים</a>
-                    <div class="main-nav-sub">
-                        <a href="warehouse_rules.php">נהלי מחסן</a>
-                    </div>
-                </div>
-            </div>
-        </nav>
-    </div>
-    <div class="user-info">
-        מחובר כ־<?= htmlspecialchars($me['username'] ?? '', ENT_QUOTES, 'UTF-8') ?>
-        (<?= $role === 'admin' ? 'אדמין' : ($role === 'warehouse_manager' ? 'מנהל מחסן' : 'סטודנט') ?>)
-        <a href="logout.php">התנתק</a>
-    </div>
-</header>
+<?php include __DIR__ . '/admin_header.php'; ?>
 <main>
     <h2 class="menu-title">תפריט ניהול מערכת</h2>
     <div class="menu-grid">

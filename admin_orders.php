@@ -1753,23 +1753,37 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <td>
                             <?php
                             $statusClass = 'status-pending';
-                            $statusLabel = 'ממתין';
+                            $statusCode  = (string)($order['status'] ?? 'pending');
+                            $statusLabel = $statusCode;
 
-                            if ($order['status'] === 'approved') {
+                            // קריאת התווית מטבלת order_status_labels אם קיימת
+                            static $statusMap = null;
+                            if ($statusMap === null) {
+                                try {
+                                    $stmtSL = $pdo->query('SELECT status, label_he FROM order_status_labels');
+                                    $statusMap = [];
+                                    foreach ($stmtSL->fetchAll(PDO::FETCH_ASSOC) as $rowSL) {
+                                        $statusMap[(string)($rowSL['status'] ?? '')] = (string)($rowSL['label_he'] ?? '');
+                                    }
+                                } catch (Throwable $e) {
+                                    $statusMap = [];
+                                }
+                            }
+                            if (isset($statusMap[$statusCode]) && $statusMap[$statusCode] !== '') {
+                                $statusLabel = $statusMap[$statusCode];
+                            }
+
+                            if ($statusCode === 'approved') {
                                 $statusClass = 'status-approved';
-                                $statusLabel = 'מאושר';
-                            } elseif ($order['status'] === 'on_loan') {
+                            } elseif ($statusCode === 'on_loan') {
                                 $statusClass = 'status-approved';
-                                $statusLabel = 'בהשאלה';
-                            } elseif ($order['status'] === 'returned') {
+                            } elseif ($statusCode === 'returned') {
                                 $statusClass = 'status-returned';
-                                $statusLabel = 'עבר';
-                            } elseif ($order['status'] === 'rejected') {
+                            } elseif ($statusCode === 'rejected') {
                                 $statusClass = 'status-rejected';
-                                $statusLabel = 'נדחה';
                             }
                             ?>
-                            <span class="badge <?= $statusClass ?>"><?= $statusLabel ?></span>
+                            <span class="badge <?= $statusClass ?>"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></span>
                         </td>
                         <td class="muted-small">
                             <?php
