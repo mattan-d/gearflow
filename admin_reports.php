@@ -10,6 +10,12 @@ require_admin();
 $me  = current_user();
 $pdo = get_db();
 
+// טאב פעיל בדוחות (ברירת מחדל: דוחות משתמשים)
+$activeTab = isset($_GET['tab']) ? (string)$_GET['tab'] : 'users';
+if (!in_array($activeTab, ['users', 'orders', 'equipment'], true)) {
+    $activeTab = 'users';
+}
+
 // פרמטרי טווח תאריכים לדוחות הזמנות
 $reportStart = isset($_GET['orders_start']) ? trim((string)$_GET['orders_start']) : '';
 $reportEnd   = isset($_GET['orders_end']) ? trim((string)$_GET['orders_end']) : '';
@@ -254,22 +260,23 @@ if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
         <h2>דוחות</h2>
 
         <div class="reports-tabs">
-            <button type="button" class="reports-tab active" data-target="reports-users">דוחות משתמשים</button>
-            <button type="button" class="reports-tab" data-target="reports-orders">דוחות הזמנות</button>
-            <button type="button" class="reports-tab" data-target="reports-equipment">דוחות ציוד</button>
+            <button type="button" class="reports-tab<?= $activeTab === 'users' ? ' active' : '' ?>" data-target="reports-users">דוחות משתמשים</button>
+            <button type="button" class="reports-tab<?= $activeTab === 'orders' ? ' active' : '' ?>" data-target="reports-orders">דוחות הזמנות</button>
+            <button type="button" class="reports-tab<?= $activeTab === 'equipment' ? ' active' : '' ?>" data-target="reports-equipment">דוחות ציוד</button>
         </div>
 
-        <div id="reports-users" class="reports-section active">
+        <div id="reports-users" class="reports-section<?= $activeTab === 'users' ? ' active' : '' ?>">
             <p class="muted-small">
                 כאן יוצגו דוחות על משתמשים (פעילים, סטודנטים לפי מחסן, כניסות למערכת ועוד).
             </p>
         </div>
 
-        <div id="reports-orders" class="reports-section">
+        <div id="reports-orders" class="reports-section<?= $activeTab === 'orders' ? ' active' : '' ?>">
             <p class="muted-small" style="margin-bottom:0.5rem;">
                 בחר טווח תאריכים כדי להציג סיכום סטטוסים להזמנות.
             </p>
             <form method="get" action="admin_reports.php" id="orders_report_form">
+                <input type="hidden" name="tab" value="orders">
                 <div class="calendar-bar" style="position:relative;">
                     <input type="hidden" name="orders_start" id="orders_start" value="<?= htmlspecialchars($ordersReport['start'], ENT_QUOTES, 'UTF-8') ?>">
                     <input type="hidden" name="orders_end" id="orders_end" value="<?= htmlspecialchars($ordersReport['end'], ENT_QUOTES, 'UTF-8') ?>">
@@ -331,7 +338,7 @@ if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
             <?php endif; ?>
         </div>
 
-        <div id="reports-equipment" class="reports-section">
+        <div id="reports-equipment" class="reports-section<?= $activeTab === 'equipment' ? ' active' : '' ?>">
             <p class="muted-small">
                 כאן יוצגו דוחות על ציוד (שימוש בפריטים, תקלות, זמינות ועוד).
             </p>
