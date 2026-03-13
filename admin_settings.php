@@ -169,6 +169,28 @@ try {
             background: #f3f4f6;
             margin: 0;
         }
+        header {
+            background: #111827;
+            color: #f9fafb;
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        header h1 {
+            margin: 0;
+            font-size: 1.3rem;
+        }
+        header .user-info {
+            font-size: 0.9rem;
+            color: #e5e7eb;
+        }
+        header a {
+            color: #f9fafb;
+            text-decoration: none;
+            margin-right: 1rem;
+            font-size: 0.85rem;
+        }
         main.settings-main {
             max-width: 900px;
             margin: 1.5rem auto 2rem;
