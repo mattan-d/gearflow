@@ -53,6 +53,11 @@ $currentDocKey   = $_POST['doc_key'] ?? ($_GET['doc'] ?? '');
 $currentCustomId = isset($_GET['custom_id']) ? (int)$_GET['custom_id'] : 0;
 $currentCustom   = null;
 
+// סטודנט לא צריך לגשת למסמך "הסכם השאלה" מתוך מסך המסמכים
+if (!$canEdit && $currentDocKey === 'consent_form') {
+    $currentDocKey = '';
+}
+
 // קריאת מסמכים מותאמים אישית מה-DB
 $customDocs = [];
 try {
@@ -400,6 +405,7 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="doc-list">
             <?php foreach ($documents as $key => $doc): ?>
+                <?php if (!$canEdit && $key === 'consent_form') { continue; } ?>
                 <a href="admin_documents.php?doc=<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>"
                    class="doc-pill <?= $key === $currentDocKey && $currentCustomId === 0 ? 'active' : '' ?>">
                     <?= htmlspecialchars($doc['title'], ENT_QUOTES, 'UTF-8') ?>
