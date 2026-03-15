@@ -61,6 +61,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+    } elseif ($action === 'bulk_add') {
+        $usernames  = $_POST['bulk_username'] ?? [];
+        $passwords  = $_POST['bulk_password'] ?? [];
+        $roles      = $_POST['bulk_role'] ?? [];
+        $firstNames = $_POST['bulk_first_name'] ?? [];
+        $lastNames  = $_POST['bulk_last_name'] ?? [];
+        $warehouses = $_POST['bulk_warehouse'] ?? [];
+        $emails     = $_POST['bulk_email'] ?? [];
+        $phones     = $_POST['bulk_phone'] ?? [];
+        if (!is_array($usernames)) $usernames = [];
+        $inserted = 0;
+        $now = date('Y-m-d H:i:s');
+        $stmt = $pdo->prepare(
+            'INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, email, phone, created_at)
+             VALUES (:username, :password_hash, :role, 1, :first_name, :last_name, :warehouse, :email, :phone, :created_at)'
+        );
+        foreach ($usernames as $i => $u) {
+            $username = trim((string)$u);
+            if ($username === '') continue;
+            $password = isset($passwords[$i]) ? (string)$passwords[$i] : '';
+            if ($password === '') $password = '123456';
+            $role = isset($roles[$i]) && in_array(trim((string)$roles[$i]), ['admin', 'warehouse_manager', 'student'], true) ? trim((string)$roles[$i]) : 'student';
+            $firstName = isset($firstNames[$i]) ? trim((string)$firstNames[$i]) : '';
+            $lastName  = isset($lastNames[$i]) ? trim((string)$lastNames[$i]) : '';
+            $warehouse = isset($warehouses[$i]) ? trim((string)$warehouses[$i]) : '';
+            if ($warehouse !== 'מחסן א' && $warehouse !== 'מחסן ב') $warehouse = '';
+            $email = isset($emails[$i]) ? trim((string)$emails[$i]) : '';
+            $phone = isset($phones[$i]) ? trim((string)$phones[$i]) : '';
+            try {
+                $stmt->execute([
+                    ':username'    => $username,
+                    ':password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                    ':role'        => $role,
+                    ':first_name' => $firstName,
+                    ':last_name'  => $lastName,
+                    ':warehouse'  => $warehouse,
+                    ':email'      => $email,
+                    ':phone'      => $phone,
+                    ':created_at' => $now,
+                ]);
+                $inserted++;
+            } catch (PDOException $e) {
+                if (str_contains($e->getMessage(), 'UNIQUE')) {
+                    $error = $error ?: 'חלק מהמשתמשים כבר קיימים (שם משתמש כפול).';
+                }
+            }
+        }
+        if ($inserted > 0) {
+            $_SESSION['admin_users_success'] = 'נוספו ' . $inserted . ' משתמשים.';
+            header('Location: admin_users.php');
+            exit;
+        }
+        if ($error === '') {
+            $error = 'לא נוספו משתמשים. מלא לפחות שורת משתמש אחת (שם משתמש וסיסמה).';
+        }
     } elseif ($action === 'toggle_active') {
         $id = (int)($_POST['id'] ?? 0);
         if ($id > 0) {
@@ -791,8 +846,9 @@ if (isset($_GET['edit_id'])) {
     <?php endif; ?>
 
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 0.75rem;">
-        <div>
+        <div style="display:flex; gap:0.5rem;">
             <button type="button" class="btn" id="open_user_modal_btn">משתמש חדש</button>
+            <button type="button" class="btn secondary" id="open_bulk_users_btn">משתמשים חדשים</button>
         </div>
         <div style="display:flex;align-items:center;gap:0.5rem;">
             <a href="admin_users.php?export=1" class="btn secondary">יצוא CSV</a>
@@ -913,6 +969,63 @@ if (isset($_GET['edit_id'])) {
     })();
     </script>
     <?php endif; ?>
+
+    <div class="modal-backdrop" id="bulk_users_modal" style="display: none;">
+        <div class="modal-card" style="max-width: 95%; width: 960px;">
+            <div class="modal-header">
+                <h2>הוספת משתמשים חדשים</h2>
+                <button type="button" class="modal-close" id="bulk_users_modal_close" aria-label="סגירה"><i data-lucide="x" aria-hidden="true"></i></button>
+            </div>
+            <p class="muted-small" style="margin-bottom:0.75rem;">הוסף שורות ומילוי פרטי משתמשים. שמירה תיצור משתמש חדש לכל שורה עם שם משתמש וסיסמה. סיסמה ריקה תוגדר אוטומטית ל־123456.</p>
+            <form method="post" action="admin_users.php">
+                <input type="hidden" name="action" value="bulk_add">
+                <div style="overflow-x: auto;">
+                    <table class="bulk-add-table" style="width:100%; border-collapse: collapse; font-size: 0.86rem;">
+                        <thead>
+                        <tr>
+                            <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">שם משתמש</th>
+                            <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">סיסמה</th>
+                            <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">תפקיד</th>
+                            <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">שם פרטי</th>
+                            <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">שם משפחה</th>
+                            <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">מחסן</th>
+                            <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">אימייל</th>
+                            <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">טלפון</th>
+                        </tr>
+                        </thead>
+                        <tbody id="bulk_users_tbody">
+                        <tr class="bulk-users-row" data-row-index="0">
+                            <td style="padding:0.35rem 0.5rem;"><input type="text" name="bulk_username[]" placeholder="שם משתמש" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;"></td>
+                            <td style="padding:0.35rem 0.5rem;"><input type="password" name="bulk_password[]" placeholder="סיסמה" autocomplete="new-password" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;"></td>
+                            <td style="padding:0.35rem 0.5rem;">
+                                <select name="bulk_role[]" style="padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db; min-width:110px;">
+                                    <option value="student">סטודנט</option>
+                                    <option value="warehouse_manager">מנהל מחסן</option>
+                                    <option value="admin">אדמין</option>
+                                </select>
+                            </td>
+                            <td style="padding:0.35rem 0.5rem;"><input type="text" name="bulk_first_name[]" placeholder="שם פרטי" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;"></td>
+                            <td style="padding:0.35rem 0.5rem;"><input type="text" name="bulk_last_name[]" placeholder="שם משפחה" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;"></td>
+                            <td style="padding:0.35rem 0.5rem;">
+                                <select name="bulk_warehouse[]" style="padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db; min-width:90px;">
+                                    <option value="">ללא</option>
+                                    <option value="מחסן א">מחסן א</option>
+                                    <option value="מחסן ב">מחסן ב</option>
+                                </select>
+                            </td>
+                            <td style="padding:0.35rem 0.5rem;"><input type="text" name="bulk_email[]" placeholder="אימייל" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;"></td>
+                            <td style="padding:0.35rem 0.5rem;"><input type="text" name="bulk_phone[]" placeholder="טלפון" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;"></td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="margin-top:0.75rem; display:flex; gap:0.5rem; align-items:center;">
+                    <button type="button" class="btn secondary" id="bulk_users_add_row_btn">הוסף שורה</button>
+                    <button type="submit" class="btn">שמירת כל המשתמשים</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <?php $showUserModal = $editingUser !== null; ?>
     <div class="modal-backdrop" id="user_modal" style="display: <?= $showUserModal ? 'flex' : 'none' ?>;">
@@ -1089,6 +1202,37 @@ document.addEventListener('DOMContentLoaded', function () {
     if (importFileInput && importForm) {
         importFileInput.addEventListener('change', function () {
             if (importFileInput.files && importFileInput.files.length > 0) importForm.submit();
+        });
+    }
+
+    var bulkUsersModal = document.getElementById('bulk_users_modal');
+    var openBulkUsersBtn = document.getElementById('open_bulk_users_btn');
+    var bulkUsersModalClose = document.getElementById('bulk_users_modal_close');
+    var bulkUsersTbody = document.getElementById('bulk_users_tbody');
+    var bulkUsersAddRowBtn = document.getElementById('bulk_users_add_row_btn');
+    if (openBulkUsersBtn && bulkUsersModal) {
+        openBulkUsersBtn.addEventListener('click', function () {
+            bulkUsersModal.style.display = 'flex';
+        });
+    }
+    if (bulkUsersModalClose && bulkUsersModal) {
+        bulkUsersModalClose.addEventListener('click', function () {
+            bulkUsersModal.style.display = 'none';
+        });
+    }
+    if (bulkUsersAddRowBtn && bulkUsersTbody) {
+        bulkUsersAddRowBtn.addEventListener('click', function () {
+            var rows = bulkUsersTbody.querySelectorAll('tr.bulk-users-row');
+            var nextIndex = rows.length;
+            var firstRow = rows[0];
+            if (!firstRow) return;
+            var clone = firstRow.cloneNode(true);
+            clone.setAttribute('data-row-index', nextIndex);
+            var inputs = clone.querySelectorAll('input');
+            inputs.forEach(function (inp) { inp.value = ''; });
+            var selects = clone.querySelectorAll('select');
+            selects.forEach(function (sel) { sel.selectedIndex = 0; });
+            bulkUsersTbody.appendChild(clone);
         });
     }
 
