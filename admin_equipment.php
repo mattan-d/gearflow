@@ -23,6 +23,14 @@ if (isset($_GET['edit_id'])) {
     }
 }
 
+// רכיבי פריט לטופס הציוד (עריכה – טעינה; הוספה – ריק)
+$formComponentsList = [];
+if ($editingEquipment !== null && !empty($editingEquipment['id'])) {
+    $stmtFc = $pdo->prepare('SELECT name, quantity FROM equipment_components WHERE equipment_id = :eid ORDER BY name ASC');
+    $stmtFc->execute([':eid' => (int)$editingEquipment['id']]);
+    $formComponentsList = $stmtFc->fetchAll(PDO::FETCH_ASSOC) ?: [];
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -136,7 +144,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':picture'            => $picturePath,
                         ':created_at'         => date('Y-m-d H:i:s'),
                     ]);
+                    $id = (int)$pdo->lastInsertId();
                     $success = 'הציוד נוסף בהצלחה.';
+                }
+                // שמירת רכיבי פריט (מטופס הציוד)
+                $names = $_POST['component_name'] ?? [];
+                $qtys  = $_POST['component_qty'] ?? [];
+                if (!is_array($names)) $names = [];
+                if (!is_array($qtys))  $qtys  = [];
+                $eqId = $id > 0 ? $id : (int)($editingEquipment['id'] ?? 0);
+                if ($eqId > 0) {
+                    try {
+                        $del = $pdo->prepare('DELETE FROM equipment_components WHERE equipment_id = :eid');
+                        $del->execute([':eid' => $eqId]);
+                        $ins = $pdo->prepare(
+                            'INSERT INTO equipment_components (equipment_id, name, quantity, created_at)
+                             VALUES (:equipment_id, :name, :quantity, :created_at)'
+                        );
+                        $now = date('Y-m-d H:i:s');
+                        foreach ($names as $idx => $nameVal) {
+                            $nameVal = trim((string)$nameVal);
+                            if ($nameVal === '') continue;
+                            $qty = isset($qtys[$idx]) ? max(1, (int)$qtys[$idx]) : 1;
+                            $ins->execute([
+                                ':equipment_id' => $eqId,
+                                ':name'         => $nameVal,
+                                ':quantity'     => $qty,
+                                ':created_at'   => $now,
+                            ]);
+                        }
+                    } catch (Throwable $e) {
+                        // לא מפילים את השמירה אם רכיבים נכשלו
+                    }
                 }
             } catch (PDOException $e) {
                 if (str_contains($e->getMessage(), 'UNIQUE') && str_contains($e->getMessage(), 'code')) {
@@ -1202,6 +1241,45 @@ $me = current_user();
                     </div>
                 </div>
 
+                <div style="margin-top:1rem;">
+                    <button type="button" class="btn secondary small" id="equipment_toggle_components_btn">הוספת פרטי ציוד</button>
+                    <div id="equipment_form_components_section" style="display:none; margin-top:0.75rem; padding:0.75rem; background:#f9fafb; border-radius:8px; border:1px solid #e5e7eb;">
+                        <div class="muted-small" style="margin-bottom:0.5rem;">רכיבי הפריט (לדוגמה: סוללה, מטען, תיק)</div>
+                        <table style="width:100%; border-collapse:collapse; font-size:0.86rem; margin-bottom:0.5rem;">
+                            <thead>
+                            <tr>
+                                <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">שם רכיב</th>
+                                <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb; width:80px;">כמות</th>
+                            </tr>
+                            </thead>
+                            <tbody id="equipment_form_components_tbody">
+                            <?php if (empty($formComponentsList)): ?>
+                                <tr>
+                                    <td style="padding:0.35rem 0.5rem;">
+                                        <input type="text" name="component_name[]" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
+                                    </td>
+                                    <td style="padding:0.35rem 0.25rem;">
+                                        <input type="number" name="component_qty[]" value="1" min="1" style="width:70px;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
+                                    </td>
+                                </tr>
+                            <?php else: ?>
+                                <?php foreach ($formComponentsList as $fc): ?>
+                                <tr>
+                                    <td style="padding:0.35rem 0.5rem;">
+                                        <input type="text" name="component_name[]" value="<?= htmlspecialchars($fc['name'] ?? '', ENT_QUOTES, 'UTF-8') ?>" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
+                                    </td>
+                                    <td style="padding:0.35rem 0.25rem;">
+                                        <input type="number" name="component_qty[]" value="<?= (int)($fc['quantity'] ?? 1) ?>" min="1" style="width:70px;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                            </tbody>
+                        </table>
+                        <button type="button" class="btn secondary small" id="equipment_form_add_component_row">הוסף שורה</button>
+                    </div>
+                </div>
+
                 <button type="submit" class="btn">
                     <?= $editingEquipment ? 'שמירת שינויים' : 'הוספת ציוד' ?>
                 </button>
@@ -1699,6 +1777,31 @@ document.addEventListener('DOMContentLoaded', function () {
                 '<input type="number" name="component_qty[]" value="1" min="1" style="width:70px;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">' +
                 '</td>';
             componentsTableBody.appendChild(tr);
+        });
+    }
+
+    // בחלון הוספת/עריכת ציוד – כפתור "הוספת פרטי ציוד" וטבלת רכיבים
+    var equipmentToggleComponentsBtn = document.getElementById('equipment_toggle_components_btn');
+    var equipmentFormComponentsSection = document.getElementById('equipment_form_components_section');
+    var equipmentFormComponentsTbody = document.getElementById('equipment_form_components_tbody');
+    var equipmentFormAddRowBtn = document.getElementById('equipment_form_add_component_row');
+    if (equipmentToggleComponentsBtn && equipmentFormComponentsSection) {
+        equipmentToggleComponentsBtn.addEventListener('click', function () {
+            var visible = equipmentFormComponentsSection.style.display !== 'none';
+            equipmentFormComponentsSection.style.display = visible ? 'none' : 'block';
+        });
+    }
+    if (equipmentFormAddRowBtn && equipmentFormComponentsTbody) {
+        equipmentFormAddRowBtn.addEventListener('click', function () {
+            var tr = document.createElement('tr');
+            tr.innerHTML =
+                '<td style="padding:0.35rem 0.5rem;">' +
+                '<input type="text" name="component_name[]" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">' +
+                '</td>' +
+                '<td style="padding:0.35rem 0.25rem;">' +
+                '<input type="number" name="component_qty[]" value="1" min="1" style="width:70px;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">' +
+                '</td>';
+            equipmentFormComponentsTbody.appendChild(tr);
         });
     }
 });
