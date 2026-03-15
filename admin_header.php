@@ -123,7 +123,6 @@ if ($userId > 0) {
         background: <?= htmlspecialchars($headerBg, ENT_QUOTES, 'UTF-8') ?>;
         border-radius: 8px;
         padding: 0.4rem 0.6rem;
-        box-shadow: 0 12px 30px rgba(0,0,0,0.45);
         display: none;
         min-width: 170px;
         z-index: 30;
@@ -136,7 +135,7 @@ if ($userId > 0) {
         color: var(--gf-header-link);
     }
     .main-nav-sub a + a {
-        margin-top: 0.15rem;
+        margin-top: 2px;
     }
     .main-nav-item-wrapper:hover .main-nav-sub {
         display: block;
