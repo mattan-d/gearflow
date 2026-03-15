@@ -6,6 +6,8 @@ require_once __DIR__ . '/auth.php';
 
 require_admin_or_warehouse();
 
+const MAX_EQUIPMENT_COMPONENTS = 6;
+
 $pdo = get_db();
 $error = '';
 $success = isset($_GET['success']) ? (string)$_GET['success'] : '';
@@ -147,11 +149,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $id = (int)$pdo->lastInsertId();
                     $success = 'הציוד נוסף בהצלחה.';
                 }
-                // שמירת רכיבי פריט (מטופס הציוד)
+                // שמירת רכיבי פריט (מטופס הציוד) – עד MAX_EQUIPMENT_COMPONENTS, כמות תמיד 1
                 $names = $_POST['component_name'] ?? [];
-                $qtys  = $_POST['component_qty'] ?? [];
                 if (!is_array($names)) $names = [];
-                if (!is_array($qtys))  $qtys  = [];
+                $names = array_values(array_filter(array_map('trim', array_map('strval', $names))));
+                $names = array_slice($names, 0, MAX_EQUIPMENT_COMPONENTS);
                 $eqId = $id > 0 ? $id : (int)($editingEquipment['id'] ?? 0);
                 if ($eqId > 0) {
                     try {
@@ -159,17 +161,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $del->execute([':eid' => $eqId]);
                         $ins = $pdo->prepare(
                             'INSERT INTO equipment_components (equipment_id, name, quantity, created_at)
-                             VALUES (:equipment_id, :name, :quantity, :created_at)'
+                             VALUES (:equipment_id, :name, 1, :created_at)'
                         );
                         $now = date('Y-m-d H:i:s');
-                        foreach ($names as $idx => $nameVal) {
-                            $nameVal = trim((string)$nameVal);
+                        foreach ($names as $nameVal) {
                             if ($nameVal === '') continue;
-                            $qty = isset($qtys[$idx]) ? max(1, (int)$qtys[$idx]) : 1;
                             $ins->execute([
                                 ':equipment_id' => $eqId,
                                 ':name'         => $nameVal,
-                                ':quantity'     => $qty,
                                 ':created_at'   => $now,
                             ]);
                         }
@@ -228,7 +227,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $imported = 0;
                     $skippedDuplicates = 0;
-                    $maxComponents = 20;
                     $now = date('Y-m-d H:i:s');
 
                     while (($row = fgetcsv($handle)) !== false) {
@@ -264,20 +262,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ':created_at'         => $now,
                             ]);
                             $newId = (int)$pdo->lastInsertId();
-                            for ($n = 1; $n <= $maxComponents; $n++) {
+                            for ($n = 1; $n <= MAX_EQUIPMENT_COMPONENTS; $n++) {
                                 $cName = $get('component_' . $n . '_name');
-                                if ($cName === '') {
-                                    continue;
-                                }
-                                $cQty = (int)$get('component_' . $n . '_quantity');
-                                if ($cQty < 1) {
-                                    $cQty = 1;
-                                }
+                                if ($cName === '') continue;
                                 try {
                                     $insertComp->execute([
                                         ':equipment_id' => $newId,
                                         ':name'         => $cName,
-                                        ':quantity'     => $cQty,
+                                        ':quantity'     => 1,
                                         ':created_at'   => $now,
                                     ]);
                                 } catch (Throwable $e) {
@@ -362,11 +354,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $equipmentId = (int)($_POST['equipment_id'] ?? 0);
         if ($equipmentId > 0) {
             $names = $_POST['component_name'] ?? [];
-            $qtys  = $_POST['component_qty'] ?? [];
             if (!is_array($names)) $names = [];
-            if (!is_array($qtys))  $qtys  = [];
+            $names = array_values(array_filter(array_map('trim', array_map('strval', $names))));
+            $names = array_slice($names, 0, MAX_EQUIPMENT_COMPONENTS);
 
-            // מוחקים רכיבים קיימים ומכניסים מחדש לפי הטופס
+            // מוחקים רכיבים קיימים ומכניסים מחדש לפי הטופס (כמות תמיד 1)
             $pdo->beginTransaction();
             try {
                 $del = $pdo->prepare('DELETE FROM equipment_components WHERE equipment_id = :eid');
@@ -374,20 +366,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $ins = $pdo->prepare(
                     'INSERT INTO equipment_components (equipment_id, name, quantity, created_at)
-                     VALUES (:equipment_id, :name, :quantity, :created_at)'
+                     VALUES (:equipment_id, :name, 1, :created_at)'
                 );
                 $now = date('Y-m-d H:i:s');
-                foreach ($names as $idx => $nameVal) {
-                    $nameVal = trim((string)$nameVal);
-                    if ($nameVal === '') {
-                        continue;
-                    }
-                    $qtyVal = isset($qtys[$idx]) ? (int)$qtys[$idx] : 1;
-                    if ($qtyVal <= 0) $qtyVal = 1;
+                foreach ($names as $nameVal) {
+                    if ($nameVal === '') continue;
                     $ins->execute([
                         ':equipment_id' => $equipmentId,
                         ':name'         => $nameVal,
-                        ':quantity'     => $qtyVal,
                         ':created_at'   => $now,
                     ]);
                 }
@@ -558,9 +544,9 @@ if ($equipmentTab === '' || $equipmentTab === 'all') {
     }
 }
 
-// יצוא רשימת ציוד ל-CSV (כולל רכיבי פריט – עמודה נפרדת לכל רכיב עם כותרת)
+// יצוא רשימת ציוד ל-CSV (כולל עד 6 רכיבי פריט – שם בלבד, ללא כמות)
 if (isset($_GET['export']) && $_GET['export'] === '1') {
-    $maxComponents = 20;
+    $maxComponents = MAX_EQUIPMENT_COMPONENTS;
     $equipmentIds = array_map(function ($item) { return (int)($item['id'] ?? 0); }, $equipmentList);
     $equipmentIds = array_values(array_filter($equipmentIds));
     $componentsByEquipment = [];
@@ -584,7 +570,6 @@ if (isset($_GET['export']) && $_GET['export'] === '1') {
     $header = ['name', 'code', 'description', 'category', 'location', 'status', 'quantity_total', 'quantity_available'];
     for ($n = 1; $n <= $maxComponents; $n++) {
         $header[] = 'component_' . $n . '_name';
-        $header[] = 'component_' . $n . '_quantity';
     }
     $header[] = 'created_at';
     $header[] = 'updated_at';
@@ -606,13 +591,7 @@ if (isset($_GET['export']) && $_GET['export'] === '1') {
             $row['quantity_available'] ?? 0,
         ];
         for ($n = 0; $n < $maxComponents; $n++) {
-            if (isset($comps[$n])) {
-                $data[] = $comps[$n]['name'];
-                $data[] = $comps[$n]['quantity'];
-            } else {
-                $data[] = '';
-                $data[] = '';
-            }
+            $data[] = isset($comps[$n]) ? $comps[$n]['name'] : '';
         }
         $data[] = $row['created_at'] ?? '';
         $data[] = $row['updated_at'] ?? '';
@@ -1352,39 +1331,34 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                 <div style="margin-top:1rem;">
                     <button type="button" class="btn secondary small" id="equipment_toggle_components_btn">הוספת פרטי ציוד</button>
                     <div id="equipment_form_components_section" style="display:none; margin-top:0.75rem; padding:0.75rem; background:#f9fafb; border-radius:8px; border:1px solid #e5e7eb;">
-                        <div class="muted-small" style="margin-bottom:0.5rem;">רכיבי הפריט (לדוגמה: סוללה, מטען, תיק)</div>
+                        <div class="muted-small" style="margin-bottom:0.5rem;">רכיבי הפריט (עד <?= MAX_EQUIPMENT_COMPONENTS ?> רכיבים, כמות 1 לכל רכיב)</div>
                         <table style="width:100%; border-collapse:collapse; font-size:0.86rem; margin-bottom:0.5rem;">
                             <thead>
                             <tr>
                                 <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">שם רכיב</th>
-                                <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb; width:80px;">כמות</th>
                             </tr>
                             </thead>
                             <tbody id="equipment_form_components_tbody">
-                            <?php if (empty($formComponentsList)): ?>
-                                <tr>
+                            <?php
+                            $formComps = array_slice($formComponentsList, 0, MAX_EQUIPMENT_COMPONENTS);
+                            if (empty($formComps)): ?>
+                                <tr class="component-row">
                                     <td style="padding:0.35rem 0.5rem;">
                                         <input type="text" name="component_name[]" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
                                     </td>
-                                    <td style="padding:0.35rem 0.25rem;">
-                                        <input type="number" name="component_qty[]" value="1" min="1" style="width:70px;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
-                                    </td>
                                 </tr>
                             <?php else: ?>
-                                <?php foreach ($formComponentsList as $fc): ?>
-                                <tr>
+                                <?php foreach ($formComps as $fc): ?>
+                                <tr class="component-row">
                                     <td style="padding:0.35rem 0.5rem;">
                                         <input type="text" name="component_name[]" value="<?= htmlspecialchars($fc['name'] ?? '', ENT_QUOTES, 'UTF-8') ?>" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
-                                    </td>
-                                    <td style="padding:0.35rem 0.25rem;">
-                                        <input type="number" name="component_qty[]" value="<?= (int)($fc['quantity'] ?? 1) ?>" min="1" style="width:70px;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
                             </tbody>
                         </table>
-                        <button type="button" class="btn secondary small" id="equipment_form_add_component_row">הוסף שורה</button>
+                        <button type="button" class="btn secondary small" id="equipment_form_add_component_row" data-max="<?= MAX_EQUIPMENT_COMPONENTS ?>">הוסף שורה</button>
                     </div>
                 </div>
 
@@ -1483,33 +1457,28 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                     <input type="hidden" name="action" value="save_components">
                     <input type="hidden" name="equipment_id" value="<?= (int)$componentsEquipment['id'] ?>">
 
+                    <p class="muted-small">עד <?= MAX_EQUIPMENT_COMPONENTS ?> רכיבים, כל רכיב בכמות 1.</p>
                     <table style="width:100%; border-collapse:collapse; font-size:0.86rem; margin-bottom:0.75rem;">
                         <thead>
                         <tr>
                             <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">שם רכיב</th>
-                            <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb; width:80px;">כמות</th>
                         </tr>
                         </thead>
                         <tbody id="components_table_body">
-                        <?php if (count($componentsList) === 0): ?>
-                            <tr>
+                        <?php
+                        $componentsListSlice = array_slice($componentsList, 0, MAX_EQUIPMENT_COMPONENTS);
+                        if (count($componentsListSlice) === 0): ?>
+                            <tr class="component-row">
                                 <td style="padding:0.35rem 0.5rem;">
                                     <input type="text" name="component_name[]" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
                                 </td>
-                                <td style="padding:0.35rem 0.25rem;">
-                                    <input type="number" name="component_qty[]" value="1" min="1" style="width:70px;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
-                                </td>
                             </tr>
                         <?php else: ?>
-                            <?php foreach ($componentsList as $comp): ?>
-                                <tr>
+                            <?php foreach ($componentsListSlice as $comp): ?>
+                                <tr class="component-row">
                                     <td style="padding:0.35rem 0.5rem;">
                                         <input type="text" name="component_name[]" value="<?= htmlspecialchars($comp['name'] ?? '', ENT_QUOTES, 'UTF-8') ?>"
                                                style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
-                                    </td>
-                                    <td style="padding:0.35rem 0.25rem;">
-                                        <input type="number" name="component_qty[]" value="<?= (int)($comp['quantity'] ?? 1) ?>" min="1"
-                                               style="width:70px;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -1517,7 +1486,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                         </tbody>
                     </table>
 
-                    <button type="button" class="btn secondary small" id="components_add_row_btn" style="margin-bottom:0.5rem;">הוסף שורה</button>
+                    <button type="button" class="btn secondary small" id="components_add_row_btn" data-max="<?= MAX_EQUIPMENT_COMPONENTS ?>" style="margin-bottom:0.5rem;">הוסף שורה</button>
 
                     <div style="display:flex;justify-content:flex-end;gap:0.5rem;">
                         <button type="submit" class="btn">שמירה</button>
@@ -1947,16 +1916,16 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // הוספת שורת רכיב חדשה
+    // הוספת שורת רכיב חדשה (עד 6 רכיבים, ללא כמות)
     if (addComponentRowBtn && componentsTableBody) {
         addComponentRowBtn.addEventListener('click', function () {
+            var max = parseInt(addComponentRowBtn.getAttribute('data-max') || '6', 10);
+            var rows = componentsTableBody.querySelectorAll('tr.component-row');
+            if (rows.length >= max) return;
             var tr = document.createElement('tr');
-            tr.innerHTML =
-                '<td style="padding:0.35rem 0.5rem;">' +
+            tr.className = 'component-row';
+            tr.innerHTML = '<td style="padding:0.35rem 0.5rem;">' +
                 '<input type="text" name="component_name[]" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">' +
-                '</td>' +
-                '<td style="padding:0.35rem 0.25rem;">' +
-                '<input type="number" name="component_qty[]" value="1" min="1" style="width:70px;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">' +
                 '</td>';
             componentsTableBody.appendChild(tr);
         });
@@ -1975,13 +1944,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     if (equipmentFormAddRowBtn && equipmentFormComponentsTbody) {
         equipmentFormAddRowBtn.addEventListener('click', function () {
+            var max = parseInt(equipmentFormAddRowBtn.getAttribute('data-max') || '6', 10);
+            var rows = equipmentFormComponentsTbody.querySelectorAll('tr.component-row');
+            if (rows.length >= max) return;
             var tr = document.createElement('tr');
-            tr.innerHTML =
-                '<td style="padding:0.35rem 0.5rem;">' +
+            tr.className = 'component-row';
+            tr.innerHTML = '<td style="padding:0.35rem 0.5rem;">' +
                 '<input type="text" name="component_name[]" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">' +
-                '</td>' +
-                '<td style="padding:0.35rem 0.25rem;">' +
-                '<input type="number" name="component_qty[]" value="1" min="1" style="width:70px;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">' +
                 '</td>';
             equipmentFormComponentsTbody.appendChild(tr);
         });
