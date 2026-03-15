@@ -11,6 +11,9 @@ const MAX_EQUIPMENT_COMPONENTS = 6;
 $pdo = get_db();
 $error = '';
 $success = isset($_GET['success']) ? (string)$_GET['success'] : '';
+if (isset($_GET['import_error']) && $_GET['import_error'] !== '') {
+    $error = (string)$_GET['import_error'];
+}
 $editingEquipment = null;
 $componentsEquipment = null;
 $componentsList = [];
@@ -469,7 +472,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (isset($skipRows[$ri])) continue;
                 $get = function ($col) use ($headerNorm, $row, $missingDefaults) {
                     $idx = $headerNorm[$col] ?? null;
-                    if ($idx !== null && isset($row[$idx])) return trim((string)$row[$idx]);
+                    if ($idx !== null && array_key_exists($idx, $row)) {
+                        $v = $row[$idx];
+                        return trim((string)$v);
+                    }
                     return (string)($missingDefaults[$col] ?? '');
                 };
                 $code = $get('code');
@@ -478,6 +484,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $name = $get('name');
                 if ($name === '' || $code === '') continue;
+                $statusVal = $get('status');
+                if (!in_array($statusVal, ['active', 'out', 'disabled'], true)) {
+                    $statusVal = 'active';
+                }
                 try {
                     $insert->execute([
                         ':name' => $name,
@@ -487,7 +497,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':location' => $get('location'),
                         ':quantity_total' => 1,
                         ':quantity_available' => 1,
-                        ':status' => $get('status') ?: 'active',
+                        ':status' => $statusVal,
                         ':created_at' => $now,
                     ]);
                     $newId = (int)$pdo->lastInsertId();
@@ -501,16 +511,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $imported++;
                 } catch (PDOException $e) {
                     if (!str_contains($e->getMessage(), 'UNIQUE') || !str_contains($e->getMessage(), 'code')) {
-                        $error = $error ?: 'שגיאה בייבוא.';
+                        $msg = $e->getMessage();
+                        $hint = (str_contains($msg, 'SQLSTATE') || str_contains($msg, 'column') || str_contains($msg, 'constraint'))
+                            ? ' נא לבדוק שהקובץ מכיל עמודות שם וקוד ושהנתונים תקינים.'
+                            : '';
+                        $error = $error ?: ('שגיאה בייבוא.' . $hint);
                     }
                 }
             }
-            unset($_SESSION['import_fix_type'], $_SESSION['import_fix_headers'], $_SESSION['import_fix_rows'], $_SESSION['import_fix_raw'], $_SESSION['import_fix_issues'], $_SESSION['import_fix_delimiter']);
             if ($error === '') {
+                unset($_SESSION['import_fix_type'], $_SESSION['import_fix_headers'], $_SESSION['import_fix_rows'], $_SESSION['import_fix_raw'], $_SESSION['import_fix_issues'], $_SESSION['import_fix_delimiter']);
                 $success = 'ייבוא הושלם. נוספו ' . $imported . ' פריטים.';
                 header('Location: admin_equipment.php?success=' . urlencode($success));
                 exit;
             }
+            header('Location: admin_equipment.php?import_fix=1&import_error=' . urlencode($error));
+            exit;
         }
     } elseif ($action === 'bulk_add') {
         $meTmp = current_user();
@@ -686,16 +702,22 @@ if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESS
                 $imported++;
             } catch (PDOException $e) {
                 if (!str_contains($e->getMessage(), 'UNIQUE') || !str_contains($e->getMessage(), 'code')) {
-                    $error = $error ?: 'שגיאה בייבוא.';
+                    $msg = $e->getMessage();
+                    $hint = (str_contains($msg, 'SQLSTATE') || str_contains($msg, 'column') || str_contains($msg, 'constraint'))
+                        ? ' נא לבדוק שהקובץ מכיל עמודות שם וקוד ושהנתונים תקינים.'
+                        : '';
+                    $error = $error ?: ('שגיאה בייבוא.' . $hint);
                 }
             }
         }
-        unset($_SESSION['import_fix_type'], $_SESSION['import_fix_headers'], $_SESSION['import_fix_rows'], $_SESSION['import_fix_raw'], $_SESSION['import_fix_issues'], $_SESSION['import_fix_delimiter'], $_SESSION['import_fix_apply_direct']);
         if ($error === '') {
+            unset($_SESSION['import_fix_type'], $_SESSION['import_fix_headers'], $_SESSION['import_fix_rows'], $_SESSION['import_fix_raw'], $_SESSION['import_fix_issues'], $_SESSION['import_fix_delimiter'], $_SESSION['import_fix_apply_direct']);
             $success = 'ייבוא הושלם. נוספו ' . $imported . ' פריטים.';
             header('Location: admin_equipment.php?success=' . urlencode($success));
             exit;
         }
+        header('Location: admin_equipment.php?import_fix=1&import_error=' . urlencode($error));
+        exit;
     }
     $show_import_fix_modal = true;
     $import_fix_data = [
@@ -1561,7 +1583,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
     </div>
 
     <?php
-    $showFormCard = $editingEquipment !== null || $error !== '';
+    $showFormCard = ($editingEquipment !== null || $error !== '') && empty($_GET['import_fix']);
     ?>
 
     <div class="modal-backdrop" id="equipment_modal" style="display: <?= $showFormCard ? 'flex' : 'none' ?>;">
@@ -1780,6 +1802,9 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                 <h2>תיקון ייבוא ציוד</h2>
                 <button type="button" class="modal-close" id="import_fix_modal_close" aria-label="סגירה">✕</button>
             </div>
+            <?php if ($error !== ''): ?>
+            <div class="flash error" style="margin-bottom:0.75rem;"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
+            <?php endif; ?>
             <div id="import_fix_content">
                 <?php $iss = $import_fix_data['issues']; ?>
                 <?php if (!empty($iss['not_csv'])): ?>
