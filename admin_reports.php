@@ -228,6 +228,16 @@ if ($eqShow) {
 
     $hasRange = $eqStart !== '' && $eqEnd !== '' && $eqStart <= $eqEnd;
     if ($hasRange) {
+        $avParams = [];
+        if ($eqCategory !== '' && $eqCategory !== 'הכל') {
+            $avParams[':eq_cat'] = $eqCategory;
+        }
+        if ($eqEquipmentId > 0) {
+            $avParams[':eq_id'] = $eqEquipmentId;
+        }
+        $avParams[':av_start'] = $eqStart;
+        $avParams[':av_end']   = $eqEnd;
+
         $wantAvailable = ($eqAvailability === 'פנוי');
         if ($wantAvailable) {
             $sqlAv = "SELECT e.id, e.name, e.code, e.category
@@ -249,10 +259,8 @@ if ($eqShow) {
                       AND DATE(o.start_date) <= :av_end AND DATE(o.end_date) >= :av_start
                       ORDER BY e.category ASC, e.name ASC";
         }
-        $eqParams[':av_start'] = $eqStart;
-        $eqParams[':av_end']   = $eqEnd;
         $stAv = $pdo->prepare($sqlAv);
-        $stAv->execute($eqParams);
+        $stAv->execute($avParams);
         $equipmentReport['availability'] = $stAv->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
