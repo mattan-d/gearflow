@@ -96,7 +96,7 @@ $versionsByDoc = [];
 try {
     $stV = $pdo->query("SELECT doc_type, doc_ref, version_number, created_at FROM document_versions ORDER BY doc_type, doc_ref, version_number DESC");
     while ($r = $stV->fetch(PDO::FETCH_ASSOC)) {
-        $k = $r['doc_type'] . ':' . $r['doc_ref'];
+        $k = $r['doc_type'] . ':' . (string)$r['doc_ref'];
         if (!isset($versionsByDoc[$k])) {
             $versionsByDoc[$k] = [];
         }
@@ -611,6 +611,10 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     $editLink = 'admin_documents.php?doc=' . htmlspecialchars($key, ENT_QUOTES, 'UTF-8') . '&edit=1';
                     $meta = $builtinMeta[$key] ?? ['created_at' => null, 'updated_at' => null, 'version_number' => 1];
                     $verList = $versionsByDoc['builtin:' . $key] ?? [];
+                    $bVer = max(1, (int)($meta['version_number'] ?? 1));
+                    $verListOlderBuiltin = array_values(array_filter($verList, function ($v) use ($bVer) {
+                        return (int)$v['version_number'] < $bVer;
+                    }));
                 ?>
                     <tr class="<?= $isSelected ? 'selected' : '' ?>">
                         <td><?= $rowNum ?></td>
@@ -619,19 +623,19 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                         <td class="doc-date"><?= $meta['created_at'] ? date('d/m/Y H:i', strtotime($meta['created_at'])) : '—' ?></td>
                         <td class="doc-date"><?= $meta['updated_at'] ? date('d/m/Y H:i', strtotime($meta['updated_at'])) : '—' ?></td>
                         <td class="doc-version-cell">
-                            <?php if ($canEdit && count($verList) > 0): ?>
+                            <?php if ($canEdit && count($verListOlderBuiltin) > 0): ?>
                                 <div class="version-dropdown-wrap">
-                                    <button type="button" class="version-trigger" data-doc-type="builtin" data-doc-ref="<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>" data-current-ver="<?= (int)$meta['version_number'] ?>" aria-haspopup="true" aria-expanded="false">
-                                        גירסה <?= (int)$meta['version_number'] ?> ▾
+                                    <button type="button" class="version-trigger" data-doc-type="builtin" data-doc-ref="<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>" data-current-ver="<?= $bVer ?>" aria-haspopup="true" aria-expanded="false">
+                                        גירסה <?= $bVer ?> ▾
                                     </button>
                                     <div class="version-dropdown" role="menu" hidden>
-                                        <?php foreach ($verList as $v): ?>
-                                            <button type="button" class="version-option" data-version="<?= (int)$v['version_number'] ?>" data-date="<?= htmlspecialchars($v['created_at'], ENT_QUOTES, 'UTF-8') ?>">גירסה <?= (int)$v['version_number'] ?> (<?= $v['created_at'] ? date('d/m/Y H:i', strtotime($v['created_at'])) : '' ?>)</button>
+                                        <?php foreach ($verListOlderBuiltin as $v): ?>
+                                            <button type="button" class="version-option" data-version="<?= (int)$v['version_number'] ?>" data-date="<?= htmlspecialchars($v['created_at'], ENT_QUOTES, 'UTF-8') ?>">גירסה <?= (int)$v['version_number'] ?></button>
                                         <?php endforeach; ?>
                                     </div>
                                 </div>
                             <?php else: ?>
-                                גירסה <?= max(1, (int)($meta['version_number'] ?? 1)) ?>
+                                גירסה <?= $bVer ?>
                             <?php endif; ?>
                         </td>
                         <td>
@@ -653,13 +657,13 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     $cCreated = $c['created_at'] ?? null;
                     $cUpdated = $c['updated_at'] ?? null;
                     $verList = $versionsByDoc['custom:' . $cid] ?? [];
-                    $cVer = (int)($c['version_number'] ?? 1);
+                    $cVer = 1;
                     if (!empty($verList)) {
-                        $maxVer = max(array_column($verList, 'version_number'));
-                        if ($maxVer > 0) {
-                            $cVer = $maxVer;
-                        }
+                        $cVer = max(array_column($verList, 'version_number'));
                     }
+                    $verListOlder = array_values(array_filter($verList, function ($v) use ($cVer) {
+                        return (int)$v['version_number'] < $cVer;
+                    }));
                 ?>
                     <tr class="<?= $isSelected ? 'selected' : '' ?>">
                         <td><?= $rowNum ?></td>
@@ -668,14 +672,14 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                         <td class="doc-date"><?= $cCreated ? date('d/m/Y H:i', strtotime($cCreated)) : '—' ?></td>
                         <td class="doc-date"><?= $cUpdated ? date('d/m/Y H:i', strtotime($cUpdated)) : '—' ?></td>
                         <td class="doc-version-cell">
-                            <?php if ($canEdit && count($verList) > 0): ?>
+                            <?php if ($canEdit && count($verListOlder) > 0): ?>
                                 <div class="version-dropdown-wrap">
                                     <button type="button" class="version-trigger" data-doc-type="custom" data-doc-ref="<?= $cid ?>" data-current-ver="<?= $cVer ?>" aria-haspopup="true" aria-expanded="false">
                                         גירסה <?= $cVer ?> ▾
                                     </button>
                                     <div class="version-dropdown" role="menu" hidden>
-                                        <?php foreach ($verList as $v): ?>
-                                            <button type="button" class="version-option" data-version="<?= (int)$v['version_number'] ?>" data-date="<?= htmlspecialchars($v['created_at'], ENT_QUOTES, 'UTF-8') ?>">גירסה <?= (int)$v['version_number'] ?> (<?= $v['created_at'] ? date('d/m/Y H:i', strtotime($v['created_at'])) : '' ?>)</button>
+                                        <?php foreach ($verListOlder as $v): ?>
+                                            <button type="button" class="version-option" data-version="<?= (int)$v['version_number'] ?>" data-date="<?= htmlspecialchars($v['created_at'], ENT_QUOTES, 'UTF-8') ?>">גירסה <?= (int)$v['version_number'] ?></button>
                                         <?php endforeach; ?>
                                     </div>
                                 </div>
