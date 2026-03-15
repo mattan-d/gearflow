@@ -238,6 +238,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($header !== null) {
                 foreach ($header as $idx => $col) {
                     $key = strtolower(trim((string)$col));
+                    $key = preg_replace('/^\x{FEFF}/u', '', $key);
                     if ($key !== '') $headerNorm[$key] = $idx;
                 }
             }
@@ -394,6 +395,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $headerNorm = [];
                 foreach ($header as $idx => $col) {
                     $key = strtolower(trim((string)$col));
+                    $key = preg_replace('/^\x{FEFF}/u', '', $key);
                     if ($key !== '') $headerNorm[$key] = $idx;
                 }
                 $systemCols = ['name', 'code', 'description', 'category', 'location', 'status'];
@@ -436,16 +438,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $headers = $_SESSION['import_fix_headers'] ?? [];
             $rows = $_SESSION['import_fix_rows'] ?? [];
             $columnMapping = json_decode((string)($_POST['column_mapping'] ?? '{}'), true) ?: [];
-            $missingDefaults = json_decode((string)($_POST['missing_defaults'] ?? '{}'), true) ?: [];
+            $missingDefaultsRaw = json_decode((string)($_POST['missing_defaults'] ?? '{}'), true) ?: [];
+            $missingDefaults = [];
+            foreach ($missingDefaultsRaw as $k => $v) {
+                $key = strtolower(trim((string)$k));
+                if ($key !== '' && (string)$v !== '') {
+                    $missingDefaults[$key] = trim((string)$v);
+                }
+            }
             $duplicateActions = json_decode((string)($_POST['duplicate_actions'] ?? '{}'), true) ?: [];
             $headerNorm = [];
             foreach ($headers as $idx => $col) {
                 $key = strtolower(trim((string)$col));
-                if ($key !== '') $headerNorm[$key] = $idx;
+                $key = preg_replace('/^\x{FEFF}/u', '', $key);
+                if ($key !== '') $headerNorm[$key] = (int)$idx;
             }
             foreach ($columnMapping as $fileCol => $systemColOrArray) {
                 $fileColNorm = strtolower(trim((string)$fileCol));
-                if ($fileColNorm === '' || !isset($headerNorm[$fileColNorm])) continue;
+                $fileColNorm = preg_replace('/^\x{FEFF}/u', '', $fileColNorm);
+                if ($fileColNorm === '' || !array_key_exists($fileColNorm, $headerNorm)) continue;
                 $targets = is_array($systemColOrArray) ? $systemColOrArray : [$systemColOrArray];
                 foreach ($targets as $sc) {
                     $sc = is_string($sc) ? trim($sc) : $sc;
@@ -488,6 +499,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $imported = 0;
             foreach ($rows as $ri => $row) {
                 if (isset($skipRows[$ri])) continue;
+                if (!is_array($row)) continue;
                 $row = array_values($row);
                 $get = function ($col) use ($headerNorm, $row, $missingDefaults) {
                     $idx = $headerNorm[$col] ?? null;
