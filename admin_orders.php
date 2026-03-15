@@ -1095,14 +1095,24 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         .icon-btn {
             border: none;
             background: transparent;
-            padding: 0.2rem;
+            padding: 0;
             border-radius: 4px;
             cursor: pointer;
             font-size: 1rem;
-            line-height: 1;
+            line-height: 0;
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            width: 1.75rem;
+            height: 1.75rem;
+            min-width: 1.75rem;
+            min-height: 1.75rem;
+            box-sizing: border-box;
+        }
+        .icon-btn svg,
+        .icon-btn i {
+            display: block;
+            line-height: 0;
         }
         .recurring-toggle-row .toggle-label { display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer; }
         .recurring-toggle-row input[type="checkbox"] { width: 1.1rem; height: 1.1rem; }
@@ -1240,6 +1250,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         }
         .row-actions form {
             margin: 0;
+            display: inline-flex;
+            align-items: center;
         }
         .tabs {
             display: inline-flex;
