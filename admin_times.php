@@ -21,6 +21,14 @@ if ($selectedWarehouse === '') {
 $days  = ['א', 'ב', 'ג', 'ד', 'ה'];
 $hours = range(9, 16);
 
+$knownWarehouses = ['מחסן א', 'מחסן ב'];
+if (!in_array($userWarehouse, $knownWarehouses, true)) {
+    $knownWarehouses[] = $userWarehouse;
+}
+if (!in_array($selectedWarehouse, $knownWarehouses, true)) {
+    $knownWarehouses[] = $selectedWarehouse;
+}
+
 // טעינת שעות פתוחות מה-DB
 $stmt = $pdo->prepare('SELECT day_of_week, hour FROM warehouse_hours WHERE warehouse = :w');
 $stmt->execute([':w' => $selectedWarehouse]);
@@ -67,6 +75,46 @@ if (empty($rows)) {
     }
 }
 
+// החלת שעות ברירת מחדל מהגדרות (שעות ברירת מחדל לפתיחת מחסן)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_default']) && isset($_POST['warehouse'])) {
+    $applyWarehouse = trim((string)$_POST['warehouse']);
+    if ($applyWarehouse !== '' && in_array($applyWarehouse, $knownWarehouses, true)) {
+        $def = [];
+        $stmtDef = $pdo->query('SELECT day_of_week, open_time, close_time FROM default_hours ORDER BY day_of_week ASC');
+        foreach ($stmtDef->fetchAll(PDO::FETCH_ASSOC) as $rowDef) {
+            $d = (int)($rowDef['day_of_week'] ?? 0);
+            $openT  = (string)($rowDef['open_time'] ?? '09:00');
+            $closeT = (string)($rowDef['close_time'] ?? '16:00');
+            $def[$d] = ['open' => $openT, 'close' => $closeT];
+        }
+        for ($d = 0; $d <= 4; $d++) {
+            if (!isset($def[$d])) {
+                $def[$d] = ['open' => '09:00', 'close' => '16:00'];
+            }
+        }
+        try {
+            $pdo->beginTransaction();
+            $del = $pdo->prepare('DELETE FROM warehouse_hours WHERE warehouse = :w');
+            $del->execute([':w' => $applyWarehouse]);
+            $ins = $pdo->prepare('INSERT OR IGNORE INTO warehouse_hours (warehouse, day_of_week, hour) VALUES (:w, :d, :h)');
+            foreach ($hours as $h) {
+                foreach (array_keys($days) as $d) {
+                    $openH  = (int)substr($def[$d]['open'], 0, 2);
+                    $closeH = (int)substr($def[$d]['close'], 0, 2);
+                    if ($h >= $openH && $h <= $closeH) {
+                        $ins->execute([':w' => $applyWarehouse, ':d' => $d, ':h' => $h]);
+                    }
+                }
+            }
+            $pdo->commit();
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+        }
+    }
+    header('Location: admin_times.php?warehouse=' . urlencode($applyWarehouse));
+    exit;
+}
+
 // שמירת עדכונים
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hours_payload'])) {
     $payload = (string)($_POST['hours_payload'] ?? '');
@@ -109,15 +157,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hours_payload'])) {
             $pdo->rollBack();
         }
     }
-}
-
-// רשימת מחסנים אפשריים – לשימוש פשוט
-$knownWarehouses = ['מחסן א', 'מחסן ב'];
-if (!in_array($userWarehouse, $knownWarehouses, true)) {
-    $knownWarehouses[] = $userWarehouse;
-}
-if (!in_array($selectedWarehouse, $knownWarehouses, true)) {
-    $knownWarehouses[] = $selectedWarehouse;
 }
 
 ?>
@@ -346,6 +385,11 @@ if (!in_array($selectedWarehouse, $knownWarehouses, true)) {
             <input type="hidden" name="hours_payload" id="hours_payload" value="">
             <div class="hours-actions">
                 <button type="submit" class="btn">שמירת שעות</button>
+                <form method="post" action="admin_times.php" style="display:inline; margin-right:0.5rem;">
+                    <input type="hidden" name="apply_default" value="1">
+                    <input type="hidden" name="warehouse" value="<?= htmlspecialchars($selectedWarehouse, ENT_QUOTES, 'UTF-8') ?>">
+                    <button type="submit" class="btn secondary">ברירת מחדל</button>
+                </form>
             </div>
         </form>
         <div class="hours-legend">
