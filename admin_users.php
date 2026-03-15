@@ -848,7 +848,7 @@ if (isset($_GET['edit_id'])) {
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 0.75rem;">
         <div style="display:flex; gap:0.5rem;">
             <button type="button" class="btn" id="open_user_modal_btn">משתמש חדש</button>
-            <button type="button" class="btn secondary" id="open_bulk_users_btn">משתמשים חדשים</button>
+            <button type="button" class="btn" id="open_bulk_users_btn">משתמשים חדשים</button>
         </div>
         <div style="display:flex;align-items:center;gap:0.5rem;">
             <a href="admin_users.php?export=1" class="btn secondary">יצוא CSV</a>
