@@ -9,6 +9,9 @@ require_admin();
 $pdo = get_db();
 $error = '';
 $success = '';
+if (isset($_GET['import_error']) && $_GET['import_error'] !== '') {
+    $error = (string)$_GET['import_error'];
+}
 if (isset($_SESSION['admin_users_success'])) {
     $success = $_SESSION['admin_users_success'];
     unset($_SESSION['admin_users_success']);
@@ -179,19 +182,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $rows[] = str_getcsv($lines[$i], $delimiter);
             }
             $notCsv = ($header === null || count($header) < 1);
+            if ($notCsv) {
+                $error = 'הקובץ חייב להיות בפורמט CSV (עם שורת כותרת ונתונים מופרדים בפסיקים).';
+                header('Location: admin_users.php?import_error=' . urlencode($error));
+                exit;
+            }
             $systemCols = ['username', 'password', 'role', 'first_name', 'last_name', 'warehouse', 'email', 'phone', 'is_active'];
             $requiredCols = ['username'];
             $headerNorm = [];
-            if ($header !== null) {
-                foreach ($header as $idx => $col) {
-                    $key = strtolower(trim((string)$col));
-                    if ($key !== '') $headerNorm[$key] = $idx;
-                }
+            foreach ($header as $idx => $col) {
+                $key = strtolower(trim((string)$col));
+                if ($key !== '') $headerNorm[$key] = $idx;
             }
             $missingColumns = array_diff($requiredCols, array_keys($headerNorm));
             $unknownColumns = array_diff(array_keys($headerNorm), $systemCols);
             $duplicateUsernames = [];
-            if (!$notCsv && isset($headerNorm['username'])) {
+            if (isset($headerNorm['username'])) {
                 $userIdx = $headerNorm['username'];
                 $existing = $pdo->query("SELECT username FROM users")->fetchAll(PDO::FETCH_COLUMN);
                 $existingSet = array_flip($existing);
@@ -202,14 +208,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
-            $hasIssues = $notCsv || !empty($missingColumns) || !empty($unknownColumns) || !empty($duplicateUsernames);
+            $hasIssues = !empty($missingColumns) || !empty($unknownColumns) || !empty($duplicateUsernames);
             if ($hasIssues) {
                 $_SESSION['import_fix_type'] = 'users';
-                $_SESSION['import_fix_headers'] = $header ?: [];
+                $_SESSION['import_fix_headers'] = $header;
                 $_SESSION['import_fix_rows'] = $rows;
                 $_SESSION['import_fix_raw'] = base64_encode($rawContent);
                 $_SESSION['import_fix_issues'] = [
-                    'not_csv' => $notCsv,
                     'missing_columns' => array_values($missingColumns),
                     'unknown_columns' => array_values($unknownColumns),
                     'duplicate_usernames' => $duplicateUsernames,
@@ -342,55 +347,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
-    } elseif ($action === 'convert_to_csv') {
-        if (isset($_SESSION['import_fix_type']) && $_SESSION['import_fix_type'] === 'users' && !empty($_SESSION['import_fix_raw'])) {
-            $raw = base64_decode((string)$_SESSION['import_fix_raw'], true);
-            if ($raw !== false) {
-                $raw = str_replace(["\t", ';'], [',', ','], $raw);
-                $_SESSION['import_fix_raw'] = base64_encode($raw);
-                $lines = preg_split('/\r\n|\r|\n/', $raw);
-                $header = count($lines) > 0 ? str_getcsv($lines[0], ',') : [];
-                $rows = [];
-                for ($i = 1; $i < count($lines); $i++) {
-                    if (trim($lines[$i]) === '') continue;
-                    $rows[] = str_getcsv($lines[$i], ',');
-                }
-                $_SESSION['import_fix_headers'] = $header;
-                $_SESSION['import_fix_rows'] = $rows;
-                $headerNorm = [];
-                foreach ($header as $idx => $col) {
-                    $key = strtolower(trim((string)$col));
-                    if ($key !== '') $headerNorm[$key] = $idx;
-                }
-                $systemCols = ['username', 'password', 'role', 'first_name', 'last_name', 'warehouse', 'email', 'phone', 'is_active'];
-                $requiredCols = ['username'];
-                $missingColumns = array_diff($requiredCols, array_keys($headerNorm));
-                $unknownColumns = array_diff(array_keys($headerNorm), $systemCols);
-                $duplicateUsernames = [];
-                if (isset($headerNorm['username'])) {
-                    $userIdx = $headerNorm['username'];
-                    $existing = $pdo->query("SELECT username FROM users")->fetchAll(PDO::FETCH_COLUMN);
-                    $existingSet = array_flip($existing);
-                    foreach ($rows as $ri => $row) {
-                        $u = isset($row[$userIdx]) ? trim((string)$row[$userIdx]) : '';
-                        if ($u !== '' && isset($existingSet[$u])) {
-                            $duplicateUsernames[] = ['row' => $ri, 'username' => $u];
-                        }
-                    }
-                }
-                $_SESSION['import_fix_issues'] = [
-                    'not_csv' => false,
-                    'missing_columns' => array_values($missingColumns),
-                    'unknown_columns' => array_values($unknownColumns),
-                    'duplicate_usernames' => $duplicateUsernames,
-                ];
-                if (empty($missingColumns) && empty($unknownColumns) && empty($duplicateUsernames)) {
-                    $_SESSION['import_fix_apply_direct'] = true;
-                }
-            }
-        }
-        header('Location: admin_users.php?import_fix=1');
-        exit;
     } elseif ($action === 'import_fixed') {
         if (isset($_SESSION['import_fix_type']) && $_SESSION['import_fix_type'] === 'users') {
             $headers = $_SESSION['import_fix_headers'] ?? [];
@@ -862,11 +818,11 @@ if (isset($_GET['edit_id'])) {
         </div>
         <div style="display:flex;align-items:center;gap:0.5rem;">
             <a href="admin_users.php?export=1" class="btn secondary">יצוא CSV</a>
-            <form method="post" action="admin_users.php" enctype="multipart/form-data" style="display:inline-flex;align-items:center;gap:0.4rem;">
+            <form method="post" action="admin_users.php" enctype="multipart/form-data" style="display:inline;">
                 <input type="hidden" name="action" value="import_csv">
-                <label class="btn secondary" style="cursor:pointer; margin:0;">
-                    יבוא CSV
-                    <input type="file" name="import_file" id="import_file" accept=".csv,.txt" required style="display:none;">
+                <label class="btn-file" style="margin:0;">
+                    בחירת קובץ
+                    <input type="file" name="import_file" id="import_file" accept=".csv" required>
                 </label>
             </form>
         </div>
@@ -880,15 +836,6 @@ if (isset($_GET['edit_id'])) {
                 <button type="button" class="modal-close" id="import_fix_modal_close" aria-label="סגירה">✕</button>
             </div>
             <div id="import_fix_content">
-                <?php if (!empty($iss['not_csv'])): ?>
-                <div class="import-fix-section">
-                    <p class="flash error">הקובץ אינו בפורמט CSV.</p>
-                    <form method="post" action="admin_users.php">
-                        <input type="hidden" name="action" value="convert_to_csv">
-                        <button type="submit" class="btn">המרה ל-CSV</button>
-                    </form>
-                </div>
-                <?php endif; ?>
                 <?php if (!empty($iss['missing_columns'])): ?>
                 <div class="import-fix-section">
                     <p class="muted-small">טורים חסרים בקובץ – הזן ערך ברירת מחדל:</p>
@@ -1158,6 +1105,12 @@ document.addEventListener('DOMContentLoaded', function () {
     var lastNameInput = document.getElementById('modal_last_name');
     var warehouseSelect = document.getElementById('modal_warehouse');
     var importFileInput = document.getElementById('import_file');
+    var importForm = importFileInput ? importFileInput.closest('form') : null;
+    if (importFileInput && importForm) {
+        importFileInput.addEventListener('change', function () {
+            if (importFileInput.files && importFileInput.files.length > 0) importForm.submit();
+        });
+    }
 
     function openForCreate() {
         if (!modal) return;

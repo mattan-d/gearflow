@@ -355,7 +355,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <form method="post" action="admin_design.php" enctype="multipart/form-data" style="display:flex;align-items:center;gap:0.5rem;">
                     <input type="hidden" name="upload_logo" value="1">
                     <input type="file" id="logo_file" name="logo_file" accept="image/*" style="display:none;" onchange="this.form.submit()">
-                    <label for="logo_file" class="logo-upload-label">טעינת לוגו</label>
+                    <label for="logo_file" class="btn-file">בחירת קובץ</label>
                     <?php if (!empty($design['logo_path'])): ?>
                         <button type="submit" name="remove_logo" value="1" class="logo-remove-x" title="הסר לוגו">
                             ✕

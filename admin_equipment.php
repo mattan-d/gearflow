@@ -1485,7 +1485,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
             <a href="admin_equipment.php?export=1" class="btn secondary">יצוא רשימת ציוד</a>
             <form method="post" action="admin_equipment.php" enctype="multipart/form-data" id="equipment_import_form" style="display:inline;">
                 <input type="hidden" name="action" value="import">
-                <label class="btn-file" style="margin:0;">
+                <label class="btn-file" style="margin:0; position:relative;">
                     יבוא רשימת ציוד
                     <input type="file" name="csv_file" accept=".csv" required id="equipment_csv_file_input">
                 </label>
@@ -1640,8 +1640,8 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                             <input type="hidden" name="delete_picture" id="delete_picture" value="0">
                         <?php endif; ?>
                         <div style="display:flex;align-items:center;gap:0.5rem;">
-                            <button type="button" class="btn secondary small" id="upload_picture_btn">טען תמונה</button>
-                            <input type="file" id="picture_file" name="picture_file" accept="image/*" style="display:none;">
+                            <label for="picture_file" class="btn-file" style="margin:0;">בחירת קובץ</label>
+                            <input type="file" id="picture_file" name="picture_file" accept="image/*" style="position:absolute;width:0.1px;height:0.1px;opacity:0;">
                         </div>
                     </div>
                     <div>
@@ -1799,44 +1799,33 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
             <div class="flash error" style="margin-bottom:0.75rem;"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
             <?php endif; ?>
             <div id="import_fix_content">
-                <?php $iss = $import_fix_data['issues']; ?>
-                <?php if (!empty($iss['not_csv'])): ?>
-                <div class="import-fix-section">
-                    <p class="flash error">הקובץ אינו בפורמט CSV.</p>
-                    <form method="post" action="admin_equipment.php">
-                        <input type="hidden" name="action" value="convert_to_csv">
-                        <button type="submit" class="btn">המרה ל-CSV</button>
-                    </form>
-                </div>
-                <?php endif; ?>
-                <?php if (!empty($iss['missing_columns'])): ?>
-                <div class="import-fix-section">
-                    <p class="muted-small">טורים חסרים בקובץ – הזן ערך ברירת מחדל (או מפה טור מהקובץ למטה, למשל item→name):</p>
-                    <?php foreach ($iss['missing_columns'] as $col): ?>
-                    <label style="display:block; margin:0.35rem 0;"><?= htmlspecialchars($col, ENT_QUOTES, 'UTF-8') ?></label>
-                    <input type="text" name="missing_default_<?= htmlspecialchars($col, ENT_QUOTES, 'UTF-8') ?>" class="import-fix-missing" data-col="<?= htmlspecialchars($col, ENT_QUOTES, 'UTF-8') ?>" placeholder="ערך ברירת מחדל" style="width:100%; max-width:280px; padding:0.35rem;">
-                    <?php endforeach; ?>
-                </div>
-                <?php endif; ?>
+                <?php $iss = $import_fix_data['issues'];
+                $defaultTargets = array_diff($iss['missing_columns'] ?? [], ['code']);
+                ?>
                 <?php if (!empty($iss['unknown_columns'])): ?>
                 <div class="import-fix-section">
-                    <p class="muted-small">הטורים הללו קיימים ברשימת הייבוא אך לא במערכת. להמרת טורים: בחר טור מערכת לכל טור בקובץ. ניתן לבחור "גם מפה ל" כדי שמעמודה אחת בקובץ ימולאו שני טורים במערכת (למשל: מעמודה "item" למפות גם ל־code וגם ל־name).</p>
+                    <p class="muted-small">טורים בקובץ שלא במערכת: מפה לטור מערכת, או בחר "ערך ברירת מחדל" והזן ערך (לא זמין לטור קוד – ייחודי).</p>
                     <?php foreach ($iss['unknown_columns'] as $uc): ?>
                     <div class="import-fix-map-row" style="display:flex; align-items:center; gap:0.5rem; margin:0.4rem 0; flex-wrap:wrap;">
                         <span style="min-width:100px;"><?= htmlspecialchars($uc, ENT_QUOTES, 'UTF-8') ?></span>
-                        <select class="import-fix-map-select" data-file-col="<?= htmlspecialchars($uc, ENT_QUOTES, 'UTF-8') ?>" style="padding:0.35rem; min-width:140px;">
+                        <select class="import-fix-map-select" data-file-col="<?= htmlspecialchars($uc, ENT_QUOTES, 'UTF-8') ?>" style="padding:0.35rem; min-width:160px;">
                             <option value="">— ביטול (התעלם מטור)</option>
                             <?php foreach ($import_fix_system_columns as $sc): ?>
                             <option value="<?= htmlspecialchars($sc, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($sc, ENT_QUOTES, 'UTF-8') ?></option>
                             <?php endforeach; ?>
+                            <?php if (!empty($defaultTargets)): ?>
+                            <option value="_default_">ערך ברירת מחדל</option>
+                            <?php endif; ?>
                         </select>
-                        <span class="muted-small" style="font-size:0.8rem;">גם מפה ל:</span>
-                        <select class="import-fix-map-select-also" data-file-col="<?= htmlspecialchars($uc, ENT_QUOTES, 'UTF-8') ?>" style="padding:0.35rem; min-width:140px;">
-                            <option value="">—</option>
-                            <?php foreach ($import_fix_system_columns as $sc): ?>
-                            <option value="<?= htmlspecialchars($sc, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($sc, ENT_QUOTES, 'UTF-8') ?></option>
-                            <?php endforeach; ?>
-                        </select>
+                        <span class="import-fix-default-wrap" style="display:none; align-items:center; gap:0.35rem;">
+                            <span class="muted-small">עבור טור:</span>
+                            <select class="import-fix-default-target" style="padding:0.35rem; min-width:120px;">
+                                <?php foreach ($defaultTargets as $dt): ?>
+                                <option value="<?= htmlspecialchars($dt, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($dt, ENT_QUOTES, 'UTF-8') ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <input type="text" class="import-fix-default-value" placeholder="ערך ברירת מחדל" style="padding:0.35rem; width:140px;" data-required-for="name">
+                        </span>
                     </div>
                     <?php endforeach; ?>
                 </div>
@@ -1867,24 +1856,46 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
     </div>
     <script>
     (function() {
-        var systemColumns = <?= json_encode($import_fix_system_columns ?? []) ?>;
-        var unknownColumns = <?= json_encode($iss['unknown_columns'] ?? []) ?>;
-        document.getElementById('import_fixed_form').addEventListener('submit', function(e) {
+        var form = document.getElementById('import_fixed_form');
+        document.querySelectorAll('.import-fix-map-select').forEach(function(sel) {
+            sel.addEventListener('change', function() {
+                var row = sel.closest('.import-fix-map-row');
+                var wrap = row ? row.querySelector('.import-fix-default-wrap') : null;
+                if (wrap) wrap.style.display = sel.value === '_default_' ? 'flex' : 'none';
+            });
+        });
+        document.querySelectorAll('.import-fix-map-row').forEach(function(row) {
+            var sel = row.querySelector('.import-fix-map-select');
+            var wrap = row.querySelector('.import-fix-default-wrap');
+            if (wrap) wrap.style.display = (sel && sel.value === '_default_') ? 'flex' : 'none';
+        });
+        form.addEventListener('submit', function(e) {
             var mapping = {};
+            var missing = {};
             document.querySelectorAll('.import-fix-map-row').forEach(function(row) {
                 var fileCol = row.querySelector('.import-fix-map-select').getAttribute('data-file-col');
                 var mainVal = row.querySelector('.import-fix-map-select').value;
-                var alsoSel = row.querySelector('.import-fix-map-select-also');
-                var alsoVal = alsoSel ? alsoSel.value : '';
-                var arr = [];
-                if (mainVal !== '') arr.push(mainVal);
-                if (alsoVal !== '' && alsoVal !== mainVal) arr.push(alsoVal);
-                if (arr.length > 0) mapping[fileCol] = arr.length === 1 ? arr[0] : arr;
+                if (mainVal === '_default_') {
+                    var targetSel = row.querySelector('.import-fix-default-target');
+                    var valInp = row.querySelector('.import-fix-default-value');
+                    if (targetSel && valInp) {
+                        var target = targetSel.value;
+                        var val = valInp.value.trim();
+                        if (target === 'name' && val === '') {
+                            e.preventDefault();
+                            valInp.style.borderColor = '#dc2626';
+                            valInp.setAttribute('title', 'שדה חובה עבור טור שם');
+                            return;
+                        }
+                        if (target && val !== '') missing[target] = val;
+                    }
+                } else if (mainVal !== '') {
+                    mapping[fileCol] = mainVal;
+                }
             });
-            var missing = {};
-            document.querySelectorAll('.import-fix-missing').forEach(function(inp) {
-                var col = inp.getAttribute('data-col');
-                if (col && inp.value.trim() !== '') missing[col] = inp.value.trim();
+            document.querySelectorAll('.import-fix-default-value').forEach(function(inp) {
+                inp.style.borderColor = '';
+                inp.removeAttribute('title');
             });
             var dups = {};
             document.querySelectorAll('.import-fix-dup-row').forEach(function(row) {
@@ -1906,23 +1917,20 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         });
         function updateMapSelectOptions() {
             var used = {};
-            function markUsed(sel) {
-                if (sel && sel.value !== '') used[sel.value] = true;
-            }
             document.querySelectorAll('.import-fix-map-row').forEach(function(row) {
-                markUsed(row.querySelector('.import-fix-map-select'));
-                markUsed(row.querySelector('.import-fix-map-select-also'));
+                var sel = row.querySelector('.import-fix-map-select');
+                if (sel && sel.value !== '' && sel.value !== '_default_') used[sel.value] = true;
             });
-            document.querySelectorAll('.import-fix-map-select, .import-fix-map-select-also').forEach(function(s) {
+            document.querySelectorAll('.import-fix-map-select').forEach(function(s) {
                 var currentVal = s.value;
                 for (var i = 0; i < s.options.length; i++) {
                     var opt = s.options[i];
-                    if (opt.value === '') continue;
+                    if (opt.value === '' || opt.value === '_default_') continue;
                     opt.disabled = used[opt.value] && opt.value !== currentVal;
                 }
             });
         }
-        document.querySelectorAll('.import-fix-map-select, .import-fix-map-select-also').forEach(function(sel) {
+        document.querySelectorAll('.import-fix-map-select').forEach(function(sel) {
             sel.addEventListener('change', updateMapSelectOptions);
         });
         updateMapSelectOptions();
@@ -2113,11 +2121,9 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     var addBtn = document.getElementById('toggle_add_equipment_btn');
-    var importBtn = document.getElementById('toggle_import_equipment_btn');
     var formModal = document.getElementById('equipment_modal');
     var formClose = document.getElementById('equipment_modal_close');
     var formCancel = document.getElementById('equipment_modal_cancel');
-    var importCard = document.getElementById('equipment_import_card');
     var bulkAddBtn = document.getElementById('toggle_bulk_add_btn');
     var bulkAddTbody = document.getElementById('bulk_add_tbody');
     var bulkAddRowBtn = document.getElementById('bulk_add_row_btn');
@@ -2125,17 +2131,10 @@ document.addEventListener('DOMContentLoaded', function () {
     var componentsClose = document.getElementById('components_modal_close');
     var addComponentRowBtn = document.getElementById('components_add_row_btn');
     var componentsTableBody = document.getElementById('components_table_body');
-    var uploadPictureBtn = document.getElementById('upload_picture_btn');
     var pictureFileInput = document.getElementById('picture_file');
     var deletePictureBtn = document.getElementById('delete_picture_btn');
     var deletePictureInput = document.getElementById('delete_picture');
     var existingPictureRow = document.getElementById('existing_picture_row');
-
-    if (uploadPictureBtn && pictureFileInput) {
-        uploadPictureBtn.addEventListener('click', function () {
-            pictureFileInput.click();
-        });
-    }
 
     if (deletePictureBtn && deletePictureInput) {
         deletePictureBtn.addEventListener('click', function () {
@@ -2376,11 +2375,11 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    if (importBtn && importCard) {
-        importBtn.addEventListener('click', function () {
-            var isVisible = importCard.style.display !== 'none';
-            importCard.style.display = isVisible ? 'none' : 'block';
-            if (bulkAddModal) bulkAddModal.style.display = 'none';
+    var csvImportInput = document.getElementById('equipment_csv_file_input');
+    var importForm = document.getElementById('equipment_import_form');
+    if (csvImportInput && importForm) {
+        csvImportInput.addEventListener('change', function () {
+            if (csvImportInput.files && csvImportInput.files.length > 0) importForm.submit();
         });
     }
     var bulkAddModal = document.getElementById('equipment_bulk_add_modal');
@@ -2388,7 +2387,6 @@ document.addEventListener('DOMContentLoaded', function () {
     if (bulkAddBtn && bulkAddModal) {
         bulkAddBtn.addEventListener('click', function () {
             bulkAddModal.style.display = 'flex';
-            if (importCard) importCard.style.display = 'none';
         });
     }
     if (bulkAddModalClose && bulkAddModal) {
