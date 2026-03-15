@@ -443,9 +443,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $key = strtolower(trim((string)$col));
                 if ($key !== '') $headerNorm[$key] = $idx;
             }
-            foreach ($columnMapping as $fileCol => $systemCol) {
-                if ($systemCol !== '' && $systemCol !== null && isset($headerNorm[$fileCol])) {
-                    $headerNorm[$systemCol] = $headerNorm[$fileCol];
+            foreach ($columnMapping as $fileCol => $systemColOrArray) {
+                if (!isset($headerNorm[$fileCol])) continue;
+                $targets = is_array($systemColOrArray) ? $systemColOrArray : [$systemColOrArray];
+                foreach ($targets as $sc) {
+                    if ($sc !== '' && $sc !== null) {
+                        $headerNorm[$sc] = $headerNorm[$fileCol];
+                    }
                 }
             }
             $systemCols = ['name', 'code', 'description', 'category', 'location', 'status'];
@@ -521,6 +525,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             if ($error === '') {
                 unset($_SESSION['import_fix_type'], $_SESSION['import_fix_headers'], $_SESSION['import_fix_rows'], $_SESSION['import_fix_raw'], $_SESSION['import_fix_issues'], $_SESSION['import_fix_delimiter']);
+                if ($imported === 0) {
+                    $error = 'לא יובאו פריטים. וודא שטורים "שם" ו"קוד" ממופים (כולל "גם מפה ל") או מולאו ערכי ברירת מחדל בטורים החסרים.';
+                    header('Location: admin_equipment.php?import_fix=1&import_error=' . urlencode($error));
+                    exit;
+                }
                 $success = 'ייבוא הושלם. נוספו ' . $imported . ' פריטים.';
                 header('Location: admin_equipment.php?success=' . urlencode($success));
                 exit;
@@ -1827,12 +1836,19 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                 <?php endif; ?>
                 <?php if (!empty($iss['unknown_columns'])): ?>
                 <div class="import-fix-section">
-                    <p class="muted-small">הטורים הללו קיימים ברשימת הייבוא אך לא במערכת. להמרת טורים:</p>
+                    <p class="muted-small">הטורים הללו קיימים ברשימת הייבוא אך לא במערכת. להמרת טורים: בחר טור מערכת לכל טור בקובץ. ניתן לבחור "גם מפה ל" כדי שמעמודה אחת בקובץ ימולאו שני טורים במערכת (למשל: מעמודה "item" למפות גם ל־code וגם ל־name).</p>
                     <?php foreach ($iss['unknown_columns'] as $uc): ?>
-                    <div class="import-fix-map-row" style="display:flex; align-items:center; gap:0.5rem; margin:0.4rem 0;">
-                        <span style="min-width:120px;"><?= htmlspecialchars($uc, ENT_QUOTES, 'UTF-8') ?></span>
-                        <select class="import-fix-map-select" data-file-col="<?= htmlspecialchars($uc, ENT_QUOTES, 'UTF-8') ?>" style="padding:0.35rem; min-width:160px;">
+                    <div class="import-fix-map-row" style="display:flex; align-items:center; gap:0.5rem; margin:0.4rem 0; flex-wrap:wrap;">
+                        <span style="min-width:100px;"><?= htmlspecialchars($uc, ENT_QUOTES, 'UTF-8') ?></span>
+                        <select class="import-fix-map-select" data-file-col="<?= htmlspecialchars($uc, ENT_QUOTES, 'UTF-8') ?>" style="padding:0.35rem; min-width:140px;">
                             <option value="">— ביטול (התעלם מטור)</option>
+                            <?php foreach ($import_fix_system_columns as $sc): ?>
+                            <option value="<?= htmlspecialchars($sc, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($sc, ENT_QUOTES, 'UTF-8') ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <span class="muted-small" style="font-size:0.8rem;">גם מפה ל:</span>
+                        <select class="import-fix-map-select-also" data-file-col="<?= htmlspecialchars($uc, ENT_QUOTES, 'UTF-8') ?>" style="padding:0.35rem; min-width:140px;">
+                            <option value="">—</option>
                             <?php foreach ($import_fix_system_columns as $sc): ?>
                             <option value="<?= htmlspecialchars($sc, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($sc, ENT_QUOTES, 'UTF-8') ?></option>
                             <?php endforeach; ?>
@@ -1871,9 +1887,15 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         var unknownColumns = <?= json_encode($iss['unknown_columns'] ?? []) ?>;
         document.getElementById('import_fixed_form').addEventListener('submit', function(e) {
             var mapping = {};
-            document.querySelectorAll('.import-fix-map-select').forEach(function(sel) {
-                var fileCol = sel.getAttribute('data-file-col');
-                if (sel.value !== '') mapping[fileCol] = sel.value;
+            document.querySelectorAll('.import-fix-map-row').forEach(function(row) {
+                var fileCol = row.querySelector('.import-fix-map-select').getAttribute('data-file-col');
+                var mainVal = row.querySelector('.import-fix-map-select').value;
+                var alsoSel = row.querySelector('.import-fix-map-select-also');
+                var alsoVal = alsoSel ? alsoSel.value : '';
+                var arr = [];
+                if (mainVal !== '') arr.push(mainVal);
+                if (alsoVal !== '' && alsoVal !== mainVal) arr.push(alsoVal);
+                if (arr.length > 0) mapping[fileCol] = arr.length === 1 ? arr[0] : arr;
             });
             var missing = {};
             document.querySelectorAll('.import-fix-missing').forEach(function(inp) {
@@ -1900,10 +1922,14 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         });
         function updateMapSelectOptions() {
             var used = {};
-            document.querySelectorAll('.import-fix-map-select').forEach(function(s) {
-                if (s.value !== '') used[s.value] = true;
+            function markUsed(sel) {
+                if (sel && sel.value !== '') used[sel.value] = true;
+            }
+            document.querySelectorAll('.import-fix-map-row').forEach(function(row) {
+                markUsed(row.querySelector('.import-fix-map-select'));
+                markUsed(row.querySelector('.import-fix-map-select-also'));
             });
-            document.querySelectorAll('.import-fix-map-select').forEach(function(s) {
+            document.querySelectorAll('.import-fix-map-select, .import-fix-map-select-also').forEach(function(s) {
                 var currentVal = s.value;
                 for (var i = 0; i < s.options.length; i++) {
                     var opt = s.options[i];
@@ -1912,7 +1938,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                 }
             });
         }
-        document.querySelectorAll('.import-fix-map-select').forEach(function(sel) {
+        document.querySelectorAll('.import-fix-map-select, .import-fix-map-select-also').forEach(function(sel) {
             sel.addEventListener('change', updateMapSelectOptions);
         });
         updateMapSelectOptions();
