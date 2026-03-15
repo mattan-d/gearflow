@@ -549,6 +549,8 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <?php if ($canEdit && $editMode && isset($_GET['new']) && (int)$_GET['new'] === 1): ?>
+            <hr style="border:0;border-top:1px solid #e5e7eb;margin:1.5rem 0 0.75rem;">
+            <h3 style="margin:0 0 0.5rem 0;font-size:1rem;color:#374151;">הוספת מסמך חדש</h3>
             <div class="doc-editor">
                 <form method="post" action="admin_documents.php">
                     <input type="hidden" name="action" value="create_custom">
@@ -564,6 +566,8 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 </form>
             </div>
         <?php elseif ($currentCustomId > 0): ?>
+            <hr style="border:0;border-top:1px solid #e5e7eb;margin:1.5rem 0 0.75rem;">
+            <h3 style="margin:0 0 0.5rem 0;font-size:1rem;color:#374151;">תוכן המסמך</h3>
             <?php
             $stmtView = $pdo->prepare('SELECT id, title, content FROM documents_custom WHERE id = :id');
             $stmtView->execute([':id' => $currentCustomId]);
@@ -675,6 +679,8 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 <?php endif; ?>
             <?php endif; ?>
         <?php elseif ($currentDocKey !== '' && isset($documents[$currentDocKey])): ?>
+            <hr style="border:0;border-top:1px solid #e5e7eb;margin:1.5rem 0 0.75rem;">
+            <h3 style="margin:0 0 0.5rem 0;font-size:1rem;color:#374151;">תוכן המסמך</h3>
             <?php $builtinContent = $documents[$currentDocKey]['content'] ?? ''; ?>
             <?php if ($canEdit && $editMode): ?>
                 <div class="doc-editor">
