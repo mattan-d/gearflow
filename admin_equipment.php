@@ -488,11 +488,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $imported = 0;
             foreach ($rows as $ri => $row) {
                 if (isset($skipRows[$ri])) continue;
+                $row = array_values($row);
                 $get = function ($col) use ($headerNorm, $row, $missingDefaults) {
                     $idx = $headerNorm[$col] ?? null;
-                    if ($idx !== null && array_key_exists($idx, $row)) {
-                        $v = $row[$idx];
-                        return trim((string)$v);
+                    if ($idx !== null && isset($row[$idx])) {
+                        return trim((string)$row[$idx]);
                     }
                     return (string)($missingDefaults[$col] ?? '');
                 };
@@ -506,13 +506,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!in_array($statusVal, ['active', 'out', 'disabled'], true)) {
                     $statusVal = 'active';
                 }
+                $desc = $get('description');
+                $cat = $get('category');
+                $loc = $get('location');
                 try {
                     $insert->execute([
                         ':name' => $name,
                         ':code' => $code,
-                        ':description' => $get('description'),
-                        ':category' => $get('category'),
-                        ':location' => $get('location'),
+                        ':description' => $desc,
+                        ':category' => $cat,
+                        ':location' => $loc,
                         ':quantity_total' => 1,
                         ':quantity_available' => 1,
                         ':status' => $statusVal,
@@ -532,11 +535,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $msg = $e->getMessage();
                         $detail = '';
                         if (str_contains($msg, 'NOT NULL')) {
-                            $detail = ' (חסר ערך בשדה חובה)';
+                            $detail = ' (חסר ערך בשדה חובה – וודא שטורי שם וקוד ממופים או מולאו)';
                         } elseif (str_contains($msg, 'UNIQUE') || str_contains($msg, 'constraint')) {
-                            $detail = ' (קוד או ערך כפול)';
-                        } elseif (str_contains($msg, 'column') || str_contains($msg, 'SQLSTATE')) {
-                            $detail = ' (נא לבדוק שטורי שם וקוד ממופים או מולאו ברירת מחדל)';
+                            $detail = ' (קוד כפול – החלף קוד או דלג על השורה)';
+                        } else {
+                            $short = preg_replace('/[^\p{L}\p{N}\s\-_]/u', ' ', $msg);
+                            $short = trim(mb_substr($short, 0, 80));
+                            $detail = $short !== '' ? ' (' . $short . ')' : '';
                         }
                         $error = $error ?: ('שגיאה בייבוא.' . $detail);
                     }
@@ -705,6 +710,7 @@ if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESS
         $now = date('Y-m-d H:i:s');
         $imported = 0;
         foreach ($rows as $row) {
+            $row = array_values($row);
             $get = function ($col) use ($headerNorm, $row) {
                 $idx = $headerNorm[$col] ?? null;
                 return ($idx !== null && isset($row[$idx])) ? trim((string)$row[$idx]) : '';
@@ -713,11 +719,13 @@ if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESS
             $code = $get('code');
             if ($name === '' || $code === '') continue;
             try {
+                $s = $get('status');
+                $statusVal = ($s !== '' && in_array($s, ['active', 'out', 'disabled'], true)) ? $s : 'active';
                 $insert->execute([
                     ':name' => $name, ':code' => $code, ':description' => $get('description'),
                     ':category' => $get('category'), ':location' => $get('location'),
                     ':quantity_total' => 1, ':quantity_available' => 1,
-                    ':status' => $get('status') ?: 'active', ':created_at' => $now,
+                    ':status' => $statusVal, ':created_at' => $now,
                 ]);
                 $newId = (int)$pdo->lastInsertId();
                 for ($n = 1; $n <= MAX_EQUIPMENT_COMPONENTS; $n++) {
@@ -731,10 +739,9 @@ if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESS
             } catch (PDOException $e) {
                 if (!str_contains($e->getMessage(), 'UNIQUE') || !str_contains($e->getMessage(), 'code')) {
                     $msg = $e->getMessage();
-                    $hint = (str_contains($msg, 'SQLSTATE') || str_contains($msg, 'column') || str_contains($msg, 'constraint'))
-                        ? ' נא לבדוק שהקובץ מכיל עמודות שם וקוד ושהנתונים תקינים.'
-                        : '';
-                    $error = $error ?: ('שגיאה בייבוא.' . $hint);
+                    $short = preg_replace('/[^\p{L}\p{N}\s\-_]/u', ' ', $msg);
+                    $short = trim(mb_substr($short, 0, 80));
+                    $error = $error ?: ('שגיאה בייבוא.' . ($short !== '' ? ' (' . $short . ')' : ''));
                 }
             }
         }
