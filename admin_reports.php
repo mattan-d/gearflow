@@ -152,6 +152,100 @@ foreach ($catRows as $cName) {
     }
 }
 
+// --- דוח ציוד ---
+$eqCategory    = isset($_GET['eq_category']) ? trim((string)$_GET['eq_category']) : '';
+$eqEquipmentId = isset($_GET['eq_equipment']) ? (int)$_GET['eq_equipment'] : 0;
+$eqStatus      = isset($_GET['eq_status']) ? trim((string)$_GET['eq_status']) : '';
+$eqOrderCheck  = isset($_GET['eq_order_check']) && $_GET['eq_order_check'] === '1';
+$eqStart       = isset($_GET['eq_start']) ? trim((string)$_GET['eq_start']) : '';
+$eqEnd         = isset($_GET['eq_end']) ? trim((string)$_GET['eq_end']) : '';
+$eqAvailability = isset($_GET['eq_availability']) ? trim((string)$_GET['eq_availability']) : 'פנוי';
+$eqShow        = isset($_GET['eq_show']);
+
+$equipmentReport = ['show' => false, 'order_counts' => [], 'availability' => [], 'chart_max' => 1];
+$equipmentListAll = [];
+$eqStmt = $pdo->query("SELECT id, name, code, category, status FROM equipment ORDER BY category ASC, name ASC");
+if ($eqStmt) {
+    $equipmentListAll = $eqStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+}
+
+if ($eqShow) {
+    $equipmentReport['show'] = true;
+    $eqWhere = "1=1";
+    $eqParams = [];
+    if ($eqCategory !== '' && $eqCategory !== 'הכל') {
+        $eqWhere .= " AND TRIM(COALESCE(e.category, '')) = :eq_cat";
+        $eqParams[':eq_cat'] = $eqCategory;
+    }
+    if ($eqEquipmentId > 0) {
+        $eqWhere .= " AND e.id = :eq_id";
+        $eqParams[':eq_id'] = $eqEquipmentId;
+    }
+    if ($eqStatus === 'תקין') {
+        $eqWhere .= " AND e.status = 'active'";
+    } elseif ($eqStatus === 'לא תקין') {
+        $eqWhere .= " AND (e.status IS NULL OR e.status != 'active')";
+    }
+
+    if ($eqOrderCheck) {
+        $joinCond = "o.equipment_id = e.id";
+        if ($eqStart !== '' && $eqEnd !== '' && $eqStart <= $eqEnd) {
+            $joinCond .= " AND DATE(o.start_date) <= :eq_end AND DATE(o.end_date) >= :eq_start";
+            $eqParams[':eq_start'] = $eqStart;
+            $eqParams[':eq_end']   = $eqEnd;
+        }
+        $sqlEq = "SELECT e.id, e.name, e.code, e.category,
+                  COUNT(o.id) AS order_count
+                  FROM equipment e
+                  LEFT JOIN orders o ON " . $joinCond . "
+                  WHERE " . $eqWhere . " GROUP BY e.id, e.name, e.code, e.category ORDER BY order_count DESC, e.name ASC";
+        $stEq = $pdo->prepare($sqlEq);
+        $stEq->execute($eqParams);
+        $equipmentReport['order_counts'] = $stEq->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    $hasRange = $eqStart !== '' && $eqEnd !== '' && $eqStart <= $eqEnd;
+    if ($hasRange) {
+        $wantAvailable = ($eqAvailability === 'פנוי');
+        if ($wantAvailable) {
+            $sqlAv = "SELECT e.id, e.name, e.code, e.category
+                      FROM equipment e
+                      WHERE " . $eqWhere . "
+                      AND NOT EXISTS (
+                          SELECT 1 FROM orders o
+                          WHERE o.equipment_id = e.id
+                          AND o.status IN ('pending', 'approved', 'on_loan')
+                          AND DATE(o.start_date) <= :av_end AND DATE(o.end_date) >= :av_start
+                      )
+                      ORDER BY e.category ASC, e.name ASC";
+        } else {
+            $sqlAv = "SELECT DISTINCT e.id, e.name, e.code, e.category
+                      FROM equipment e
+                      INNER JOIN orders o ON o.equipment_id = e.id
+                      WHERE " . $eqWhere . "
+                      AND o.status IN ('pending', 'approved', 'on_loan')
+                      AND DATE(o.start_date) <= :av_end AND DATE(o.end_date) >= :av_start
+                      ORDER BY e.category ASC, e.name ASC";
+        }
+        $eqParams[':av_start'] = $eqStart;
+        $eqParams[':av_end']   = $eqEnd;
+        $stAv = $pdo->prepare($sqlAv);
+        $stAv->execute($eqParams);
+        $equipmentReport['availability'] = $stAv->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    $equipmentReport['chart_max'] = 1;
+    foreach ($equipmentReport['order_counts'] as $r) {
+        $c = (int)($r['order_count'] ?? 0);
+        if ($c > $equipmentReport['chart_max']) {
+            $equipmentReport['chart_max'] = $c;
+        }
+    }
+    if (count($equipmentReport['availability']) > $equipmentReport['chart_max']) {
+        $equipmentReport['chart_max'] = max($equipmentReport['chart_max'], count($equipmentReport['availability']));
+    }
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -277,6 +371,9 @@ foreach ($catRows as $cName) {
         }
         .report-param-block.report-param-show-btn {
             flex-shrink: 0;
+        }
+        .report-param-block.eq-calendar-bar {
+            position: relative;
         }
         .report-param-block .param-value-hint {
             font-size: 0.75rem;
@@ -536,9 +633,145 @@ foreach ($catRows as $cName) {
         </div>
 
         <div id="reports-equipment" class="reports-section<?= $activeTab === 'equipment' ? ' active' : '' ?>">
-            <p class="muted-small">
-                כאן יוצגו דוחות על ציוד (שימוש בפריטים, תקלות, זמינות ועוד).
+            <p class="muted-small" style="margin-bottom:0.75rem;">
+                בחר קטגוריה, פריט ציוד, סטטוס וטווח זמן. סמן "הזמנה" לספירת הזמנות לפריט; בחר טווח תאריכים לבדיקת זמינות (פנוי/מוזמן).
             </p>
+            <form method="get" action="admin_reports.php" id="equipment_report_form">
+                <input type="hidden" name="tab" value="equipment">
+                <input type="hidden" name="eq_start" id="eq_start" value="<?= htmlspecialchars($eqStart, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="eq_end" id="eq_end" value="<?= htmlspecialchars($eqEnd, ENT_QUOTES, 'UTF-8') ?>">
+
+                <h3 class="report-params-title">פרמטרים להצגת דוח</h3>
+                <div class="report-params-row">
+                    <div class="report-param-block">
+                        <label class="param-label" for="eq_category">קטגוריית ציוד</label>
+                        <select name="eq_category" id="eq_category"
+                                style="min-width:130px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
+                            <option value="הכל" <?= ($eqCategory === '' || $eqCategory === 'הכל') ? 'selected' : '' ?>>הכל</option>
+                            <?php foreach ($reportCategories as $c): ?>
+                                <option value="<?= htmlspecialchars($c, ENT_QUOTES, 'UTF-8') ?>" <?= $eqCategory === $c ? 'selected' : '' ?>><?= htmlspecialchars($c, ENT_QUOTES, 'UTF-8') ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="report-param-block">
+                        <label class="param-label" for="eq_equipment">פריט ציוד</label>
+                        <select name="eq_equipment" id="eq_equipment"
+                                style="min-width:160px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
+                            <option value="">הכל</option>
+                            <?php foreach ($equipmentListAll as $eq): ?>
+                                <option value="<?= (int)$eq['id'] ?>" data-category="<?= htmlspecialchars(trim((string)($eq['category'] ?? '')), ENT_QUOTES, 'UTF-8') ?>"
+                                    <?= $eqEquipmentId === (int)$eq['id'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($eq['name'] . ' (' . $eq['code'] . ')', ENT_QUOTES, 'UTF-8') ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="report-param-block">
+                        <label class="param-label" for="eq_status">סטטוס ציוד</label>
+                        <select name="eq_status" id="eq_status"
+                                style="min-width:110px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
+                            <option value="הכל" <?= ($eqStatus === '' || $eqStatus === 'הכל') ? 'selected' : '' ?>>הכל</option>
+                            <option value="תקין" <?= $eqStatus === 'תקין' ? 'selected' : '' ?>>תקין</option>
+                            <option value="לא תקין" <?= $eqStatus === 'לא תקין' ? 'selected' : '' ?>>לא תקין</option>
+                        </select>
+                    </div>
+                    <div class="report-param-block" style="align-items:center;">
+                        <span class="param-label" aria-hidden="true">&nbsp;</span>
+                        <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.85rem;cursor:pointer;">
+                            <input type="checkbox" name="eq_order_check" value="1" <?= $eqOrderCheck ? 'checked' : '' ?> id="eq_order_check">
+                            הזמנה (כמה פעמים הוזמן)
+                        </label>
+                    </div>
+                    <div class="report-param-block calendar-bar eq-calendar-bar">
+                        <span class="param-label">תאריך התחלה וסיום</span>
+                        <button type="button" id="eq_range_btn" class="calendar-icon-btn" title="בחירת טווח" aria-label="טווח תאריכים"><i data-lucide="calendar" aria-hidden="true"></i></button>
+                        <span class="param-value-hint" id="eq_range_hint">
+                            <?php if ($eqStart !== '' && $eqEnd !== ''): ?>
+                                מ־<?= htmlspecialchars($eqStart, ENT_QUOTES, 'UTF-8') ?> עד <?= htmlspecialchars($eqEnd, ENT_QUOTES, 'UTF-8') ?>
+                            <?php elseif ($eqStart !== ''): ?>
+                                מ־<?= htmlspecialchars($eqStart, ENT_QUOTES, 'UTF-8') ?>
+                            <?php else: ?>
+                                לא נבחר
+                            <?php endif; ?>
+                        </span>
+                        <div id="eq_calendar_panel" class="calendar-panel" style="display:none;">
+                            <div class="cal-mode-btns">
+                                <button type="button" class="cal-mode-btn active" id="eq_cal_btn_start">התחלה</button>
+                                <button type="button" class="cal-mode-btn" id="eq_cal_btn_end">סיום</button>
+                            </div>
+                            <div class="calendar-grid" id="eq_calendar_grid"></div>
+                        </div>
+                    </div>
+                    <div class="report-param-block" id="eq_availability_wrap" style="<?= ($eqStart !== '' && $eqEnd !== '') ? '' : 'display:none;' ?>">
+                        <label class="param-label" for="eq_availability">זמינות בטווח</label>
+                        <select name="eq_availability" id="eq_availability"
+                                style="min-width:100px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
+                            <option value="פנוי" <?= $eqAvailability === 'פנוי' ? 'selected' : '' ?>>פנוי</option>
+                            <option value="מוזמן" <?= $eqAvailability === 'מוזמן' ? 'selected' : '' ?>>מוזמן</option>
+                        </select>
+                    </div>
+                    <div class="report-param-block report-param-show-btn">
+                        <span class="param-label" aria-hidden="true">&nbsp;</span>
+                        <button type="submit" name="eq_show" value="1" class="btn">הצג</button>
+                    </div>
+                </div>
+            </form>
+
+            <?php if ($equipmentReport['show']): ?>
+                <?php if ($eqOrderCheck && !empty($equipmentReport['order_counts'])): ?>
+                    <h3 style="margin:1rem 0 0.5rem;font-size:1rem;color:#374151;">כמות הזמנות לפי פריט ציוד</h3>
+                    <div class="orders-report-bars">
+                        <?php
+                        $eqMax = max(1, $equipmentReport['chart_max']);
+                        foreach ($equipmentReport['order_counts'] as $row):
+                            $cnt = (int)($row['order_count'] ?? 0);
+                            $pct = $eqMax > 0 ? max(2, ($cnt / $eqMax) * 100) : 0;
+                            $label = htmlspecialchars($row['name'] . ' (' . $row['code'] . ')', ENT_QUOTES, 'UTF-8');
+                        ?>
+                            <div class="orders-report-bar">
+                                <div class="orders-report-bar-label"><?= $label ?></div>
+                                <div class="orders-report-bar-track">
+                                    <div class="orders-report-bar-fill" style="width: <?= $pct ?>%;"></div>
+                                </div>
+                                <div class="orders-report-bar-value"><?= $cnt ?></div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php elseif ($eqOrderCheck): ?>
+                    <p class="muted-small" style="margin-top:0.75rem;">לא נמצאו פריטי ציוד התואמים לסינון.</p>
+                <?php endif; ?>
+
+                <?php
+                $hasRange = $eqStart !== '' && $eqEnd !== '' && $eqStart <= $eqEnd;
+                if ($hasRange): ?>
+                    <h3 style="margin:1rem 0 0.5rem;font-size:1rem;color:#374151;">פריטים <?= $eqAvailability === 'פנוי' ? 'פנויים' : 'מוזמנים' ?> בתקופה מ־<?= htmlspecialchars($eqStart, ENT_QUOTES, 'UTF-8') ?> עד <?= htmlspecialchars($eqEnd, ENT_QUOTES, 'UTF-8') ?></h3>
+                    <?php if (!empty($equipmentReport['availability'])): ?>
+                        <div class="orders-report-bars">
+                            <?php
+                            $avList = $equipmentReport['availability'];
+                            $eqMaxAv = max(1, count($avList));
+                            foreach ($avList as $idx => $row):
+                                $pct = max(2, (1 / $eqMaxAv) * 100);
+                                $label = htmlspecialchars($row['name'] . ' (' . $row['code'] . ')', ENT_QUOTES, 'UTF-8');
+                            ?>
+                                <div class="orders-report-bar">
+                                    <div class="orders-report-bar-label"><?= $label ?></div>
+                                    <div class="orders-report-bar-track">
+                                        <div class="orders-report-bar-fill" style="width: <?= $pct ?>%;"></div>
+                                    </div>
+                                    <div class="orders-report-bar-value">—</div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php else: ?>
+                        <p class="muted-small" style="margin-top:0.75rem;">לא נמצאו פריטים <?= $eqAvailability === 'פנוי' ? 'פנויים' : 'מוזמנים' ?> בתקופה הנבחרת.</p>
+                    <?php endif; ?>
+                <?php endif; ?>
+
+                <?php if ($equipmentReport['show'] && !$eqOrderCheck && !$hasRange): ?>
+                    <p class="muted-small" style="margin-top:0.75rem;">סמן "הזמנה" ו/או בחר טווח תאריכים ולחץ הצג.</p>
+                <?php endif; ?>
+            <?php endif; ?>
         </div>
     </div>
 </main>
@@ -739,6 +972,120 @@ foreach ($catRows as $cName) {
                 suggestionsWrap.appendChild(item);
             });
             suggestionsWrap.style.display = 'block';
+        });
+    })();
+
+    (function() {
+        var eqCat = document.getElementById('eq_category');
+        var eqSelect = document.getElementById('eq_equipment');
+        if (!eqCat || !eqSelect) return;
+        var options = Array.prototype.slice.call(eqSelect.querySelectorAll('option'));
+        function filterEqByCategory() {
+            var cat = (eqCat.value || '').trim();
+            var hasAll = eqSelect.querySelector('option[value=""]');
+            options.forEach(function(opt) {
+                if (opt.value === '') {
+                    opt.style.display = '';
+                    return;
+                }
+                var optCat = (opt.getAttribute('data-category') || '').trim();
+                if (cat === '' || cat === 'הכל' || optCat === cat) {
+                    opt.style.display = '';
+                } else {
+                    opt.style.display = 'none';
+                }
+            });
+            var visible = Array.prototype.filter.call(eqSelect.options, function(o) { return o.style.display !== 'none' && o.value !== ''; });
+            if (visible.length && eqSelect.value && eqSelect.querySelector('option[value="' + eqSelect.value + '"]').style.display === 'none') {
+                eqSelect.value = '';
+            }
+        }
+        eqCat.addEventListener('change', filterEqByCategory);
+        filterEqByCategory();
+    })();
+
+    (function() {
+        var form = document.getElementById('equipment_report_form');
+        var startInput = document.getElementById('eq_start');
+        var endInput = document.getElementById('eq_end');
+        var rangeBtn = document.getElementById('eq_range_btn');
+        var rangeHint = document.getElementById('eq_range_hint');
+        var panel = document.getElementById('eq_calendar_panel');
+        var grid = document.getElementById('eq_calendar_grid');
+        var availWrap = document.getElementById('eq_availability_wrap');
+        if (!form || !startInput || !endInput || !rangeBtn || !panel || !grid) return;
+
+        var startDate = startInput.value || '';
+        var endDate = endInput.value || '';
+        function updateHint() {
+            if (!rangeHint) return;
+            if (startDate && endDate) rangeHint.textContent = 'מ־' + startDate + ' עד ' + endDate;
+            else if (startDate) rangeHint.textContent = 'מ־' + startDate;
+            else rangeHint.textContent = 'לא נבחר';
+        }
+        function updateAvailVisibility() {
+            if (availWrap) availWrap.style.display = (startDate && endDate) ? '' : 'none';
+        }
+        updateHint();
+        updateAvailVisibility();
+
+        function formatDate(d) {
+            var y = d.getFullYear();
+            var m = String(d.getMonth() + 1).padStart(2, '0');
+            var day = String(d.getDate()).padStart(2, '0');
+            return y + '-' + m + '-' + day;
+        }
+        function buildCalendar() {
+            grid.innerHTML = '';
+            var today = new Date();
+            var year = today.getFullYear();
+            var month = today.getMonth();
+            var first = new Date(year, month, 1);
+            var startWeekday = (first.getDay() + 6) % 7;
+            var daysInMonth = new Date(year, month + 1, 0).getDate();
+            var weekdays = ['ב', 'ג', 'ד', 'ה', 'ו', 'ש', 'א'];
+            weekdays.forEach(function(w) {
+                var h = document.createElement('div');
+                h.className = 'cal-day header';
+                h.textContent = w;
+                grid.appendChild(h);
+            });
+            for (var i = 0; i < startWeekday; i++) {
+                var empty = document.createElement('div');
+                empty.className = 'cal-day disabled';
+                grid.appendChild(empty);
+            }
+            for (var day = 1; day <= daysInMonth; day++) {
+                (function(d) {
+                    var date = new Date(year, month, d);
+                    var dateStr = formatDate(date);
+                    var cell = document.createElement('div');
+                    cell.className = 'cal-day';
+                    cell.textContent = d;
+                    if (startDate && endDate && dateStr >= startDate && dateStr <= endDate) cell.classList.add('in-range');
+                    else if (startDate && !endDate && dateStr === startDate) cell.classList.add('selected');
+                    cell.addEventListener('click', function() {
+                        if (!startDate || (startDate && endDate)) {
+                            startDate = dateStr;
+                            endDate = '';
+                        } else {
+                            if (dateStr < startDate) { endDate = startDate; startDate = dateStr; }
+                            else endDate = dateStr;
+                            panel.style.display = 'none';
+                        }
+                        startInput.value = startDate;
+                        endInput.value = endDate;
+                        updateHint();
+                        updateAvailVisibility();
+                        buildCalendar();
+                    });
+                    grid.appendChild(cell);
+                })(day);
+            }
+        }
+        rangeBtn.addEventListener('click', function() {
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            buildCalendar();
         });
     })();
 </script>
