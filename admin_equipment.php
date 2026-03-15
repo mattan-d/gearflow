@@ -543,7 +543,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $cName = trim((string)($r['component_' . $n . '_name'] ?? ''));
                         if ($cName === '') continue;
                         try {
-                            $insertComp->execute([':equipment_id' => $newId, ':name' => $cName, ':quantity' => 1, ':created_at' => $now]);
+                            $insertComp->execute([':equipment_id' => $newId, ':name' => $cName, ':created_at' => $now]);
                         } catch (Throwable $e) {}
                     }
                     $imported++;
@@ -758,7 +758,7 @@ if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESS
                     $cName = trim((string)($r['component_' . $n . '_name'] ?? ''));
                     if ($cName === '') continue;
                     try {
-                        $insertComp->execute([':equipment_id' => $newId, ':name' => $cName, ':quantity' => 1, ':created_at' => $now]);
+                        $insertComp->execute([':equipment_id' => $newId, ':name' => $cName, ':created_at' => $now]);
                     } catch (Throwable $e) {}
                 }
                 $imported++;

@@ -137,6 +137,7 @@ if ($userId > 0) {
     }
     .notif-bell-btn.has-unread {
         color:rgb(201, 0, 0);
+        filter: hue-rotate(320deg);
     }
     .notif-badge {
         position: absolute;
