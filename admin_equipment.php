@@ -444,17 +444,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($key !== '') $headerNorm[$key] = $idx;
             }
             foreach ($columnMapping as $fileCol => $systemColOrArray) {
-                if (!isset($headerNorm[$fileCol])) continue;
+                $fileColNorm = strtolower(trim((string)$fileCol));
+                if ($fileColNorm === '' || !isset($headerNorm[$fileColNorm])) continue;
                 $targets = is_array($systemColOrArray) ? $systemColOrArray : [$systemColOrArray];
                 foreach ($targets as $sc) {
+                    $sc = is_string($sc) ? trim($sc) : $sc;
                     if ($sc !== '' && $sc !== null) {
-                        $headerNorm[$sc] = $headerNorm[$fileCol];
+                        $headerNorm[$sc] = $headerNorm[$fileColNorm];
                     }
                 }
             }
             $systemCols = ['name', 'code', 'description', 'category', 'location', 'status'];
             for ($n = 1; $n <= MAX_EQUIPMENT_COMPONENTS; $n++) {
                 $systemCols[] = 'component_' . $n . '_name';
+            }
+            $hasName = isset($headerNorm['name']);
+            $hasCode = isset($headerNorm['code']);
+            if (!$hasName && !isset($missingDefaults['name'])) {
+                $error = 'טור "שם" חסר: יש למפות טור מהקובץ (למשל item→name) או להזין ערך ברירת מחדל.';
+                header('Location: admin_equipment.php?import_fix=1&import_error=' . urlencode($error));
+                exit;
+            }
+            if (!$hasCode && !isset($missingDefaults['code'])) {
+                $error = 'טור "קוד" חסר: יש למפות טור מהקובץ (למשל item→code) או להזין ערך ברירת מחדל.';
+                header('Location: admin_equipment.php?import_fix=1&import_error=' . urlencode($error));
+                exit;
             }
             $skipRows = [];
             foreach ($duplicateActions as $ri => $act) {
@@ -516,10 +530,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } catch (PDOException $e) {
                     if (!str_contains($e->getMessage(), 'UNIQUE') || !str_contains($e->getMessage(), 'code')) {
                         $msg = $e->getMessage();
-                        $hint = (str_contains($msg, 'SQLSTATE') || str_contains($msg, 'column') || str_contains($msg, 'constraint'))
-                            ? ' נא לבדוק שהקובץ מכיל עמודות שם וקוד ושהנתונים תקינים.'
-                            : '';
-                        $error = $error ?: ('שגיאה בייבוא.' . $hint);
+                        $detail = '';
+                        if (str_contains($msg, 'NOT NULL')) {
+                            $detail = ' (חסר ערך בשדה חובה)';
+                        } elseif (str_contains($msg, 'UNIQUE') || str_contains($msg, 'constraint')) {
+                            $detail = ' (קוד או ערך כפול)';
+                        } elseif (str_contains($msg, 'column') || str_contains($msg, 'SQLSTATE')) {
+                            $detail = ' (נא לבדוק שטורי שם וקוד ממופים או מולאו ברירת מחדל)';
+                        }
+                        $error = $error ?: ('שגיאה בייבוא.' . $detail);
                     }
                 }
             }
@@ -1827,7 +1846,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                 <?php endif; ?>
                 <?php if (!empty($iss['missing_columns'])): ?>
                 <div class="import-fix-section">
-                    <p class="muted-small">טורים חסרים בקובץ – הזן ערך ברירת מחדל:</p>
+                    <p class="muted-small">טורים חסרים בקובץ – הזן ערך ברירת מחדל (או מפה טור מהקובץ למטה, למשל item→name):</p>
                     <?php foreach ($iss['missing_columns'] as $col): ?>
                     <label style="display:block; margin:0.35rem 0;"><?= htmlspecialchars($col, ENT_QUOTES, 'UTF-8') ?></label>
                     <input type="text" name="missing_default_<?= htmlspecialchars($col, ENT_QUOTES, 'UTF-8') ?>" class="import-fix-missing" data-col="<?= htmlspecialchars($col, ENT_QUOTES, 'UTF-8') ?>" placeholder="ערך ברירת מחדל" style="width:100%; max-width:280px; padding:0.35rem;">
