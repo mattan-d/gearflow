@@ -221,9 +221,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                          VALUES
                          (:name, :code, :description, :category, :location, :quantity_total, :quantity_available, :status, :created_at)'
                     );
+                    $insertComp = $pdo->prepare(
+                        'INSERT INTO equipment_components (equipment_id, name, quantity, created_at)
+                         VALUES (:equipment_id, :name, :quantity, :created_at)'
+                    );
 
                     $imported = 0;
                     $skippedDuplicates = 0;
+                    $maxComponents = 20;
+                    $now = date('Y-m-d H:i:s');
 
                     while (($row = fgetcsv($handle)) !== false) {
                         $get = function (string $key) use ($map, $row): string {
@@ -255,8 +261,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ':quantity_total'     => 1,
                                 ':quantity_available' => 1,
                                 ':status'             => $status,
-                                ':created_at'         => date('Y-m-d H:i:s'),
+                                ':created_at'         => $now,
                             ]);
+                            $newId = (int)$pdo->lastInsertId();
+                            for ($n = 1; $n <= $maxComponents; $n++) {
+                                $cName = $get('component_' . $n . '_name');
+                                if ($cName === '') {
+                                    continue;
+                                }
+                                $cQty = (int)$get('component_' . $n . '_quantity');
+                                if ($cQty < 1) {
+                                    $cQty = 1;
+                                }
+                                try {
+                                    $insertComp->execute([
+                                        ':equipment_id' => $newId,
+                                        ':name'         => $cName,
+                                        ':quantity'     => $cQty,
+                                        ':created_at'   => $now,
+                                    ]);
+                                } catch (Throwable $e) {
+                                    // דילוג על רכיב בודד שנכשל
+                                }
+                            }
                             $imported++;
                         } catch (PDOException $e) {
                             // If code already exists (UNIQUE constraint), skip this row silently
@@ -280,6 +307,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
+        }
+    } elseif ($action === 'bulk_add') {
+        $meTmp = current_user();
+        $roleTmp = (string)($meTmp['role'] ?? '');
+        $warehouseTmp = trim((string)($meTmp['warehouse'] ?? ''));
+        $names = $_POST['bulk_name'] ?? [];
+        $codes = $_POST['bulk_code'] ?? [];
+        $descs = $_POST['bulk_description'] ?? [];
+        $cats = $_POST['bulk_category'] ?? [];
+        $locs = $_POST['bulk_location'] ?? [];
+        if (!is_array($names)) $names = [];
+        $inserted = 0;
+        $now = date('Y-m-d H:i:s');
+        $ins = $pdo->prepare(
+            'INSERT INTO equipment (name, code, description, category, location, quantity_total, quantity_available, status, created_at)
+             VALUES (:name, :code, :description, :category, :location, 1, 1, :status, :created_at)'
+        );
+        foreach ($names as $i => $name) {
+            $name = trim((string)$name);
+            $code = isset($codes[$i]) ? trim((string)$codes[$i]) : '';
+            if ($name === '' || $code === '') continue;
+            $desc = isset($descs[$i]) ? trim((string)$descs[$i]) : '';
+            $cat = isset($cats[$i]) ? trim((string)$cats[$i]) : '';
+            if ($roleTmp === 'admin') {
+                $loc = isset($locs[$i]) ? trim((string)$locs[$i]) : '';
+                if ($loc !== 'מחסן א' && $loc !== 'מחסן ב') $loc = 'מחסן א';
+            } else {
+                $loc = $warehouseTmp !== '' ? $warehouseTmp : 'מחסן א';
+            }
+            try {
+                $ins->execute([
+                    ':name' => $name,
+                    ':code' => $code,
+                    ':description' => $desc,
+                    ':category' => $cat,
+                    ':location' => $loc,
+                    ':status' => 'active',
+                    ':created_at' => $now,
+                ]);
+                $inserted++;
+            } catch (PDOException $e) {
+                if (!str_contains($e->getMessage(), 'UNIQUE') || !str_contains($e->getMessage(), 'code')) {
+                    $error = $error ?: 'שגיאה בהוספת פריטים. קוד כפול או שגיאה אחרת.';
+                }
+            }
+        }
+        if ($error === '' && $inserted > 0) {
+            $success = 'נוספו ' . $inserted . ' פריטי ציוד.';
+            header('Location: admin_equipment.php?success=' . urlencode($success));
+            exit;
         }
     } elseif ($action === 'save_components') {
         $equipmentId = (int)($_POST['equipment_id'] ?? 0);
@@ -481,8 +558,9 @@ if ($equipmentTab === '' || $equipmentTab === 'all') {
     }
 }
 
-// יצוא רשימת ציוד ל-CSV (כולל רכיבי פריט)
+// יצוא רשימת ציוד ל-CSV (כולל רכיבי פריט – עמודה נפרדת לכל רכיב עם כותרת)
 if (isset($_GET['export']) && $_GET['export'] === '1') {
+    $maxComponents = 20;
     $equipmentIds = array_map(function ($item) { return (int)($item['id'] ?? 0); }, $equipmentList);
     $equipmentIds = array_values(array_filter($equipmentIds));
     $componentsByEquipment = [];
@@ -497,18 +575,27 @@ if (isset($_GET['export']) && $_GET['export'] === '1') {
             if (!isset($componentsByEquipment[$eid])) {
                 $componentsByEquipment[$eid] = [];
             }
-            $qty = (int)($r['quantity'] ?? 1);
-            $componentsByEquipment[$eid][] = ($r['name'] ?? '') . ($qty > 1 ? ' (' . $qty . ')' : '');
+            $componentsByEquipment[$eid][] = [
+                'name'     => (string)($r['name'] ?? ''),
+                'quantity' => (int)($r['quantity'] ?? 1),
+            ];
         }
     }
+    $header = ['name', 'code', 'description', 'category', 'location', 'status', 'quantity_total', 'quantity_available'];
+    for ($n = 1; $n <= $maxComponents; $n++) {
+        $header[] = 'component_' . $n . '_name';
+        $header[] = 'component_' . $n . '_quantity';
+    }
+    $header[] = 'created_at';
+    $header[] = 'updated_at';
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="equipment-' . date('Ymd-His') . '.csv"');
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['name', 'code', 'description', 'category', 'location', 'status', 'quantity_total', 'quantity_available', 'components', 'created_at', 'updated_at']);
+    fputcsv($out, $header);
     foreach ($equipmentList as $row) {
         $eid = (int)($row['id'] ?? 0);
-        $componentsStr = isset($componentsByEquipment[$eid]) ? implode(', ', $componentsByEquipment[$eid]) : '';
-        fputcsv($out, [
+        $comps = isset($componentsByEquipment[$eid]) ? $componentsByEquipment[$eid] : [];
+        $data = [
             $row['name'] ?? '',
             $row['code'] ?? '',
             $row['description'] ?? '',
@@ -517,10 +604,19 @@ if (isset($_GET['export']) && $_GET['export'] === '1') {
             $row['status'] ?? '',
             $row['quantity_total'] ?? 0,
             $row['quantity_available'] ?? 0,
-            $componentsStr,
-            $row['created_at'] ?? '',
-            $row['updated_at'] ?? '',
-        ]);
+        ];
+        for ($n = 0; $n < $maxComponents; $n++) {
+            if (isset($comps[$n])) {
+                $data[] = $comps[$n]['name'];
+                $data[] = $comps[$n]['quantity'];
+            } else {
+                $data[] = '';
+                $data[] = '';
+            }
+        }
+        $data[] = $row['created_at'] ?? '';
+        $data[] = $row['updated_at'] ?? '';
+        fputcsv($out, $data);
     }
     fclose($out);
     exit;
