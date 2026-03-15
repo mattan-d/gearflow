@@ -155,6 +155,9 @@ if ($userId > 0) {
         width: max-content;
         z-index: 30;
         color: var(--gf-header-text);
+        box-shadow: none;
+        direction: rtl;
+        text-align: right;
     }
     .main-nav-sub a {
         display: block;
@@ -163,6 +166,7 @@ if ($userId > 0) {
         color: var(--gf-header-link);
         transition: color 0.2s ease;
         text-align: right;
+        direction: rtl;
     }
     .main-nav-sub a + a {
         border-top: 1px solid #f3f4f6;
