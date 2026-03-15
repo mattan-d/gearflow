@@ -91,7 +91,7 @@ try {
     }
 }
 
-// רשימת גרסאות לכל מסמך (לתפריט חזרה לגירסה)
+// רשימת גרסאות לכל מסמך (תפריט חזרה לגירסה) – בסדר יורד (גרסה אחרונה ראשונה)
 $versionsByDoc = [];
 try {
     $stV = $pdo->query("SELECT doc_type, doc_ref, version_number, created_at FROM document_versions ORDER BY doc_type, doc_ref, version_number DESC");
@@ -101,6 +101,11 @@ try {
             $versionsByDoc[$k] = [];
         }
         $versionsByDoc[$k][] = ['version_number' => (int)$r['version_number'], 'created_at' => $r['created_at'] ?? ''];
+    }
+    foreach ($versionsByDoc as $k => $list) {
+        usort($versionsByDoc[$k], function ($a, $b) {
+            return $b['version_number'] - $a['version_number'];
+        });
     }
 } catch (Throwable $e) {
     $versionsByDoc = [];
@@ -647,8 +652,14 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     $editLink = 'admin_documents.php?custom_id=' . $cid . '&edit=1';
                     $cCreated = $c['created_at'] ?? null;
                     $cUpdated = $c['updated_at'] ?? null;
-                    $cVer = (int)($c['version_number'] ?? 1);
                     $verList = $versionsByDoc['custom:' . $cid] ?? [];
+                    $cVer = (int)($c['version_number'] ?? 1);
+                    if (!empty($verList)) {
+                        $maxVer = max(array_column($verList, 'version_number'));
+                        if ($maxVer > 0) {
+                            $cVer = $maxVer;
+                        }
+                    }
                 ?>
                     <tr class="<?= $isSelected ? 'selected' : '' ?>">
                         <td><?= $rowNum ?></td>
