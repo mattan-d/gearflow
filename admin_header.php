@@ -168,8 +168,8 @@ if ($userId > 0) {
         padding: 0;
     }
     .notif-bell-btn.has-unread {
-        color:rgb(201, 0, 0);
-        filter: hue-rotate(320deg);
+        color:rgb(255, 0, 0);
+        filter: hue-rotate(0deg);
     }
     .notif-badge {
         position: absolute;
