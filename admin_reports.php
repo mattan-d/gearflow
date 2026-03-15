@@ -153,14 +153,17 @@ foreach ($catRows as $cName) {
 }
 
 // --- דוח ציוד ---
-$eqCategory    = isset($_GET['eq_category']) ? trim((string)$_GET['eq_category']) : '';
-$eqEquipmentId = isset($_GET['eq_equipment']) ? (int)$_GET['eq_equipment'] : 0;
-$eqStatus      = isset($_GET['eq_status']) ? trim((string)$_GET['eq_status']) : '';
-$eqOrderCheck  = isset($_GET['eq_order_check']) && $_GET['eq_order_check'] === '1';
-$eqStart       = isset($_GET['eq_start']) ? trim((string)$_GET['eq_start']) : '';
-$eqEnd         = isset($_GET['eq_end']) ? trim((string)$_GET['eq_end']) : '';
+$eqCategory     = isset($_GET['eq_category']) ? trim((string)$_GET['eq_category']) : '';
+$eqEquipmentId  = isset($_GET['eq_equipment']) ? (int)$_GET['eq_equipment'] : 0;
+$eqReportType   = isset($_GET['eq_report_type']) ? trim((string)$_GET['eq_report_type']) : '';
+if (!in_array($eqReportType, ['status', 'orders', 'availability'], true)) {
+    $eqReportType = 'status';
+}
+$eqStatus       = isset($_GET['eq_status']) ? trim((string)$_GET['eq_status']) : '';
+$eqStart        = isset($_GET['eq_start']) ? trim((string)$_GET['eq_start']) : '';
+$eqEnd          = isset($_GET['eq_end']) ? trim((string)$_GET['eq_end']) : '';
 $eqAvailability = isset($_GET['eq_availability']) ? trim((string)$_GET['eq_availability']) : 'פנוי';
-$eqShow        = isset($_GET['eq_show']);
+$eqShow         = isset($_GET['eq_show']);
 
 $equipmentReport = ['show' => false, 'order_counts' => [], 'availability' => [], 'status_ok' => 0, 'status_not_ok' => 0, 'chart_max' => 1];
 $equipmentListAll = [];
@@ -197,7 +200,7 @@ if ($eqShow) {
         $eqWhereNoStatus .= " AND e.id = :eq_id_s";
         $eqParamsStatus[':eq_id_s'] = $eqEquipmentId;
     }
-    if ($eqStatus === 'תקין' || $eqStatus === 'לא תקין') {
+    if ($eqReportType === 'status') {
         $sqlStatus = "SELECT
                       SUM(CASE WHEN e.status = 'active' THEN 1 ELSE 0 END) AS ok_count,
                       SUM(CASE WHEN e.status IS NULL OR e.status != 'active' THEN 1 ELSE 0 END) AS not_ok_count
@@ -209,7 +212,7 @@ if ($eqShow) {
         $equipmentReport['status_not_ok'] = (int)($rowStatus['not_ok_count'] ?? 0);
     }
 
-    if ($eqOrderCheck) {
+    if ($eqReportType === 'orders') {
         $joinCond = "o.equipment_id = e.id";
         if ($eqStart !== '' && $eqEnd !== '' && $eqStart <= $eqEnd) {
             $joinCond .= " AND DATE(o.start_date) <= :eq_end AND DATE(o.end_date) >= :eq_start";
@@ -227,7 +230,7 @@ if ($eqShow) {
     }
 
     $hasRange = $eqStart !== '' && $eqEnd !== '' && $eqStart <= $eqEnd;
-    if ($hasRange) {
+    if ($eqReportType === 'availability' && $hasRange) {
         $avParams = [];
         if ($eqCategory !== '' && $eqCategory !== 'הכל') {
             $avParams[':eq_cat'] = $eqCategory;
@@ -664,7 +667,7 @@ if ($eqShow) {
 
         <div id="reports-equipment" class="reports-section<?= $activeTab === 'equipment' ? ' active' : '' ?>">
             <p class="muted-small" style="margin-bottom:0.75rem;">
-                בחר קטגוריה, פריט ציוד, סטטוס וטווח זמן. סמן "הזמנה" לספירת הזמנות לפריט; בחר טווח תאריכים לבדיקת זמינות (פנוי/מוזמן).
+                בחר פריט ציוד (קטגוריה ופריט) וסוג דוח. לפי סוג הדוח יוצגו הפקדים הרלוונטיים.
             </p>
             <form method="get" action="admin_reports.php" id="equipment_report_form">
                 <input type="hidden" name="tab" value="equipment">
@@ -697,7 +700,16 @@ if ($eqShow) {
                         </select>
                     </div>
                     <div class="report-param-block">
-                        <label class="param-label" for="eq_status">סטטוס ציוד</label>
+                        <label class="param-label" for="eq_report_type">סוג דוח</label>
+                        <select name="eq_report_type" id="eq_report_type"
+                                style="min-width:160px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
+                            <option value="status" <?= $eqReportType === 'status' ? 'selected' : '' ?>>דוח תקינות</option>
+                            <option value="orders" <?= $eqReportType === 'orders' ? 'selected' : '' ?>>דוח כמות הזמנות</option>
+                            <option value="availability" <?= $eqReportType === 'availability' ? 'selected' : '' ?>>דוח זמינות</option>
+                        </select>
+                    </div>
+                    <div class="report-param-block" id="eq_type_status_wrap" style="<?= $eqReportType === 'status' ? '' : 'display:none;' ?>">
+                        <label class="param-label" for="eq_status">תקין / לא תקין</label>
                         <select name="eq_status" id="eq_status"
                                 style="min-width:110px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
                             <option value="הכל" <?= ($eqStatus === '' || $eqStatus === 'הכל') ? 'selected' : '' ?>>הכל</option>
@@ -705,14 +717,7 @@ if ($eqShow) {
                             <option value="לא תקין" <?= $eqStatus === 'לא תקין' ? 'selected' : '' ?>>לא תקין</option>
                         </select>
                     </div>
-                    <div class="report-param-block" style="align-items:center;">
-                        <span class="param-label" aria-hidden="true">&nbsp;</span>
-                        <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.85rem;cursor:pointer;">
-                            <input type="checkbox" name="eq_order_check" value="1" <?= $eqOrderCheck ? 'checked' : '' ?> id="eq_order_check">
-                            הזמנה (כמה פעמים הוזמן)
-                        </label>
-                    </div>
-                    <div class="report-param-block calendar-bar eq-calendar-bar">
+                    <div class="report-param-block calendar-bar eq-calendar-bar" id="eq_type_availability_wrap" style="<?= $eqReportType === 'availability' ? '' : 'display:none;' ?>">
                         <span class="param-label">תאריך התחלה וסיום</span>
                         <button type="button" id="eq_range_btn" class="calendar-icon-btn" title="בחירת טווח" aria-label="טווח תאריכים"><i data-lucide="calendar" aria-hidden="true"></i></button>
                         <span class="param-value-hint" id="eq_range_hint">
@@ -732,8 +737,8 @@ if ($eqShow) {
                             <div class="calendar-grid" id="eq_calendar_grid"></div>
                         </div>
                     </div>
-                    <div class="report-param-block" id="eq_availability_wrap" style="<?= ($eqStart !== '' && $eqEnd !== '') ? '' : 'display:none;' ?>">
-                        <label class="param-label" for="eq_availability">זמינות בטווח</label>
+                    <div class="report-param-block" id="eq_availability_wrap" style="<?= ($eqReportType === 'availability' && $eqStart !== '' && $eqEnd !== '') ? '' : 'display:none;' ?>">
+                        <label class="param-label" for="eq_availability">פנוי / מוזמן</label>
                         <select name="eq_availability" id="eq_availability"
                                 style="min-width:100px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
                             <option value="פנוי" <?= $eqAvailability === 'פנוי' ? 'selected' : '' ?>>פנוי</option>
@@ -748,8 +753,8 @@ if ($eqShow) {
             </form>
 
             <?php if ($equipmentReport['show']): ?>
-                <?php if ($eqStatus === 'תקין' || $eqStatus === 'לא תקין'): ?>
-                    <h3 style="margin:1rem 0 0.5rem;font-size:1rem;color:#374151;">דוח סטטוס ציוד – תקין / לא תקין</h3>
+                <?php if ($eqReportType === 'status'): ?>
+                    <h3 style="margin:1rem 0 0.5rem;font-size:1rem;color:#374151;">דוח תקינות – תקין / לא תקין</h3>
                     <div class="orders-report-bars">
                         <?php
                         $stMax = max(1, $equipmentReport['status_ok'], $equipmentReport['status_not_ok']);
@@ -773,7 +778,7 @@ if ($eqShow) {
                     </div>
                 <?php endif; ?>
 
-                <?php if ($eqOrderCheck && !empty($equipmentReport['order_counts'])): ?>
+                <?php if ($eqReportType === 'orders' && !empty($equipmentReport['order_counts'])): ?>
                     <h3 style="margin:1rem 0 0.5rem;font-size:1rem;color:#374151;">כמות הזמנות לפי פריט ציוד</h3>
                     <div class="orders-report-bars">
                         <?php
@@ -792,13 +797,13 @@ if ($eqShow) {
                             </div>
                         <?php endforeach; ?>
                     </div>
-                <?php elseif ($eqOrderCheck): ?>
+                <?php elseif ($eqReportType === 'orders'): ?>
                     <p class="muted-small" style="margin-top:0.75rem;">לא נמצאו פריטי ציוד התואמים לסינון.</p>
                 <?php endif; ?>
 
                 <?php
                 $hasRange = $eqStart !== '' && $eqEnd !== '' && $eqStart <= $eqEnd;
-                if ($hasRange): ?>
+                if ($eqReportType === 'availability' && $hasRange): ?>
                     <h3 style="margin:1rem 0 0.5rem;font-size:1rem;color:#374151;">פריטים <?= $eqAvailability === 'פנוי' ? 'פנויים' : 'מוזמנים' ?> בתקופה מ־<?= htmlspecialchars($eqStart, ENT_QUOTES, 'UTF-8') ?> עד <?= htmlspecialchars($eqEnd, ENT_QUOTES, 'UTF-8') ?></h3>
                     <?php if (!empty($equipmentReport['availability'])): ?>
                         <div class="orders-report-bars">
@@ -823,8 +828,8 @@ if ($eqShow) {
                     <?php endif; ?>
                 <?php endif; ?>
 
-                <?php if ($equipmentReport['show'] && !$eqOrderCheck && !$hasRange && $eqStatus !== 'תקין' && $eqStatus !== 'לא תקין'): ?>
-                    <p class="muted-small" style="margin-top:0.75rem;">בחר סטטוס ציוד (תקין/לא תקין), סמן "הזמנה" ו/או בחר טווח תאריכים ולחץ הצג.</p>
+                <?php if ($equipmentReport['show'] && $eqReportType === 'availability' && !$hasRange): ?>
+                    <p class="muted-small" style="margin-top:0.75rem;">בחר טווח תאריכים ולחץ הצג.</p>
                 <?php endif; ?>
             <?php endif; ?>
         </div>
@@ -1062,6 +1067,27 @@ if ($eqShow) {
     })();
 
     (function() {
+        var reportType = document.getElementById('eq_report_type');
+        var statusWrap = document.getElementById('eq_type_status_wrap');
+        var availabilityWrap = document.getElementById('eq_type_availability_wrap');
+        var availWrap = document.getElementById('eq_availability_wrap');
+        if (!reportType) return;
+        function toggleByReportType() {
+            var t = (reportType.value || '').trim();
+            if (statusWrap) statusWrap.style.display = (t === 'status') ? '' : 'none';
+            if (availabilityWrap) availabilityWrap.style.display = (t === 'availability') ? '' : 'none';
+            if (availWrap) {
+                var startInput = document.getElementById('eq_start');
+                var endInput = document.getElementById('eq_end');
+                var hasRange = startInput && endInput && startInput.value && endInput.value;
+                availWrap.style.display = (t === 'availability' && hasRange) ? '' : 'none';
+            }
+        }
+        reportType.addEventListener('change', toggleByReportType);
+        toggleByReportType();
+    })();
+
+    (function() {
         var form = document.getElementById('equipment_report_form');
         var startInput = document.getElementById('eq_start');
         var endInput = document.getElementById('eq_end');
@@ -1081,7 +1107,10 @@ if ($eqShow) {
             else rangeHint.textContent = 'לא נבחר';
         }
         function updateAvailVisibility() {
-            if (availWrap) availWrap.style.display = (startDate && endDate) ? '' : 'none';
+            if (!availWrap) return;
+            var rt = document.getElementById('eq_report_type');
+            var isAvail = rt && (rt.value || '').trim() === 'availability';
+            availWrap.style.display = (isAvail && startDate && endDate) ? '' : 'none';
         }
         updateHint();
         updateAvailVisibility();
