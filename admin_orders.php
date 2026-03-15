@@ -2051,9 +2051,31 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 $adminTabsAllowed = in_array($tab, ['today', 'pending', 'future'], true);
                                 if ($adminTabsAllowed): ?>
                                     <div class="row-actions">
+                                        <form method="post" action="admin_orders.php">
+                                            <input type="hidden" name="action" value="duplicate">
+                                            <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                            <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                            <button type="submit" class="icon-btn" title="שכפול" aria-label="שכפול"><i data-lucide="copy" aria-hidden="true"></i></button>
+                                        </form>
+
+                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
+
                                         <?php
-                                        // בחירת סטטוס בהתאם לכללי המעבר:
-                                        // מציגים את הסטטוס הנוכחי (כפריט ראשון, מסומן), ועוד את הסטטוס הבא המותר
+                                        // מנהל יכול למחוק רק הזמנות שהוא יצר בעצמו (creator_username)
+                                        $canDelete = isset($order['creator_username'], $me['username'])
+                                            && $order['creator_username'] === $me['username'];
+                                        if ($canDelete): ?>
+                                            <form method="post" action="admin_orders.php"
+                                                  onsubmit="return confirm('למחוק את ההזמנה הזו?');">
+                                                <input type="hidden" name="action" value="delete">
+                                                <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                                <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                                <button type="submit" class="icon-btn" title="מחיקה" aria-label="מחיקה"><i data-lucide="trash-2" aria-hidden="true"></i></button>
+                                            </form>
+                                        <?php endif; ?>
+
+                                        <?php
+                                        // קומבו בוקס שינוי סטטוס – בסוף טור הפעולות
                                         $options = [];
                                         if ($order['status'] === 'pending') {
                                             $options = [
@@ -2072,15 +2094,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                                 'returned' => 'עבר',
                                             ];
                                         }
-                                        ?>
-                                        <form method="post" action="admin_orders.php">
-                                            <input type="hidden" name="action" value="duplicate">
-                                            <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                            <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                            <button type="submit" class="icon-btn" title="שכפול" aria-label="שכפול"><i data-lucide="copy" aria-hidden="true"></i></button>
-                                        </form>
-
-                                        <?php if (!empty($options)): ?>
+                                        if (!empty($options)): ?>
                                             <select name="status"
                                                     class="muted-small order-status-select"
                                                     data-order-id="<?= (int)$order['id'] ?>"
@@ -2091,22 +2105,6 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                                     </option>
                                                 <?php endforeach; ?>
                                             </select>
-                                        <?php endif; ?>
-
-                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
-
-                                        <?php
-                                        // מנהל יכול למחוק רק הזמנות שהוא יצר בעצמו (creator_username), לא הזמנות סטודנט
-                                        $canDelete = isset($order['creator_username'], $me['username'])
-                                            && $order['creator_username'] === $me['username'];
-                                        if ($canDelete): ?>
-                                            <form method="post" action="admin_orders.php"
-                                                  onsubmit="return confirm('למחוק את ההזמנה הזו?');">
-                                                <input type="hidden" name="action" value="delete">
-                                                <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                                <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                                <button type="submit" class="icon-btn" title="מחיקה" aria-label="מחיקה"><i data-lucide="trash-2" aria-hidden="true"></i></button>
-                                            </form>
                                         <?php endif; ?>
                                     </div>
                                 <?php endif;

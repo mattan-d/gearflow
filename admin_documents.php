@@ -120,10 +120,7 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? ''
             if ($docType === 'builtin' && isset($documents[$docRef])) {
                 file_put_contents($documents[$docRef]['file'], $content);
                 $documents[$docRef]['content'] = $content;
-                $stNext = $pdo->prepare("SELECT COALESCE(MAX(version_number), 0) + 1 AS n FROM document_versions WHERE doc_type = 'builtin' AND doc_ref = ?");
-                $stNext->execute([$docRef]);
-                $next = (int)$stNext->fetch(PDO::FETCH_ASSOC)['n'];
-                $pdo->prepare("INSERT INTO document_versions (doc_type, doc_ref, content, version_number, created_at) VALUES ('builtin', ?, ?, ?, ?)")->execute([$docRef, $content, $next, date('Y-m-d H:i:s')]);
+                $pdo->prepare("DELETE FROM document_versions WHERE doc_type = 'builtin' AND doc_ref = ? AND version_number > ?")->execute([$docRef, $verNum]);
                 $notice = 'המסמך הוחזר לגירסה ' . $verNum . '.';
                 header('Location: admin_documents.php?doc=' . urlencode($docRef));
                 exit;
@@ -131,12 +128,9 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? ''
             if ($docType === 'custom') {
                 $cid = (int)$docRef;
                 if ($cid > 0) {
-                    $stNext = $pdo->prepare("SELECT COALESCE(MAX(version_number), 0) + 1 AS n FROM document_versions WHERE doc_type = 'custom' AND doc_ref = ?");
-                    $stNext->execute([(string)$cid]);
-                    $next = (int)$stNext->fetch(PDO::FETCH_ASSOC)['n'];
+                    $pdo->prepare("DELETE FROM document_versions WHERE doc_type = 'custom' AND doc_ref = ? AND version_number > ?")->execute([(string)$cid, $verNum]);
                     $now = date('Y-m-d H:i:s');
-                    $pdo->prepare("INSERT INTO document_versions (doc_type, doc_ref, content, version_number, created_at) VALUES ('custom', ?, ?, ?, ?)")->execute([(string)$cid, $content, $next, $now]);
-                    $pdo->prepare('UPDATE documents_custom SET content = ?, updated_at = ?, version_number = ? WHERE id = ?')->execute([$content, $now, $next, $cid]);
+                    $pdo->prepare('UPDATE documents_custom SET content = ?, updated_at = ?, version_number = ? WHERE id = ?')->execute([$content, $now, $verNum, $cid]);
                     $notice = 'המסמך הוחזר לגירסה ' . $verNum . '.';
                     header('Location: admin_documents.php?custom_id=' . $cid);
                     exit;
