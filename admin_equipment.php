@@ -8,7 +8,7 @@ require_admin_or_warehouse();
 
 $pdo = get_db();
 $error = '';
-$success = '';
+$success = isset($_GET['success']) ? (string)$_GET['success'] : '';
 $editingEquipment = null;
 $componentsEquipment = null;
 $componentsList = [];
@@ -623,6 +623,17 @@ if (isset($_GET['export']) && $_GET['export'] === '1') {
 }
 
 $me = current_user();
+$bulkCategories = [];
+try {
+    $catStmt = $pdo->query("SELECT name FROM equipment_categories ORDER BY name");
+    if ($catStmt) $bulkCategories = $catStmt->fetchAll(PDO::FETCH_COLUMN);
+} catch (Throwable $e) {}
+if (empty($bulkCategories)) {
+    $catStmt = $pdo->query("SELECT DISTINCT category FROM equipment WHERE category IS NOT NULL AND TRIM(category) != '' ORDER BY category");
+    if ($catStmt) $bulkCategories = $catStmt->fetchAll(PDO::FETCH_COLUMN);
+}
+$isAdminForBulk = isset($me['role']) && ($me['role'] ?? '') === 'admin';
+$bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
 
 ?>
 <!DOCTYPE html>
@@ -1146,6 +1157,7 @@ $me = current_user();
     <div class="toolbar-top">
         <div class="toolbar-buttons">
             <button type="button" class="btn" id="toggle_add_equipment_btn">הוספת פריט ציוד</button>
+            <button type="button" class="btn secondary" id="toggle_bulk_add_btn">הוספת מספר פריטים</button>
             <button type="button" class="btn secondary" id="toggle_import_equipment_btn">יבוא רשימת ציוד</button>
             <a href="admin_equipment.php?export=1" class="btn neutral">יצוא רשימת ציוד</a>
         </div>
@@ -1388,6 +1400,56 @@ $me = current_user();
         </div>
     </div>
 
+    <div class="card" id="equipment_bulk_add_card" style="display: none;">
+        <h2>הוספת מספר פריטים</h2>
+        <p class="muted-small">הוסף שורות ומילוי פרטי ציוד. שמירה תיצור פריט חדש לכל שורה עם שם וקוד.</p>
+        <form method="post" action="admin_equipment.php">
+            <input type="hidden" name="action" value="bulk_add">
+            <div style="overflow-x: auto;">
+                <table class="bulk-add-table" style="width:100%; border-collapse: collapse; font-size: 0.86rem;">
+                    <thead>
+                    <tr>
+                        <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">שם ציוד</th>
+                        <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">קוד זיהוי</th>
+                        <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">תיאור</th>
+                        <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">קטגוריה</th>
+                        <?php if ($isAdminForBulk): ?>
+                        <th style="padding:0.4rem 0.5rem; text-align:right; border-bottom:1px solid #e5e7eb;">מחסן</th>
+                        <?php endif; ?>
+                    </tr>
+                    </thead>
+                    <tbody id="bulk_add_tbody">
+                    <tr class="bulk-add-row">
+                        <td style="padding:0.35rem 0.5rem;"><input type="text" name="bulk_name[]" placeholder="שם" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;"></td>
+                        <td style="padding:0.35rem 0.5rem;"><input type="text" name="bulk_code[]" placeholder="קוד" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;"></td>
+                        <td style="padding:0.35rem 0.5rem;"><input type="text" name="bulk_description[]" placeholder="תיאור" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;"></td>
+                        <td style="padding:0.35rem 0.5rem;">
+                            <select name="bulk_category[]" style="padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db; min-width:120px;">
+                                <option value="">—</option>
+                                <?php foreach ($bulkCategories as $bc): ?>
+                                <option value="<?= htmlspecialchars($bc, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($bc, ENT_QUOTES, 'UTF-8') ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </td>
+                        <?php if ($isAdminForBulk): ?>
+                        <td style="padding:0.35rem 0.5rem;">
+                            <select name="bulk_location[]" style="padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db; min-width:100px;">
+                                <option value="מחסן א">מחסן א</option>
+                                <option value="מחסן ב">מחסן ב</option>
+                            </select>
+                        </td>
+                        <?php endif; ?>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div style="margin-top:0.75rem; display:flex; gap:0.5rem; align-items:center;">
+                <button type="button" class="btn secondary" id="bulk_add_row_btn">הוסף שורה</button>
+                <button type="submit" class="btn">שמירת כל הפריטים</button>
+            </div>
+        </form>
+    </div>
+
     <div class="card" id="equipment_import_card" style="display: none;">
         <h2>יבוא רשימת ציוד (CSV)</h2>
         <p class="muted-small">
@@ -1591,6 +1653,10 @@ document.addEventListener('DOMContentLoaded', function () {
     var formClose = document.getElementById('equipment_modal_close');
     var formCancel = document.getElementById('equipment_modal_cancel');
     var importCard = document.getElementById('equipment_import_card');
+    var bulkAddCard = document.getElementById('equipment_bulk_add_card');
+    var bulkAddBtn = document.getElementById('toggle_bulk_add_btn');
+    var bulkAddTbody = document.getElementById('bulk_add_tbody');
+    var bulkAddRowBtn = document.getElementById('bulk_add_row_btn');
     var componentsModal = document.getElementById('components_modal');
     var componentsClose = document.getElementById('components_modal_close');
     var addComponentRowBtn = document.getElementById('components_add_row_btn');
@@ -1850,6 +1916,26 @@ document.addEventListener('DOMContentLoaded', function () {
         importBtn.addEventListener('click', function () {
             var isVisible = importCard.style.display !== 'none';
             importCard.style.display = isVisible ? 'none' : 'block';
+            if (bulkAddCard) bulkAddCard.style.display = 'none';
+        });
+    }
+    if (bulkAddBtn && bulkAddCard) {
+        bulkAddBtn.addEventListener('click', function () {
+            var isVisible = bulkAddCard.style.display !== 'none';
+            bulkAddCard.style.display = isVisible ? 'none' : 'block';
+            if (importCard) importCard.style.display = 'none';
+        });
+    }
+    if (bulkAddRowBtn && bulkAddTbody) {
+        bulkAddRowBtn.addEventListener('click', function () {
+            var firstRow = bulkAddTbody.querySelector('tr.bulk-add-row');
+            if (!firstRow) return;
+            var clone = firstRow.cloneNode(true);
+            var inputs = clone.querySelectorAll('input[type="text"]');
+            inputs.forEach(function (inp) { inp.value = ''; });
+            var selects = clone.querySelectorAll('select');
+            selects.forEach(function (sel) { sel.selectedIndex = 0; });
+            bulkAddTbody.appendChild(clone);
         });
     }
 
