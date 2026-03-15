@@ -533,8 +533,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':description' => $r['description'] ?? '',
                         ':category' => $r['category'] ?? '',
                         ':location' => $r['location'] ?? '',
-                        ':quantity_total' => 1,
-                        ':quantity_available' => 1,
                         ':status' => $statusVal,
                         ':created_at' => $now,
                     ]);
@@ -750,7 +748,6 @@ if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESS
                 $insert->execute([
                     ':name' => $r['name'] ?? '', ':code' => $r['code'] ?? '', ':description' => $r['description'] ?? '',
                     ':category' => $r['category'] ?? '', ':location' => $r['location'] ?? '',
-                    ':quantity_total' => 1, ':quantity_available' => 1,
                     ':status' => $statusVal, ':created_at' => $now,
                 ]);
                 $newId = (int)$pdo->lastInsertId();
