@@ -487,6 +487,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $skipRows[(int)$ri] = true;
                 }
             }
+            // גישה חלופית: בונים מערך שורות מתוקנות (מפתחות קבועים) ואז מייבאים רק ממנו
+            $rowsFixed = [];
+            foreach ($rows as $ri => $row) {
+                if (isset($skipRows[$ri])) continue;
+                if (!is_array($row)) continue;
+                $row = array_values($row);
+                $fixed = [];
+                foreach ($systemCols as $col) {
+                    $idx = $headerNorm[$col] ?? null;
+                    if ($idx !== null && array_key_exists($idx, $row)) {
+                        $fixed[$col] = trim((string)$row[$idx]);
+                    } else {
+                        $fixed[$col] = (string)($missingDefaults[$col] ?? '');
+                    }
+                }
+                if (isset($duplicateActions[$ri]['action']) && $duplicateActions[$ri]['action'] === 'replace' && isset($duplicateActions[$ri]['newCode'])) {
+                    $fixed['code'] = trim((string)$duplicateActions[$ri]['newCode']);
+                }
+                if ($fixed['name'] !== '' && $fixed['code'] !== '') {
+                    $rowsFixed[] = $fixed;
+                }
+            }
             $insert = $pdo->prepare(
                 'INSERT INTO equipment (name, code, description, category, location, quantity_total, quantity_available, status, created_at)
                  VALUES (:name, :code, :description, :category, :location, 1, 1, :status, :created_at)'
@@ -497,37 +519,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
             $now = date('Y-m-d H:i:s');
             $imported = 0;
-            foreach ($rows as $ri => $row) {
-                if (isset($skipRows[$ri])) continue;
-                if (!is_array($row)) continue;
-                $row = array_values($row);
-                $get = function ($col) use ($headerNorm, $row, $missingDefaults) {
-                    $idx = $headerNorm[$col] ?? null;
-                    if ($idx !== null && isset($row[$idx])) {
-                        return trim((string)$row[$idx]);
-                    }
-                    return (string)($missingDefaults[$col] ?? '');
-                };
-                $code = $get('code');
-                if (isset($duplicateActions[$ri]['action']) && $duplicateActions[$ri]['action'] === 'replace' && isset($duplicateActions[$ri]['newCode'])) {
-                    $code = trim((string)$duplicateActions[$ri]['newCode']);
-                }
-                $name = $get('name');
-                if ($name === '' || $code === '') continue;
-                $statusVal = $get('status');
+            foreach ($rowsFixed as $r) {
+                $name = $r['name'] ?? '';
+                $code = $r['code'] ?? '';
+                $statusVal = $r['status'] ?? '';
                 if (!in_array($statusVal, ['active', 'out', 'disabled'], true)) {
                     $statusVal = 'active';
                 }
-                $desc = $get('description');
-                $cat = $get('category');
-                $loc = $get('location');
                 try {
                     $insert->execute([
                         ':name' => $name,
                         ':code' => $code,
-                        ':description' => $desc,
-                        ':category' => $cat,
-                        ':location' => $loc,
+                        ':description' => $r['description'] ?? '',
+                        ':category' => $r['category'] ?? '',
+                        ':location' => $r['location'] ?? '',
                         ':quantity_total' => 1,
                         ':quantity_available' => 1,
                         ':status' => $statusVal,
@@ -535,7 +540,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                     $newId = (int)$pdo->lastInsertId();
                     for ($n = 1; $n <= MAX_EQUIPMENT_COMPONENTS; $n++) {
-                        $cName = $get('component_' . $n . '_name');
+                        $cName = trim((string)($r['component_' . $n . '_name'] ?? ''));
                         if ($cName === '') continue;
                         try {
                             $insertComp->execute([':equipment_id' => $newId, ':name' => $cName, ':quantity' => 1, ':created_at' => $now]);
@@ -709,7 +714,25 @@ if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESS
         $headerNorm = [];
         foreach ($headers as $idx => $col) {
             $key = strtolower(trim((string)$col));
-            if ($key !== '') $headerNorm[$key] = $idx;
+            $key = preg_replace('/^\x{FEFF}/u', '', $key);
+            if ($key !== '') $headerNorm[$key] = (int)$idx;
+        }
+        $systemColsDirect = ['name', 'code', 'description', 'category', 'location', 'status'];
+        for ($n = 1; $n <= MAX_EQUIPMENT_COMPONENTS; $n++) {
+            $systemColsDirect[] = 'component_' . $n . '_name';
+        }
+        $rowsFixed = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) continue;
+            $row = array_values($row);
+            $fixed = [];
+            foreach ($systemColsDirect as $col) {
+                $idx = $headerNorm[$col] ?? null;
+                $fixed[$col] = ($idx !== null && array_key_exists($idx, $row)) ? trim((string)$row[$idx]) : '';
+            }
+            if ($fixed['name'] !== '' && $fixed['code'] !== '') {
+                $rowsFixed[] = $fixed;
+            }
         }
         $insert = $pdo->prepare(
             'INSERT INTO equipment (name, code, description, category, location, quantity_total, quantity_available, status, created_at)
@@ -721,27 +744,18 @@ if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESS
         );
         $now = date('Y-m-d H:i:s');
         $imported = 0;
-        foreach ($rows as $row) {
-            $row = array_values($row);
-            $get = function ($col) use ($headerNorm, $row) {
-                $idx = $headerNorm[$col] ?? null;
-                return ($idx !== null && isset($row[$idx])) ? trim((string)$row[$idx]) : '';
-            };
-            $name = $get('name');
-            $code = $get('code');
-            if ($name === '' || $code === '') continue;
+        foreach ($rowsFixed as $r) {
+            $statusVal = ($r['status'] ?? '') !== '' && in_array($r['status'], ['active', 'out', 'disabled'], true) ? $r['status'] : 'active';
             try {
-                $s = $get('status');
-                $statusVal = ($s !== '' && in_array($s, ['active', 'out', 'disabled'], true)) ? $s : 'active';
                 $insert->execute([
-                    ':name' => $name, ':code' => $code, ':description' => $get('description'),
-                    ':category' => $get('category'), ':location' => $get('location'),
+                    ':name' => $r['name'] ?? '', ':code' => $r['code'] ?? '', ':description' => $r['description'] ?? '',
+                    ':category' => $r['category'] ?? '', ':location' => $r['location'] ?? '',
                     ':quantity_total' => 1, ':quantity_available' => 1,
                     ':status' => $statusVal, ':created_at' => $now,
                 ]);
                 $newId = (int)$pdo->lastInsertId();
                 for ($n = 1; $n <= MAX_EQUIPMENT_COMPONENTS; $n++) {
-                    $cName = $get('component_' . $n . '_name');
+                    $cName = trim((string)($r['component_' . $n . '_name'] ?? ''));
                     if ($cName === '') continue;
                     try {
                         $insertComp->execute([':equipment_id' => $newId, ':name' => $cName, ':quantity' => 1, ':created_at' => $now]);
@@ -752,8 +766,7 @@ if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESS
                 if (!str_contains($e->getMessage(), 'UNIQUE') || !str_contains($e->getMessage(), 'code')) {
                     $msg = $e->getMessage();
                     $short = preg_replace('/[^\p{L}\p{N}\s\-_]/u', ' ', $msg);
-                    $short = trim(mb_substr($short, 0, 80));
-                    $error = $error ?: ('שגיאה בייבוא.' . ($short !== '' ? ' (' . $short . ')' : ''));
+                    $error = $error ?: ('שגיאה בייבוא.' . (trim(mb_substr($short, 0, 80)) !== '' ? ' (' . trim(mb_substr($short, 0, 80)) . ')' : ''));
                 }
             }
         }
