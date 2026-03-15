@@ -162,7 +162,7 @@ $eqEnd         = isset($_GET['eq_end']) ? trim((string)$_GET['eq_end']) : '';
 $eqAvailability = isset($_GET['eq_availability']) ? trim((string)$_GET['eq_availability']) : 'פנוי';
 $eqShow        = isset($_GET['eq_show']);
 
-$equipmentReport = ['show' => false, 'order_counts' => [], 'availability' => [], 'chart_max' => 1];
+$equipmentReport = ['show' => false, 'order_counts' => [], 'availability' => [], 'status_ok' => 0, 'status_not_ok' => 0, 'chart_max' => 1];
 $equipmentListAll = [];
 $eqStmt = $pdo->query("SELECT id, name, code, category, status FROM equipment ORDER BY category ASC, name ASC");
 if ($eqStmt) {
@@ -185,6 +185,28 @@ if ($eqShow) {
         $eqWhere .= " AND e.status = 'active'";
     } elseif ($eqStatus === 'לא תקין') {
         $eqWhere .= " AND (e.status IS NULL OR e.status != 'active')";
+    }
+
+    $eqWhereNoStatus = "1=1";
+    $eqParamsStatus = [];
+    if ($eqCategory !== '' && $eqCategory !== 'הכל') {
+        $eqWhereNoStatus .= " AND TRIM(COALESCE(e.category, '')) = :eq_cat_s";
+        $eqParamsStatus[':eq_cat_s'] = $eqCategory;
+    }
+    if ($eqEquipmentId > 0) {
+        $eqWhereNoStatus .= " AND e.id = :eq_id_s";
+        $eqParamsStatus[':eq_id_s'] = $eqEquipmentId;
+    }
+    if ($eqStatus === 'תקין' || $eqStatus === 'לא תקין') {
+        $sqlStatus = "SELECT
+                      SUM(CASE WHEN e.status = 'active' THEN 1 ELSE 0 END) AS ok_count,
+                      SUM(CASE WHEN e.status IS NULL OR e.status != 'active' THEN 1 ELSE 0 END) AS not_ok_count
+                      FROM equipment e WHERE " . $eqWhereNoStatus;
+        $stStatus = $pdo->prepare($sqlStatus);
+        $stStatus->execute($eqParamsStatus);
+        $rowStatus = $stStatus->fetch(PDO::FETCH_ASSOC) ?: [];
+        $equipmentReport['status_ok'] = (int)($rowStatus['ok_count'] ?? 0);
+        $equipmentReport['status_not_ok'] = (int)($rowStatus['not_ok_count'] ?? 0);
     }
 
     if ($eqOrderCheck) {
@@ -718,6 +740,31 @@ if ($eqShow) {
             </form>
 
             <?php if ($equipmentReport['show']): ?>
+                <?php if ($eqStatus === 'תקין' || $eqStatus === 'לא תקין'): ?>
+                    <h3 style="margin:1rem 0 0.5rem;font-size:1rem;color:#374151;">דוח סטטוס ציוד – תקין / לא תקין</h3>
+                    <div class="orders-report-bars">
+                        <?php
+                        $stMax = max(1, $equipmentReport['status_ok'], $equipmentReport['status_not_ok']);
+                        $pctOk = $stMax > 0 ? max(2, ($equipmentReport['status_ok'] / $stMax) * 100) : 0;
+                        $pctNot = $stMax > 0 ? max(2, ($equipmentReport['status_not_ok'] / $stMax) * 100) : 0;
+                        ?>
+                        <div class="orders-report-bar">
+                            <div class="orders-report-bar-label">תקין</div>
+                            <div class="orders-report-bar-track">
+                                <div class="orders-report-bar-fill" style="width: <?= $pctOk ?>%;"></div>
+                            </div>
+                            <div class="orders-report-bar-value"><?= (int)$equipmentReport['status_ok'] ?></div>
+                        </div>
+                        <div class="orders-report-bar">
+                            <div class="orders-report-bar-label">לא תקין</div>
+                            <div class="orders-report-bar-track">
+                                <div class="orders-report-bar-fill" style="width: <?= $pctNot ?>%;"></div>
+                            </div>
+                            <div class="orders-report-bar-value"><?= (int)$equipmentReport['status_not_ok'] ?></div>
+                        </div>
+                    </div>
+                <?php endif; ?>
+
                 <?php if ($eqOrderCheck && !empty($equipmentReport['order_counts'])): ?>
                     <h3 style="margin:1rem 0 0.5rem;font-size:1rem;color:#374151;">כמות הזמנות לפי פריט ציוד</h3>
                     <div class="orders-report-bars">
@@ -768,8 +815,8 @@ if ($eqShow) {
                     <?php endif; ?>
                 <?php endif; ?>
 
-                <?php if ($equipmentReport['show'] && !$eqOrderCheck && !$hasRange): ?>
-                    <p class="muted-small" style="margin-top:0.75rem;">סמן "הזמנה" ו/או בחר טווח תאריכים ולחץ הצג.</p>
+                <?php if ($equipmentReport['show'] && !$eqOrderCheck && !$hasRange && $eqStatus !== 'תקין' && $eqStatus !== 'לא תקין'): ?>
+                    <p class="muted-small" style="margin-top:0.75rem;">בחר סטטוס ציוד (תקין/לא תקין), סמן "הזמנה" ו/או בחר טווח תאריכים ולחץ הצג.</p>
                 <?php endif; ?>
             <?php endif; ?>
         </div>
@@ -873,7 +920,9 @@ if ($eqShow) {
                             }
                             startInput.value = startDate;
                             endInput.value = endDate;
-                            panel.style.display = 'none';
+                            setTimeout(function() {
+                                panel.style.display = 'none';
+                            }, 1000);
                         }
                         updateHint();
                         buildCalendar();
@@ -1071,7 +1120,9 @@ if ($eqShow) {
                         } else {
                             if (dateStr < startDate) { endDate = startDate; startDate = dateStr; }
                             else endDate = dateStr;
-                            panel.style.display = 'none';
+                            setTimeout(function() {
+                                panel.style.display = 'none';
+                            }, 1000);
                         }
                         startInput.value = startDate;
                         endInput.value = endDate;
