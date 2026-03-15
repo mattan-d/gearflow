@@ -820,8 +820,8 @@ if (isset($_GET['edit_id'])) {
             <a href="admin_users.php?export=1" class="btn secondary">יצוא CSV</a>
             <form method="post" action="admin_users.php" enctype="multipart/form-data" style="display:inline;">
                 <input type="hidden" name="action" value="import_csv">
-                <label class="btn-file" style="margin:0;">
-                    בחירת קובץ
+                <label class="btn btn-file" style="margin:0;">
+                   ייבוא רשימת משתמשים
                     <input type="file" name="import_file" id="import_file" accept=".csv" required>
                 </label>
             </form>

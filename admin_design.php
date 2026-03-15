@@ -188,6 +188,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: #e5e7eb;
             text-decoration: none;
         }
+        .btn {
+            padding: 0.5rem 1.1rem;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-family: inherit;
+            border: none;
+            text-decoration: none;
+        }
         .main-nav-primary {
             display: flex;
             gap: 0.8rem;
@@ -355,7 +366,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <form method="post" action="admin_design.php" enctype="multipart/form-data" style="display:flex;align-items:center;gap:0.5rem;">
                     <input type="hidden" name="upload_logo" value="1">
                     <input type="file" id="logo_file" name="logo_file" accept="image/*" style="display:none;" onchange="this.form.submit()">
-                    <label for="logo_file" class="btn-file">בחירת קובץ</label>
+                    <label for="logo_file" class="btn btn-file">בחירת קובץ</label>
                     <?php if (!empty($design['logo_path'])): ?>
                         <button type="submit" name="remove_logo" value="1" class="logo-remove-x" title="הסר לוגו">
                             ✕

@@ -215,21 +215,12 @@ if ($userId > 0) {
         cursor: pointer;
         font-size: 0.8rem;
     }
-    .btn-file {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0.5rem 1.1rem;
-        font-size: 0.9rem;
-        font-family: inherit;
-        border-radius: 8px;
+    .btn.btn-file {
         border: 1px solid #d4a5a5;
         background: #f8d7da;
         color: #721c24;
-        cursor: pointer;
-        text-decoration: none;
     }
-    .btn-file:hover {
+    .btn.btn-file:hover {
         background: #f5c2c7;
     }
     .btn-file input[type="file"] {

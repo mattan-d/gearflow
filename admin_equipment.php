@@ -1485,7 +1485,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
             <a href="admin_equipment.php?export=1" class="btn secondary">יצוא רשימת ציוד</a>
             <form method="post" action="admin_equipment.php" enctype="multipart/form-data" id="equipment_import_form" style="display:inline;">
                 <input type="hidden" name="action" value="import">
-                <label class="btn-file" style="margin:0; position:relative;">
+                <label class="btn btn-file" style="margin:0; position:relative;">
                     יבוא רשימת ציוד
                     <input type="file" name="csv_file" accept=".csv" required id="equipment_csv_file_input">
                 </label>
@@ -1640,7 +1640,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                             <input type="hidden" name="delete_picture" id="delete_picture" value="0">
                         <?php endif; ?>
                         <div style="display:flex;align-items:center;gap:0.5rem;">
-                            <label for="picture_file" class="btn-file" style="margin:0;">בחירת קובץ</label>
+                            <label for="picture_file" class="btn btn-file" style="margin:0;">ייבוא רשימת ציוד</label>
                             <input type="file" id="picture_file" name="picture_file" accept="image/*" style="position:absolute;width:0.1px;height:0.1px;opacity:0;">
                         </div>
                     </div>
