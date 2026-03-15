@@ -94,6 +94,16 @@ if ($userId > 0) {
         --gf-header-link: <?= htmlspecialchars($headerLink, ENT_QUOTES, 'UTF-8') ?>;
         --gf-header-muted: <?= htmlspecialchars($headerMuted, ENT_QUOTES, 'UTF-8') ?>;
     }
+    header {
+        padding: 1rem 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    header h1 {
+        margin: 0;
+        font-size: 1.3rem;
+    }
     .main-nav {
         margin-top: 0.5rem;
         display: flex;
@@ -276,6 +286,7 @@ if ($userId > 0) {
     }
     header .muted {
         color: var(--gf-header-muted);
+        font-size: 0.8rem;
     }
     .file-drop-zone {
         display: block;
