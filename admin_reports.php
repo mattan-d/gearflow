@@ -256,6 +256,22 @@ foreach ($catRows as $cName) {
             white-space: nowrap;
             display: block;
         }
+        .btn {
+            border: none;
+            border-radius: 999px;
+            padding: 0.5rem 1.1rem;
+            background: linear-gradient(135deg, #4f46e5, #6366f1);
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+        .btn:hover {
+            background: linear-gradient(135deg, #4338ca, #4f46e5);
+        }
+        .report-param-block.report-param-show-btn {
+            flex-shrink: 0;
+        }
         .report-param-block .param-value-hint {
             font-size: 0.75rem;
             color: #6b7280;
@@ -355,21 +371,8 @@ foreach ($catRows as $cName) {
             color: #f9fafb;
             border-color: #111827;
         }
-        .orders-report-table {
-            width: 100%;
-            max-width: 520px;
-            border-collapse: collapse;
-            font-size: 0.9rem;
-            margin-top: 0.5rem;
-        }
-        .orders-report-table th,
-        .orders-report-table td {
-            border: 1px solid #e5e7eb;
-            padding: 0.35rem 0.5rem;
-            text-align: right;
-        }
         .orders-report-bars {
-            margin-top: 1rem;
+            margin-top: 0.75rem;
             max-width: 520px;
         }
         .orders-report-bar {
@@ -490,49 +493,14 @@ foreach ($catRows as $cName) {
                         <div id="orders_selected_students"
                              style="margin-top:0.35rem;display:flex;flex-wrap:wrap;gap:0.35rem;font-size:0.85rem;"></div>
                     </div>
-                    <div class="report-param-block" style="align-self:flex-end;">
+                    <div class="report-param-block report-param-show-btn">
+                        <span class="param-label" aria-hidden="true">&nbsp;</span>
                         <button type="submit" name="orders_show" value="1" class="btn">הצג</button>
                     </div>
                 </div>
             </form>
 
             <?php if ($ordersReport['has_range']): ?>
-                <table class="orders-report-table">
-                    <tbody>
-                    <tr>
-                        <th>כמות הזמנות (סה״כ)</th>
-                        <td><?= (int)$ordersReport['total'] ?></td>
-                    </tr>
-                    <tr>
-                        <th>בסטטוס "ממתין"</th>
-                        <td><?= (int)$ordersReport['pending'] ?></td>
-                    </tr>
-                    <tr>
-                        <th>בסטטוס "מאושר"</th>
-                        <td><?= (int)$ordersReport['approved'] ?></td>
-                    </tr>
-                    <tr>
-                        <th>בסטטוס "נדחה"</th>
-                        <td><?= (int)$ordersReport['rejected'] ?></td>
-                    </tr>
-                    <tr>
-                        <th>בסטטוס "בהשאלה"</th>
-                        <td><?= (int)$ordersReport['on_loan'] ?></td>
-                    </tr>
-                    <tr>
-                        <th>בסטטוס "עבר"</th>
-                        <td><?= (int)$ordersReport['returned'] ?></td>
-                    </tr>
-                    <tr>
-                        <th>הוזמנו ולא נלקחו</th>
-                        <td><?= (int)$ordersReport['not_picked'] ?></td>
-                    </tr>
-                    <tr>
-                        <th>לא הושבו בזמן</th>
-                        <td><?= (int)$ordersReport['not_returned_late'] ?></td>
-                    </tr>
-                    </tbody>
-                </table>
                 <div class="orders-report-bars">
                     <?php
                     $bars = [
