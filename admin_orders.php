@@ -1391,7 +1391,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         }
         footer {
             background: var(--gf-footer-bg, #111827);
-            color: #9ca3af;
+            color: var(--gf-footer-text, #9ca3af);
             text-align: center;
             padding: 0.75rem 1rem;
             font-size: 0.8rem;

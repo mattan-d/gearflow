@@ -138,8 +138,8 @@ $me = current_user();
             opacity: 0.9;
         }
         footer {
-            background: #111827;
-            color: #9ca3af;
+            background: var(--gf-footer-bg, #111827);
+            color: var(--gf-footer-text, #9ca3af);
             text-align: center;
             padding: 0.75rem 1rem;
             font-size: 0.8rem;
