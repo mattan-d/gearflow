@@ -39,25 +39,20 @@ $daysLabels = [
 $success = '';
 $error   = '';
 
-// עדכון שעות ברירת מחדל
+// עדכון שעות ברירת מחדל (ימים א-ה – ערך אחד לכל השבוע)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['default_hours_submit'])) {
+    $open  = trim((string)($_POST['default_open_weekdays'] ?? ''));
+    $close = trim((string)($_POST['default_close_weekdays'] ?? ''));
+    $validOpen  = ['09:00', '10:00', '11:00', '12:00'];
+    $validClose = ['12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
+    if (!in_array($open, $validOpen, true))  $open = $defaults[0]['open'];
+    if (!in_array($close, $validClose, true)) $close = $defaults[0]['close'];
     try {
         $pdo->beginTransaction();
         $up = $pdo->prepare('INSERT OR REPLACE INTO default_hours (day_of_week, open_time, close_time) VALUES (:d, :o, :c)');
         for ($d = 0; $d <= 4; $d++) {
-            $open  = trim((string)($_POST['default_open_'.$d] ?? ''));
-            $close = trim((string)($_POST['default_close_'.$d] ?? ''));
-            if ($open === '' || $close === '') {
-                $open  = $defaults[$d]['open'];
-                $close = $defaults[$d]['close'];
-            }
-            $up->execute([
-                ':d' => $d,
-                ':o' => $open,
-                ':c' => $close,
-            ]);
-            $defaults[$d]['open']  = $open;
-            $defaults[$d]['close'] = $close;
+            $up->execute([':d' => $d, ':o' => $open, ':c' => $close]);
+            $defaults[$d] = ['open' => $open, 'close' => $close];
         }
         $pdo->commit();
         $success = 'שעות ברירת המחדל נשמרו בהצלחה.';
@@ -236,8 +231,13 @@ try {
             font-weight: 600;
             color: #111827;
         }
-        table.default-hours input[type="time"] {
-            max-width: 110px;
+        table.default-hours input[type="time"],
+        table.default-hours select.default-hours-select {
+            padding: 0.35rem 0.5rem;
+            font-size: 0.9rem;
+        }
+        table.default-hours select.default-hours-select {
+            min-width: 80px;
         }
         .flash {
             margin-bottom: 0.75rem;
@@ -326,31 +326,39 @@ try {
             שעות אלו ישמשו כברירת מחדל בעת הגדרת שעות פתיחה למחסנים חדשים, ובהיעדר הגדרה ספציפית למחסן.
         </p>
 
+        <?php
+            $weekdaysOpen  = $defaults[0]['open'] ?? '09:00';
+            $weekdaysClose = $defaults[0]['close'] ?? '16:00';
+            $openOptions  = ['09:00', '10:00', '11:00', '12:00'];
+            $closeOptions = ['12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
+            ?>
         <form method="post" action="admin_settings.php">
             <table class="default-hours">
                 <thead>
                 <tr>
-                    <th>יום</th>
+                    <th>ימים</th>
                     <th>שעת פתיחה</th>
                     <th>שעת סגירה</th>
                 </tr>
                 </thead>
                 <tbody>
-                <?php for ($d = 0; $d <= 4; $d++): ?>
-                    <tr>
-                        <td><?= htmlspecialchars($daysLabels[$d] ?? (string)$d, ENT_QUOTES, 'UTF-8') ?></td>
-                        <td>
-                            <input type="time"
-                                   name="default_open_<?= $d ?>"
-                                   value="<?= htmlspecialchars($defaults[$d]['open'] ?? '09:00', ENT_QUOTES, 'UTF-8') ?>">
-                        </td>
-                        <td>
-                            <input type="time"
-                                   name="default_close_<?= $d ?>"
-                                   value="<?= htmlspecialchars($defaults[$d]['close'] ?? '16:00', ENT_QUOTES, 'UTF-8') ?>">
-                        </td>
-                    </tr>
-                <?php endfor; ?>
+                <tr>
+                    <td>ימים א׳–ה׳</td>
+                    <td>
+                        <select name="default_open_weekdays" class="default-hours-select">
+                            <?php foreach ($openOptions as $t): ?>
+                            <option value="<?= htmlspecialchars($t, ENT_QUOTES, 'UTF-8') ?>" <?= $weekdaysOpen === $t ? 'selected' : '' ?>><?= htmlspecialchars($t, ENT_QUOTES, 'UTF-8') ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </td>
+                    <td>
+                        <select name="default_close_weekdays" class="default-hours-select">
+                            <?php foreach ($closeOptions as $t): ?>
+                            <option value="<?= htmlspecialchars($t, ENT_QUOTES, 'UTF-8') ?>" <?= $weekdaysClose === $t ? 'selected' : '' ?>><?= htmlspecialchars($t, ENT_QUOTES, 'UTF-8') ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </td>
+                </tr>
                 </tbody>
             </table>
             <button type="submit" class="btn" name="default_hours_submit" value="1">שמירת שעות ברירת מחדל</button>
