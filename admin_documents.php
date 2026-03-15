@@ -455,13 +455,10 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $editMode    = $canEdit && isset($_GET['edit']) && $_GET['edit'] === '1';
         ?>
         <div class="doc-header-row">
-            <h2>מסמכים</h2>
+            <h2 style="margin:0;">מסמכים</h2>
             <?php if ($canEdit): ?>
-                <a href="<?= htmlspecialchars($editMode ? $viewUrl : $editUrl, ENT_QUOTES, 'UTF-8') ?>"
-                   class="edit-toggle-btn <?= $editMode ? 'active' : 'inactive' ?>"
-                   title="<?= $editMode ? 'מצב עריכה פעיל – לחץ לביטול' : 'הפעל מצב עריכה' ?>"
-                   aria-label="<?= $editMode ? 'מצב עריכה פעיל' : 'הפעל מצב עריכה' ?>">
-                    <i data-lucide="pencil" aria-hidden="true"></i>
+                <a href="admin_documents.php?new=1" class="btn">
+                    הוספת מסמך
                 </a>
             <?php endif; ?>
         </div>
@@ -472,18 +469,6 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
 
         <h3 style="margin:0 0 0.5rem 0;font-size:1rem;color:#374151;">רשימת מסמכים</h3>
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;margin-bottom:0.75rem;">
-            <?php if ($canEdit && $editMode): ?>
-                <form method="get" action="admin_documents.php" style="margin:0;">
-                    <button type="submit" class="btn secondary" name="new" value="1">
-                        הוספת מסמך
-                    </button>
-                </form>
-            <?php else: ?>
-                <span></span>
-            <?php endif; ?>
-        </div>
-
         <div class="doc-table-wrap">
             <table class="doc-table">
                 <thead>
@@ -548,7 +533,7 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
             </table>
         </div>
 
-        <?php if ($canEdit && $editMode && isset($_GET['new']) && (int)$_GET['new'] === 1): ?>
+        <?php if ($canEdit && isset($_GET['new']) && (int)$_GET['new'] === 1): ?>
             <hr style="border:0;border-top:1px solid #e5e7eb;margin:1.5rem 0 0.75rem;">
             <h3 style="margin:0 0 0.5rem 0;font-size:1rem;color:#374151;">הוספת מסמך חדש</h3>
             <div class="doc-editor">
@@ -562,7 +547,10 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                         תוכן המסמך
                     </label>
                     <textarea id="custom_content" name="custom_content"></textarea>
-                    <button type="submit" class="btn" style="margin-top:0.6rem;">שמירת מסמך</button>
+                    <div style="display:flex;gap:0.5rem;margin-top:0.6rem;">
+                        <button type="submit" class="btn">שמירת מסמך</button>
+                        <a href="admin_documents.php" class="btn secondary">ביטול</a>
+                    </div>
                 </form>
             </div>
         <?php elseif ($currentCustomId > 0): ?>
