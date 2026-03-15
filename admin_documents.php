@@ -427,8 +427,9 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php if ($canEdit): ?>
                 <a href="<?= htmlspecialchars($editMode ? $viewUrl : $editUrl, ENT_QUOTES, 'UTF-8') ?>"
                    class="edit-toggle-btn <?= $editMode ? 'active' : 'inactive' ?>"
-                   title="<?= $editMode ? 'מצב עריכה פעיל – לחץ לביטול' : 'הפעל מצב עריכה' ?>">
-                    ✏️
+                   title="<?= $editMode ? 'מצב עריכה פעיל – לחץ לביטול' : 'הפעל מצב עריכה' ?>"
+                   aria-label="<?= $editMode ? 'מצב עריכה פעיל' : 'הפעל מצב עריכה' ?>">
+                    <i data-lucide="pencil" aria-hidden="true"></i>
                 </a>
             <?php endif; ?>
         </div>
@@ -465,8 +466,9 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                             <input type="hidden" name="action" value="delete_custom">
                             <input type="hidden" name="custom_id" value="<?= (int)$c['id'] ?>">
                             <button type="submit" class="doc-pill-delete"
-                                    onclick="return confirm('למחוק את המסמך \"<?= htmlspecialchars($c['title'], ENT_QUOTES, 'UTF-8') ?>\"?');">
-                                ✕
+                                    onclick="return confirm('למחוק את המסמך \"<?= htmlspecialchars($c['title'], ENT_QUOTES, 'UTF-8') ?>\"?');"
+                                    aria-label="מחיקת מסמך">
+                                <i data-lucide="x" aria-hidden="true"></i>
                             </button>
                         </form>
                     <?php endif; ?>

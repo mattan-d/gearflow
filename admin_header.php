@@ -231,7 +231,25 @@ if ($userId > 0) {
         overflow: hidden;
         z-index: -1;
     }
+    [data-lucide] {
+        width: 1.25em;
+        height: 1.25em;
+        vertical-align: -0.25em;
+    }
+    .icon-btn [data-lucide],
+    .modal-close [data-lucide],
+    .notif-bell-btn [data-lucide],
+    .calendar-icon-btn [data-lucide] {
+        width: 1.1em;
+        height: 1.1em;
+    }
 </style>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.lucide) lucide.createIcons();
+});
+</script>
 <header style="background: <?= htmlspecialchars($headerBg, ENT_QUOTES, 'UTF-8') ?>;">
     <div>
         <div style="display:flex;align-items:center;gap:0.75rem;">
@@ -288,8 +306,9 @@ if ($userId > 0) {
             <div class="notif-wrapper">
                 <button type="button"
                         class="notif-bell-btn <?= $unreadCount > 0 ? 'has-unread' : '' ?>"
-                        onclick="var m=document.getElementById('notif_menu'); if(m){m.classList.toggle('visible');}">
-                    🔔
+                        onclick="var m=document.getElementById('notif_menu'); if(m){m.classList.toggle('visible');}"
+                        aria-label="התראות">
+                    <i data-lucide="bell" aria-hidden="true"></i>
                     <?php if ($unreadCount > 0): ?>
                         <span class="notif-badge"><?= (int)$unreadCount ?></span>
                     <?php endif; ?>
@@ -324,7 +343,7 @@ if ($userId > 0) {
                                     <form method="post" action="">
                                         <input type="hidden" name="notif_action" value="delete">
                                         <input type="hidden" name="notif_id" value="<?= (int)($n['id'] ?? 0) ?>">
-                                        <button type="submit" title="מחיקת התראה">✕</button>
+                                        <button type="submit" title="מחיקת התראה" aria-label="מחיקת התראה"><i data-lucide="x" aria-hidden="true"></i></button>
                                     </form>
                                 </div>
                             <?php endforeach; ?>

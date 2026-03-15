@@ -388,7 +388,7 @@ foreach ($catRows as $cName) {
                 <div class="report-params-row">
                     <div class="report-param-block calendar-bar">
                         <span class="param-label">תאריך התחלה</span>
-                        <button type="button" id="orders_start_btn" class="calendar-icon-btn active" title="בחירת תאריך התחלה" aria-label="תאריך התחלה">📅</button>
+                        <button type="button" id="orders_start_btn" class="calendar-icon-btn active" title="בחירת תאריך התחלה" aria-label="תאריך התחלה"><i data-lucide="calendar" aria-hidden="true"></i></button>
                         <span class="param-value-hint" id="orders_start_hint"><?= $ordersReport['start'] !== '' ? htmlspecialchars($ordersReport['start'], ENT_QUOTES, 'UTF-8') : 'לא נבחר' ?></span>
                         <div id="orders_calendar_panel" class="calendar-panel" style="display:none;">
                             <div class="calendar-grid" id="orders_calendar_grid"></div>
@@ -396,7 +396,7 @@ foreach ($catRows as $cName) {
                     </div>
                     <div class="report-param-block">
                         <span class="param-label">תאריך סיום</span>
-                        <button type="button" id="orders_end_btn" class="calendar-icon-btn" title="בחירת תאריך סיום" aria-label="תאריך סיום" disabled>📅</button>
+                        <button type="button" id="orders_end_btn" class="calendar-icon-btn" title="בחירת תאריך סיום" aria-label="תאריך סיום" disabled><i data-lucide="calendar" aria-hidden="true"></i></button>
                         <span class="param-value-hint" id="orders_end_hint"><?= $ordersReport['end'] !== '' ? htmlspecialchars($ordersReport['end'], ENT_QUOTES, 'UTF-8') : 'לא נבחר' ?></span>
                     </div>
                     <div class="report-param-block">
@@ -653,11 +653,13 @@ foreach ($catRows as $cName) {
                     if (full) label = full + ' (' + uname + ')';
                 }
                 var pill = document.createElement('span');
-                pill.textContent = label + ' ✕';
+                pill.innerHTML = label + ' <i data-lucide="x" aria-hidden="true"></i>';
                 pill.style.background = '#e5e7eb';
                 pill.style.borderRadius = '999px';
                 pill.style.padding = '0.2rem 0.7rem';
                 pill.style.cursor = 'pointer';
+                pill.setAttribute('role', 'button');
+                pill.setAttribute('aria-label', 'הסר ' + label);
                 pill.addEventListener('click', function () {
                     var current = parseSelected().filter(function (u) { return u !== uname; });
                     updateHidden(current);
@@ -665,6 +667,7 @@ foreach ($catRows as $cName) {
                 });
                 selectedWrap.appendChild(pill);
             });
+            if (window.lucide) lucide.createIcons();
         }
 
         renderSelected();

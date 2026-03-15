@@ -1486,7 +1486,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         הזמנה חדשה
                     <?php endif; ?>
                 </h2>
-                <button type="button" class="modal-close" id="order_modal_close" aria-label="סגירת חלון">✕</button>
+                <button type="button" class="modal-close" id="order_modal_close" aria-label="סגירת חלון"><i data-lucide="x" aria-hidden="true"></i></button>
             </div>
 
             <form method="post" action="admin_orders.php<?= $editingOrder ? '?edit_id=' . (int)$editingOrder['id'] : '' ?>">
@@ -1588,7 +1588,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         </label>
                         <div class="date-picker">
                             <div class="date-picker-toggle" id="date_picker_toggle">
-                                <span class="date-picker-toggle-icon">📅</span>
+                                <i data-lucide="calendar" class="date-picker-toggle-icon" aria-hidden="true"></i>
                                 <span>פתח לוח שנה</span>
                             </div>
                             <div class="date-picker-panel" id="date_picker_panel" style="display: none;">
@@ -1605,8 +1605,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                         <button type="button" id="cal_prev">&lt;</button>
                                         <div id="cal_month_label"></div>
                                         <div style="display:flex;align-items:center;gap:4px;">
-                                            <button type="button" id="cal_close" class="icon-btn" title="סגירת לוח שנה">✕</button>
-                                            <button type="button" id="cal_next">&gt;</button>
+                                            <button type="button" id="cal_close" class="icon-btn" title="סגירת לוח שנה" aria-label="סגירת לוח שנה"><i data-lucide="x" aria-hidden="true"></i></button>
+                                            <button type="button" id="cal_next" aria-label="חודש הבא"><i data-lucide="chevron-left" aria-hidden="true"></i></button>
                                         </div>
                                     </div>
                                     <div class="date-calendar-weekdays">
@@ -1628,7 +1628,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             <?php if ($editingOrder): ?>
                             <div class="selected-equipment-row" data-equipment-id="<?= (int)$editingOrder['equipment_id'] ?>" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
                                 <span><?= htmlspecialchars($editingOrder['equipment_name'] ?? '', ENT_QUOTES, 'UTF-8') ?><?= ($editingOrder['equipment_code'] ?? '') ? ' (' . htmlspecialchars($editingOrder['equipment_code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
-                                <button type="button" class="equipment-list-trash" style="border: none; background: transparent; cursor: pointer; font-size: 0.85rem;" title="הסר ציוד">🗑️</button>
+                                <button type="button" class="equipment-list-trash" style="border: none; background: transparent; cursor: pointer; font-size: 0.85rem;" title="הסר ציוד" aria-label="הסר ציוד"><i data-lucide="trash-2" aria-hidden="true"></i></button>
                             </div>
                             <?php endif; ?>
                         </div>
@@ -2036,15 +2036,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 }
                                 if ($canEditOrDelete): ?>
                                     <div class="row-actions">
-                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="icon-btn" title="עריכה">
-                                            ✏️
-                                        </a>
+                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
                                         <form method="post" action="admin_orders.php"
                                               onsubmit="return confirm('למחוק את ההזמנה הזו?');">
                                             <input type="hidden" name="action" value="delete">
                                             <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
                                             <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                            <button type="submit" class="icon-btn" title="מחיקה">🗑️</button>
+                                            <button type="submit" class="icon-btn" title="מחיקה" aria-label="מחיקה"><i data-lucide="trash-2" aria-hidden="true"></i></button>
                                         </form>
                                     </div>
                                 <?php endif;
@@ -2079,7 +2077,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                             <input type="hidden" name="action" value="duplicate">
                                             <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
                                             <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                            <button type="submit" class="icon-btn" title="שכפול">⧉</button>
+                                            <button type="submit" class="icon-btn" title="שכפול" aria-label="שכפול"><i data-lucide="copy" aria-hidden="true"></i></button>
                                         </form>
 
                                         <?php if (!empty($options)): ?>
@@ -2095,9 +2093,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                             </select>
                                         <?php endif; ?>
 
-                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="icon-btn" title="עריכה">
-                                            ✏️
-                                        </a>
+                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
 
                                         <?php
                                         // מנהל יכול למחוק רק הזמנות שהוא יצר בעצמו (creator_username), לא הזמנות סטודנט
@@ -2109,7 +2105,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                                 <input type="hidden" name="action" value="delete">
                                                 <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
                                                 <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                                <button type="submit" class="icon-btn" title="מחיקה">🗑️</button>
+                                                <button type="submit" class="icon-btn" title="מחיקה" aria-label="מחיקה"><i data-lucide="trash-2" aria-hidden="true"></i></button>
                                             </form>
                                         <?php endif; ?>
                                     </div>
@@ -2269,17 +2265,19 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 const removeBtn = document.createElement('button');
                 removeBtn.type = 'button';
                 removeBtn.className = 'equipment-list-trash';
-                removeBtn.textContent = '🗑️';
+                removeBtn.setAttribute('aria-label', 'הסר ציוד');
+                removeBtn.title = 'הסר ציוד';
                 removeBtn.style.border = 'none';
                 removeBtn.style.background = 'transparent';
                 removeBtn.style.cursor = 'pointer';
                 removeBtn.style.fontSize = '0.85rem';
-                removeBtn.title = 'הסר ציוד';
+                removeBtn.innerHTML = '<i data-lucide="trash-2" aria-hidden="true"></i>';
 
                 row.appendChild(label);
                 row.appendChild(removeBtn);
                 selectedEquipmentList.appendChild(row);
             });
+            if (window.lucide) lucide.createIcons();
             if (equipmentIdHidden) {
                 const firstRow = selectedEquipmentList.querySelector('.selected-equipment-row');
                 equipmentIdHidden.value = firstRow ? (firstRow.getAttribute('data-equipment-id') || '') : '';
@@ -2575,7 +2573,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         updateEquipmentState();
         renderCalendar();
 
-        // בוטלה הסגירה האוטומטית של לוח השנה; המשתמש יסגור ידנית עם כפתור ה-✕
+        // בוטלה הסגירה האוטומטית של לוח השנה; המשתמש יסגור ידנית עם כפתור הסגירה
     }
 
     function openTimePicker(target, isoDate) {
@@ -2757,9 +2755,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         let html = '<div class="recurring-cal-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">';
-        html += '<button type="button" class="icon-btn" data-dir="-1">‹</button>';
+        html += '<button type="button" class="icon-btn" data-dir="-1" aria-label="חודש קודם"><i data-lucide="chevron-right" aria-hidden="true"></i></button>';
         html += '<span>' + year + '-' + (month + 1) + '</span>';
-        html += '<button type="button" class="icon-btn" data-dir="1">›</button></div>';
+        html += '<button type="button" class="icon-btn" data-dir="1" aria-label="חודש הבא"><i data-lucide="chevron-left" aria-hidden="true"></i></button></div>';
         html += '<div class="recurring-cal-weekdays" style="display:flex;gap:2px;margin-bottom:4px;font-size:0.75rem;">';
         ['א','ב','ג','ד','ה','ו','ש'].forEach(function (w) { html += '<span style="width:2rem;text-align:center;">' + w + '</span>'; });
         html += '</div><div class="recurring-cal-grid" style="display:flex;flex-wrap:wrap;gap:2px;">';
@@ -2774,6 +2772,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         }
         html += '</div>';
         container.innerHTML = html;
+        if (window.lucide) lucide.createIcons();
         container.querySelectorAll('.day-cell:not(.disabled)').forEach(function (cell) {
             cell.addEventListener('click', function () {
                 const ymd = cell.getAttribute('data-ymd');
@@ -3033,7 +3032,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
             closeBtn = document.createElement('button');
             closeBtn.type = 'button';
-            closeBtn.textContent = '✕';
+            closeBtn.setAttribute('aria-label', 'סגירה');
+            closeBtn.innerHTML = '<i data-lucide="x" aria-hidden="true"></i>';
             closeBtn.style.border = 'none';
             closeBtn.style.background = 'transparent';
             closeBtn.style.cursor = 'pointer';
@@ -3047,6 +3047,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
             backdrop.appendChild(card);
             document.body.appendChild(backdrop);
+            if (window.lucide) lucide.createIcons();
 
             function hide() {
                 backdrop.style.display = 'none';

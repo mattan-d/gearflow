@@ -833,7 +833,7 @@ if (isset($_GET['edit_id'])) {
         <div class="modal-card" style="max-width: 95%; width: 640px; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header">
                 <h2>תיקון ייבוא משתמשים</h2>
-                <button type="button" class="modal-close" id="import_fix_modal_close" aria-label="סגירה">✕</button>
+                <button type="button" class="modal-close" id="import_fix_modal_close" aria-label="סגירה"><i data-lucide="x" aria-hidden="true"></i></button>
             </div>
             <div id="import_fix_content">
                 <?php if (!empty($iss['missing_columns'])): ?>
@@ -939,7 +939,7 @@ if (isset($_GET['edit_id'])) {
         <div class="modal-card">
             <div class="modal-header">
                 <h2><?= $editingUser ? 'עריכת משתמש' : 'משתמש חדש' ?></h2>
-                <button type="button" class="modal-close" id="user_modal_close" aria-label="סגירת חלון">✕</button>
+                <button type="button" class="modal-close" id="user_modal_close" aria-label="סגירת חלון"><i data-lucide="x" aria-hidden="true"></i></button>
             </div>
 
             <?php if ($error !== ''): ?>
@@ -1068,16 +1068,16 @@ if (isset($_GET['edit_id'])) {
                     </td>
                     <td>
                         <div class="row-actions">
-                            <a href="admin_users.php?edit_id=<?= (int)$user['id'] ?>" class="icon-btn" title="עריכת משתמש">✏️</a>
+                            <a href="admin_users.php?edit_id=<?= (int)$user['id'] ?>" class="icon-btn" title="עריכת משתמש" aria-label="עריכת משתמש"><i data-lucide="pencil" aria-hidden="true"></i></a>
                             <form method="post" action="admin_users.php">
                                 <input type="hidden" name="action" value="toggle_active">
                                 <input type="hidden" name="id" value="<?= (int)$user['id'] ?>">
-                                <button type="submit" class="icon-btn" title="<?= (int)$user['is_active'] === 1 ? 'השבת' : 'הפעל' ?>"><?= (int)$user['is_active'] === 1 ? '⏸️' : '▶️' ?></button>
+                                <button type="submit" class="icon-btn" title="<?= (int)$user['is_active'] === 1 ? 'השבת' : 'הפעל' ?>" aria-label="<?= (int)$user['is_active'] === 1 ? 'השבת' : 'הפעל' ?>"><i data-lucide="<?= (int)$user['is_active'] === 1 ? 'pause' : 'play' ?>" aria-hidden="true"></i></button>
                             </form>
                             <form method="post" action="admin_users.php" onsubmit="return confirm('למחוק את המשתמש הזה?');">
                                 <input type="hidden" name="action" value="delete">
                                 <input type="hidden" name="id" value="<?= (int)$user['id'] ?>">
-                                <button type="submit" class="icon-btn" title="מחיקת משתמש">🗑️</button>
+                                <button type="submit" class="icon-btn" title="מחיקת משתמש" aria-label="מחיקת משתמש"><i data-lucide="trash-2" aria-hidden="true"></i></button>
                             </form>
                         </div>
                     </td>

@@ -1526,7 +1526,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                     <label>פנוי בין התאריכים</label>
                     <div class="date-picker">
                         <div class="date-picker-toggle" id="eq_date_picker_toggle">
-                            <span class="date-picker-toggle-icon">📅</span>
+                            <i data-lucide="calendar" class="date-picker-toggle-icon" aria-hidden="true"></i>
                         </div>
                         <span id="eq_date_range_label" class="muted-small">
                             <?php if ($availabilityStartRaw !== '' && $availabilityEndRaw !== ''): ?>
@@ -1542,7 +1542,9 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                         <span id="eq_clear_range_btn_outside"
                               class="clear-range-btn"
                               style="cursor: pointer; <?= ($availabilityStartRaw === '' || $availabilityEndRaw === '') ? 'display:none;' : '' ?>"
-                              title="נקה טווח">✕</span>
+                              role="button"
+                              title="נקה טווח"
+                              aria-label="נקה טווח"><i data-lucide="x" aria-hidden="true"></i></span>
 
                         <div class="date-picker-panel" id="eq_date_picker_panel" style="display: none;">
                             <div class="date-mode-toggle">
@@ -1564,7 +1566,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                                     <button type="button" id="eq_cal_prev">&lt;</button>
                                     <div id="eq_cal_month_label"></div>
                                     <div style="display:flex;align-items:center;gap:4px;">
-                                        <button type="button" id="eq_cal_close" class="icon-btn" title="סגירת לוח שנה">✕</button>
+                                        <button type="button" id="eq_cal_close" class="icon-btn" title="סגירת לוח שנה" aria-label="סגירת לוח שנה"><i data-lucide="x" aria-hidden="true"></i></button>
                                         <button type="button" id="eq_cal_next">&gt;</button>
                                     </div>
                                 </div>
@@ -1597,7 +1599,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         <div class="modal-card">
             <div class="modal-header">
                 <h2><?= $editingEquipment ? 'עריכת ציוד' : 'הוספת ציוד חדש' ?></h2>
-                <button type="button" class="modal-close" id="equipment_modal_close" aria-label="סגירת חלון">✕</button>
+                <button type="button" class="modal-close" id="equipment_modal_close" aria-label="סגירת חלון"><i data-lucide="x" aria-hidden="true"></i></button>
             </div>
 
             <?php if ($error !== ''): ?>
@@ -1635,7 +1637,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                                 <a href="<?= htmlspecialchars($existingPicture, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener">
                                     הצג תמונה קיימת
                                 </a>
-                                <button type="button" class="icon-btn" id="delete_picture_btn" title="מחיקת התמונה">✕</button>
+                                <button type="button" class="icon-btn" id="delete_picture_btn" title="מחיקת התמונה" aria-label="מחיקת התמונה"><i data-lucide="x" aria-hidden="true"></i></button>
                             </div>
                             <input type="hidden" name="delete_picture" id="delete_picture" value="0">
                         <?php endif; ?>
@@ -1729,7 +1731,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         <div class="modal-card" style="max-width: 95%; width: 900px;">
             <div class="modal-header">
                 <h2>הוספת מספר פריטים</h2>
-                <button type="button" class="modal-close" id="bulk_add_modal_close" aria-label="סגירה">✕</button>
+                <button type="button" class="modal-close" id="bulk_add_modal_close" aria-label="סגירה"><i data-lucide="x" aria-hidden="true"></i></button>
             </div>
             <p class="muted-small" style="margin-bottom:0.75rem;">הוסף שורות ומילוי פרטי ציוד. שמירה תיצור פריט חדש לכל שורה עם שם וקוד. ניתן להוסיף עד <?= MAX_EQUIPMENT_COMPONENTS ?> רכיבי ציוד לכל שורה.</p>
             <form method="post" action="admin_equipment.php">
@@ -1793,7 +1795,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         <div class="modal-card" style="max-width: 95%; width: 640px; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header">
                 <h2>תיקון ייבוא ציוד</h2>
-                <button type="button" class="modal-close" id="import_fix_modal_close" aria-label="סגירה">✕</button>
+                <button type="button" class="modal-close" id="import_fix_modal_close" aria-label="סגירה"><i data-lucide="x" aria-hidden="true"></i></button>
             </div>
             <?php if ($error !== ''): ?>
             <div class="flash error" style="margin-bottom:0.75rem;"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
@@ -1947,7 +1949,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         <div class="modal-card">
             <div class="modal-header">
                 <h2>רכיבי פריט: <?= $componentsEquipment ? htmlspecialchars($componentsEquipment['name'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></h2>
-                <button type="button" class="modal-close" id="components_modal_close" aria-label="סגירת חלון">✕</button>
+                <button type="button" class="modal-close" id="components_modal_close" aria-label="סגירת חלון"><i data-lucide="x" aria-hidden="true"></i></button>
             </div>
 
             <?php if ($error !== '' && $componentsEquipment): ?>
@@ -2097,13 +2099,11 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                             <td>
                                 <div class="row-actions">
                                     <?php $editParams = array_merge(['edit_id' => (int)$item['id']], $tabBaseParams, ($equipmentTab !== 'all' && $equipmentTab !== '') ? ['equipment_tab' => $equipmentTab] : []); ?>
-                                    <a href="admin_equipment.php?<?= http_build_query($editParams) ?>" class="icon-btn" title="עריכה">
-                                        ✏️
-                                    </a>
+                                    <a href="admin_equipment.php?<?= http_build_query($editParams) ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
                                     <form method="post" action="admin_equipment.php" onsubmit="return confirm('למחוק את הפריט הזה?');">
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="id" value="<?= (int)$item['id'] ?>">
-                                        <button type="submit" class="icon-btn" title="מחיקה">🗑️</button>
+                                        <button type="submit" class="icon-btn" title="מחיקה" aria-label="מחיקה"><i data-lucide="trash-2" aria-hidden="true"></i></button>
                                     </form>
                                 </div>
                             </td>

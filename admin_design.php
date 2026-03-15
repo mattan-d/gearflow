@@ -368,8 +368,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <input type="file" id="logo_file" name="logo_file" accept="image/*" style="display:none;" onchange="this.form.submit()">
                     <label for="logo_file" class="btn btn-file">בחירת קובץ</label>
                     <?php if (!empty($design['logo_path'])): ?>
-                        <button type="submit" name="remove_logo" value="1" class="logo-remove-x" title="הסר לוגו">
-                            ✕
+                        <button type="submit" name="remove_logo" value="1" class="logo-remove-x" title="הסר לוגו" aria-label="הסר לוגו">
+                            <i data-lucide="x" aria-hidden="true"></i>
                         </button>
                     <?php endif; ?>
                 </form>
