@@ -229,23 +229,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             $notCsv = ($header === null || count($header) < 1);
+            if ($notCsv) {
+                $error = 'הקובץ חייב להיות בפורמט CSV (עם שורת כותרת ונתונים מופרדים בפסיקים).';
+                header('Location: admin_equipment.php?import_error=' . urlencode($error));
+                exit;
+            }
             $systemCols = ['name', 'code', 'description', 'category', 'location', 'status'];
             for ($n = 1; $n <= MAX_EQUIPMENT_COMPONENTS; $n++) {
                 $systemCols[] = 'component_' . $n . '_name';
             }
             $requiredCols = ['name', 'code'];
             $headerNorm = [];
-            if ($header !== null) {
-                foreach ($header as $idx => $col) {
-                    $key = strtolower(trim((string)$col));
-                    $key = preg_replace('/^\x{FEFF}/u', '', $key);
-                    if ($key !== '') $headerNorm[$key] = $idx;
-                }
+            foreach ($header as $idx => $col) {
+                $key = strtolower(trim((string)$col));
+                $key = preg_replace('/^\x{FEFF}/u', '', $key);
+                if ($key !== '') $headerNorm[$key] = $idx;
             }
             $missingColumns = array_diff($requiredCols, array_keys($headerNorm));
             $unknownColumns = array_diff(array_keys($headerNorm), $systemCols);
             $duplicateCodes = [];
-            if (!$notCsv && isset($headerNorm['code'])) {
+            if (isset($headerNorm['code'])) {
                 $codeIdx = $headerNorm['code'];
                 $existingCodes = $pdo->query("SELECT code FROM equipment")->fetchAll(PDO::FETCH_COLUMN);
                 $existingSet = array_flip($existingCodes);
@@ -256,14 +259,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
-            $hasIssues = $notCsv || !empty($missingColumns) || !empty($unknownColumns) || !empty($duplicateCodes);
+            $hasIssues = !empty($missingColumns) || !empty($unknownColumns) || !empty($duplicateCodes);
             if ($hasIssues) {
                 $_SESSION['import_fix_type'] = 'equipment';
-                $_SESSION['import_fix_headers'] = $header ?: [];
+                $_SESSION['import_fix_headers'] = $header;
                 $_SESSION['import_fix_rows'] = $rows;
                 $_SESSION['import_fix_raw'] = base64_encode($rawContent);
                 $_SESSION['import_fix_issues'] = [
-                    'not_csv' => $notCsv,
                     'missing_columns' => array_values($missingColumns),
                     'unknown_columns' => array_values($unknownColumns),
                     'duplicate_codes' => $duplicateCodes,
@@ -377,62 +379,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
-    } elseif ($action === 'convert_to_csv') {
-        if (isset($_SESSION['import_fix_type']) && $_SESSION['import_fix_type'] === 'equipment' && !empty($_SESSION['import_fix_raw'])) {
-            $raw = base64_decode((string)$_SESSION['import_fix_raw'], true);
-            if ($raw !== false) {
-                $raw = str_replace(["\t", ';'], [',', ','], $raw);
-                $_SESSION['import_fix_raw'] = base64_encode($raw);
-                $lines = preg_split('/\r\n|\r|\n/', $raw);
-                $header = count($lines) > 0 ? str_getcsv($lines[0], ',') : [];
-                $rows = [];
-                for ($i = 1; $i < count($lines); $i++) {
-                    if (trim($lines[$i]) === '') continue;
-                    $rows[] = str_getcsv($lines[$i], ',');
-                }
-                $_SESSION['import_fix_headers'] = $header;
-                $_SESSION['import_fix_rows'] = $rows;
-                $headerNorm = [];
-                foreach ($header as $idx => $col) {
-                    $key = strtolower(trim((string)$col));
-                    $key = preg_replace('/^\x{FEFF}/u', '', $key);
-                    if ($key !== '') $headerNorm[$key] = $idx;
-                }
-                $systemCols = ['name', 'code', 'description', 'category', 'location', 'status'];
-                for ($n = 1; $n <= MAX_EQUIPMENT_COMPONENTS; $n++) {
-                    $systemCols[] = 'component_' . $n . '_name';
-                }
-                $requiredCols = ['name', 'code'];
-                $missingColumns = array_diff($requiredCols, array_keys($headerNorm));
-                $unknownColumns = array_diff(array_keys($headerNorm), $systemCols);
-                $duplicateCodes = [];
-                if (isset($headerNorm['code'])) {
-                    $codeIdx = $headerNorm['code'];
-                    $existingCodes = $pdo->query("SELECT code FROM equipment")->fetchAll(PDO::FETCH_COLUMN);
-                    $existingSet = array_flip($existingCodes);
-                    foreach ($rows as $ri => $row) {
-                        $code = isset($row[$codeIdx]) ? trim((string)$row[$codeIdx]) : '';
-                        if ($code !== '' && isset($existingSet[$code])) {
-                            $duplicateCodes[] = ['row' => $ri, 'code' => $code];
-                        }
-                    }
-                }
-                $issues = [
-                    'not_csv' => false,
-                    'missing_columns' => array_values($missingColumns),
-                    'unknown_columns' => array_values($unknownColumns),
-                    'duplicate_codes' => $duplicateCodes,
-                ];
-                $_SESSION['import_fix_issues'] = $issues;
-                if (empty($missingColumns) && empty($unknownColumns) && empty($duplicateCodes)) {
-                    $_SESSION['import_fix_apply_direct'] = true;
-                    header('Location: admin_equipment.php?import_fix=1');
-                    exit;
-                }
-            }
-        }
-        header('Location: admin_equipment.php?import_fix=1');
-        exit;
     } elseif ($action === 'import_fixed') {
         if (isset($_SESSION['import_fix_type']) && $_SESSION['import_fix_type'] === 'equipment') {
             $headers = $_SESSION['import_fix_headers'] ?? [];
@@ -457,12 +403,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $fileColNorm = strtolower(trim((string)$fileCol));
                 $fileColNorm = preg_replace('/^\x{FEFF}/u', '', $fileColNorm);
                 if ($fileColNorm === '' || !array_key_exists($fileColNorm, $headerNorm)) continue;
-                $targets = is_array($systemColOrArray) ? $systemColOrArray : [$systemColOrArray];
-                foreach ($targets as $sc) {
-                    $sc = is_string($sc) ? trim($sc) : $sc;
-                    if ($sc !== '' && $sc !== null) {
-                        $headerNorm[$sc] = $headerNorm[$fileColNorm];
-                    }
+                $sc = is_array($systemColOrArray) ? (string)($systemColOrArray[0] ?? '') : (string)$systemColOrArray;
+                $sc = trim($sc);
+                if ($sc !== '' && $sc !== '_default_') {
+                    $headerNorm[$sc] = $headerNorm[$fileColNorm];
                 }
             }
             $systemCols = ['name', 'code', 'description', 'category', 'location', 'status'];
@@ -565,7 +509,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($error === '') {
                 unset($_SESSION['import_fix_type'], $_SESSION['import_fix_headers'], $_SESSION['import_fix_rows'], $_SESSION['import_fix_raw'], $_SESSION['import_fix_issues'], $_SESSION['import_fix_delimiter']);
                 if ($imported === 0) {
-                    $error = 'לא יובאו פריטים. וודא שטורים "שם" ו"קוד" ממופים (כולל "גם מפה ל") או מולאו ערכי ברירת מחדל בטורים החסרים.';
+                    $error = 'לא יובאו פריטים. וודא שטורים "שם" ו"קוד" ממופים או מולאו ערך ברירת מחדל.';
                     header('Location: admin_equipment.php?import_fix=1&import_error=' . urlencode($error));
                     exit;
                 }

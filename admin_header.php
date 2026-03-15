@@ -215,6 +215,31 @@ if ($userId > 0) {
         cursor: pointer;
         font-size: 0.8rem;
     }
+    .btn-file {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.5rem 1.1rem;
+        font-size: 0.9rem;
+        font-family: inherit;
+        border-radius: 8px;
+        border: 1px solid #d4a5a5;
+        background: #f8d7da;
+        color: #721c24;
+        cursor: pointer;
+        text-decoration: none;
+    }
+    .btn-file:hover {
+        background: #f5c2c7;
+    }
+    .btn-file input[type="file"] {
+        position: absolute;
+        width: 0.1px;
+        height: 0.1px;
+        opacity: 0;
+        overflow: hidden;
+        z-index: -1;
+    }
 </style>
 <header style="background: <?= htmlspecialchars($headerBg, ENT_QUOTES, 'UTF-8') ?>;">
     <div>
