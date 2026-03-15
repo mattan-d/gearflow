@@ -1233,8 +1233,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         }
         .row-actions {
             display: flex;
+            align-items: center;
             gap: 0.3rem;
-            flex-wrap: wrap;
+            flex-wrap: nowrap;
+            white-space: nowrap;
         }
         .row-actions form {
             margin: 0;
