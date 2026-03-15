@@ -263,6 +263,13 @@ if ($userId > 0) {
         overflow: hidden;
         z-index: -1;
     }
+    .header-logo-wrap {
+        overflow: visible;
+        flex-shrink: 0;
+    }
+    .header-logo-wrap img {
+        display: block;
+    }
     [data-lucide] {
         width: 1.25em;
         height: 1.25em;
@@ -284,19 +291,83 @@ if ($userId > 0) {
     header .muted {
         color: var(--gf-header-muted);
     }
+    .file-drop-zone {
+        display: block;
+        border: 2px dashed #d1d5db;
+        border-radius: 12px;
+        padding: 1.5rem;
+        background: #f9fafb;
+        text-align: center;
+        cursor: pointer;
+        transition: border-color 0.2s, background 0.2s;
+        position: relative;
+    }
+    .file-drop-zone:hover {
+        border-color: #9ca3af;
+        background: #f3f4f6;
+    }
+    .file-drop-zone.drag-over {
+        border-color: #4f46e5;
+        background: #eef2ff;
+    }
+    .file-drop-input {
+        position: absolute;
+        width: 0.1px;
+        height: 0.1px;
+        opacity: 0;
+        overflow: hidden;
+        z-index: -1;
+    }
+    .file-drop-text {
+        display: block;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 0.25rem;
+    }
+    .file-drop-hint {
+        display: block;
+        font-size: 0.8rem;
+        color: #6b7280;
+    }
+    .file-drop-zone .file-drop-icon {
+        width: 2rem;
+        height: 2rem;
+        margin: 0 auto 0.5rem;
+        color: #9ca3af;
+    }
 </style>
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     if (window.lucide) lucide.createIcons();
+    document.querySelectorAll('.file-drop-zone').forEach(function(zone) {
+        var input = zone.querySelector('.file-drop-input') || document.getElementById(zone.getAttribute('for'));
+        if (!input || input.type !== 'file') return;
+        ['dragenter','dragover'].forEach(function(ev) {
+            zone.addEventListener(ev, function(e) { e.preventDefault(); zone.classList.add('drag-over'); });
+        });
+        ['dragleave','drop'].forEach(function(ev) {
+            zone.addEventListener(ev, function(e) {
+                e.preventDefault();
+                zone.classList.remove('drag-over');
+                if (ev === 'drop' && e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+                    var dt = new DataTransfer();
+                    for (var i = 0; i < e.dataTransfer.files.length; i++) dt.items.add(e.dataTransfer.files[i]);
+                    input.files = dt.files;
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
+        });
+    });
 });
 </script>
 <header style="background: <?= htmlspecialchars($headerBg, ENT_QUOTES, 'UTF-8') ?>; color: <?= htmlspecialchars($headerText, ENT_QUOTES, 'UTF-8') ?>;">
     <div>
         <div style="display:flex;align-items:center;gap:0.75rem;">
-            <div style="min-width:36px;height:36px;border-radius:10px;background:transparent;display:flex;align-items:center;justify-content:center;color:<?= htmlspecialchars($headerText, ENT_QUOTES, 'UTF-8') ?>;font-weight:700;font-size:0.85rem;box-shadow:0 4px 10px rgba(0,0,0,0.25);overflow:hidden;">
+            <div class="header-logo-wrap" style="min-width:36px;height:36px;border-radius:10px;background:transparent;display:flex;align-items:center;justify-content:center;color:<?= htmlspecialchars($headerText, ENT_QUOTES, 'UTF-8') ?>;font-weight:700;font-size:0.85rem;box-shadow:0 4px 12px rgba(0,0,0,0.35);">
                 <?php if ($logoPath !== ''): ?>
-                    <img src="<?= htmlspecialchars($logoPath, ENT_QUOTES, 'UTF-8') ?>" alt="לוגו" style="height:100%;width:auto;object-fit:contain;">
+                    <img src="<?= htmlspecialchars($logoPath, ENT_QUOTES, 'UTF-8') ?>" alt="לוגו" style="height:100%;max-width:100%;width:auto;object-fit:contain;border-radius:10px;">
                 <?php else: ?>
                     GF
                 <?php endif; ?>
