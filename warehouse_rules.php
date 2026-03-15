@@ -83,29 +83,7 @@ if (is_file($file)) {
         .main-nav-item-wrapper {
             position: relative;
         }
-        .main-nav-sub {
-            position: absolute;
-            right: 0;
-            top: 100%;
-            background: #111827;
-            border-radius: 8px;
-            padding: 0.4rem 0.6rem;
-            box-shadow: 0 12px 30px rgba(0,0,0,0.45);
-            display: none;
-            min-width: 170px;
-            z-index: 30;
-        }
-        .main-nav-sub a {
-            display: block;
-            padding: 0.25rem 0.2rem;
-            font-size: 0.8rem;
-        }
-        .main-nav-sub a + a {
-            margin-top: 0.15rem;
-        }
-        .main-nav-item-wrapper:hover .main-nav-sub {
-            display: block;
-        }
+        /* .main-nav-sub מוגדר ב־admin_header.php */
         main {
             max-width: 900px;
             margin: 2rem auto;
