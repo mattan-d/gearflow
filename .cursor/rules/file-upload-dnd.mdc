@@ -1,0 +1,43 @@
+---
+description: File selection inputs must use a modern drag-and-drop zone UI
+globs: "**/*.php"
+alwaysApply: false
+---
+
+# File Upload: Drag-and-Drop Zone
+
+Whenever the page has an `<input type="file">` for selecting files, provide a **dedicated drag-and-drop area** with a modern look, instead of only a plain "בחירת קובץ" button.
+
+## Requirements
+
+- A visible **drop zone** (e.g. dashed border, rounded corners, padding) that accepts drag-and-drop.
+- **Click-to-browse**: clicking the zone triggers the file input (input hidden or overlayed with `opacity: 0` / `position: absolute`).
+- **Feedback**: on `dragover` / `dragenter` add a class (e.g. `drag-over`) to change background/border; remove on `dragleave` and `drop`.
+- **Accessibility**: keep the native `<input type="file">` in the DOM; associate a label or use `aria-label` on the zone so screen readers understand it.
+- **RTL**: text like "גרור קובץ לכאן או לחץ לבחירה" (or similar) in Hebrew.
+
+## Markup pattern
+
+```html
+<label class="file-drop-zone" id="file_drop_zone">
+    <input type="file" name="csv_file" accept=".csv" class="file-drop-input" id="file_input">
+    <span class="file-drop-text">גרור קובץ לכאן או לחץ לבחירה</span>
+    <span class="file-drop-hint">CSV עד 5MB</span>
+</label>
+```
+
+- Zone: `class="file-drop-zone"` (or `file-upload-zone`).
+- Input: hidden visually (`width: 0; height: 0; opacity: 0; position: absolute`) or use a separate `<input>` and trigger `.click()` from the zone’s click handler.
+- Optional: show selected file name after choice via JS.
+
+## Styling (modern)
+
+- Dashed border (e.g. `2px dashed #d1d5db`), `border-radius: 12px`, padding `1.5rem`, background `#f9fafb`.
+- Hover: `border-color: #9ca3af`, background `#f3f4f6`.
+- `.drag-over`: border primary color (e.g. `#4f46e5`), background tint (e.g. `#eef2ff`).
+- Centered text and optional icon (e.g. Lucide `upload`).
+
+## Do not
+
+- Rely only on a small "בחירת קובץ" button with no drop zone.
+- Use a native file input as the only visible control when space allows for a full drop area.
