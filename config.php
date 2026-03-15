@@ -267,11 +267,13 @@ function initialize_database(PDO $pdo): void
         )
     ");
     $statusDefaults = [
-        'pending'     => 'ממתין',
-        'approved'    => 'מאושר',
-        'on_loan'     => 'בהשאלה',
-        'returned'    => 'עבר',
-        'rejected'    => 'נדחה',
+        'pending'      => 'ממתין',
+        'approved'     => 'מאושר',
+        'on_loan'      => 'בהשאלה',
+        'returned'     => 'עבר',
+        'rejected'     => 'נדחה',
+        'not_returned' => 'לא הוחזר',  // הזמנה בהשאלה שעבר תאריך ההחזרה
+        'not_picked'   => 'לא נלקח',   // הזמנה מאושרת שעבר מועד ההשאלה ולא נלקחה
     ];
     foreach ($statusDefaults as $code => $label) {
         $stmt = $pdo->prepare('INSERT OR IGNORE INTO order_status_labels (status, label_he) VALUES (:s, :l)');

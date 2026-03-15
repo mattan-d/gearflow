@@ -94,8 +94,14 @@ if (isset($_GET['orders_show'])) {
     }
 
     if ($reportStatus !== '' && $reportStatus !== 'הכל') {
-        $sql .= " AND o.status = :status";
-        $params[':status'] = $reportStatus;
+        if ($reportStatus === 'not_returned') {
+            $sql .= " AND o.status = 'on_loan' AND DATE(o.end_date) < DATE('now')";
+        } elseif ($reportStatus === 'not_picked') {
+            $sql .= " AND o.status = 'approved' AND DATE(o.start_date) < DATE('now')";
+        } else {
+            $sql .= " AND o.status = :status";
+            $params[':status'] = $reportStatus;
+        }
     }
 
     $stmt = $pdo->prepare($sql);

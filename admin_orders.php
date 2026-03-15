@@ -519,10 +519,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $today = date('Y-m-d');
                     $targetTab = 'pending';
                     if ($newStatus === 'approved') {
-                        if ($startDate <= $today && $endDate >= $today) {
-                            $targetTab = 'today';
-                        } elseif ($startDate > $today) {
+                        if ($startDate > $today) {
                             $targetTab = 'future';
+                        } elseif ($startDate <= $today && $endDate >= $today) {
+                            $targetTab = 'today';
+                        } else {
+                            $targetTab = 'not_picked'; // עבר מועד ההשאלה – לא נלקח
                         }
                         header('Location: admin_orders.php?tab=' . $targetTab);
                         exit;
@@ -714,7 +716,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = 'הזמנה נמחקה.';
 
             // לאחר מחיקה – נשארים בטאב ממנו בוצעה הפעולה (נשלח בטופס)
-            if ($currentTab && in_array($currentTab, ['today', 'pending', 'future', 'active', 'not_returned', 'history'], true)) {
+            if ($currentTab && in_array($currentTab, ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history'], true)) {
                 header('Location: admin_orders.php?tab=' . urlencode($currentTab));
                 exit;
             }
@@ -769,9 +771,10 @@ $tab       = $_GET['tab'] ?? 'today';
 // pending  – הזמנות ממתינות לאישור אדמין
 // future   – הזמנות מאושרות לעתיד (לפני יום ההשאלה)
 // active   – בהשאלה (status = on_loan) ועדיין לא עבר מועד ההחזרה
-// not_returned – בהשאלה (status = on_loan) שעבר מועד ההחזרה
+// not_returned – בהשאלה (status = on_loan) שעבר מועד ההחזרה – לא הוחזר
+// not_picked  – מאושר אך עבר מועד ההשאלה ולא נלקח
 // history  – הזמנות שהסתיימו (status = returned)
-$validTabs = ['today', 'pending', 'future', 'active', 'not_returned', 'history'];
+$validTabs = ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history'];
 
 if (!in_array($tab, $validTabs, true)) {
     $tab = 'today';
@@ -817,6 +820,13 @@ switch ($tab) {
         // בקשות מאושרות שהן לעתיד (לפני יום ההשאלה)
         $where = " WHERE o.status = 'approved'
                    AND DATE(o.start_date) > :today";
+        $params[':today'] = $today;
+        break;
+
+    case 'not_picked':
+        // מאושר אך עבר מועד ההשאלה ולא נלקח
+        $where = " WHERE o.status = 'approved'
+                   AND DATE(o.start_date) < :today";
         $params[':today'] = $today;
         break;
 
@@ -1867,6 +1877,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             <a href="admin_orders.php?tab=today"   class="<?= $tab === 'today'   ? 'active' : '' ?>">היום</a>
             <a href="admin_orders.php?tab=pending" class="<?= $tab === 'pending' ? 'active' : '' ?>">ממתין</a>
             <a href="admin_orders.php?tab=future"       class="<?= $tab === 'future'       ? 'active' : '' ?>">עתידי</a>
+            <a href="admin_orders.php?tab=not_picked"   class="<?= $tab === 'not_picked'   ? 'active' : '' ?>">לא נלקח</a>
             <a href="admin_orders.php?tab=active"       class="<?= $tab === 'active'       ? 'active' : '' ?>">בהשאלה</a>
             <a href="admin_orders.php?tab=not_returned" class="<?= $tab === 'not_returned' ? 'active' : '' ?>">לא הוחזר</a>
             <a href="admin_orders.php?tab=history"      class="<?= $tab === 'history'      ? 'active' : '' ?>">היסטוריה</a>
