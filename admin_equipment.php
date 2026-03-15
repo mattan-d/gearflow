@@ -1483,7 +1483,13 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         </div>
         <div class="toolbar-left">
             <a href="admin_equipment.php?export=1" class="btn secondary">יצוא רשימת ציוד</a>
-            <button type="button" class="btn secondary" id="toggle_import_equipment_btn">יבוא רשימת ציוד</button>
+            <form method="post" action="admin_equipment.php" enctype="multipart/form-data" id="equipment_import_form" style="display:inline;">
+                <input type="hidden" name="action" value="import">
+                <label class="btn-file" style="margin:0;">
+                    יבוא רשימת ציוד
+                    <input type="file" name="csv_file" accept=".csv" required id="equipment_csv_file_input">
+                </label>
+            </form>
         </div>
     </div>
 
@@ -1780,20 +1786,6 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                 </div>
             </form>
         </div>
-    </div>
-
-    <div class="card" id="equipment_import_card" style="display: none;">
-        <h2>יבוא רשימת ציוד (CSV)</h2>
-        <p class="muted-small">
-            יש לבחור קובץ CSV המכיל לפחות עמודות: שם ציוד, מספר סידורי, תיאור, קטגוריה, מיקום, סטטוס.
-            השורה הראשונה תיחשב ככותרת.
-        </p>
-        <form method="post" action="admin_equipment.php" enctype="multipart/form-data">
-            <input type="hidden" name="action" value="import">
-            <label for="csv_file">קובץ CSV</label>
-            <input type="file" id="csv_file" name="csv_file" accept=".csv,.txt" required>
-            <button type="submit" class="btn">יבוא</button>
-        </form>
     </div>
 
     <?php if ($show_import_fix_modal && $import_fix_data): ?>
