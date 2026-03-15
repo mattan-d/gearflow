@@ -29,6 +29,16 @@ $selectedStudents = array_values(array_filter(array_map('trim', explode(',', $se
 // קטגוריית ציוד לדוח הזמנות
 $reportCategory = isset($_GET['orders_category']) ? trim((string)$_GET['orders_category']) : '';
 
+// סטטוס הזמנה לדוח (ריק או 'הכל' = כל הסטטוסים)
+$reportStatus = isset($_GET['orders_status']) ? trim((string)$_GET['orders_status']) : '';
+
+// רשימת סטטוסים מהטבלה (לקומבו בוקס)
+$orderStatusLabels = [];
+$orderStatusStmt = $pdo->query('SELECT status, label_he FROM order_status_labels ORDER BY status ASC');
+if ($orderStatusStmt) {
+    $orderStatusLabels = $orderStatusStmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+}
+
 $ordersReport = [
     'has_range'        => false,
     'start'            => $reportStart,
@@ -43,7 +53,8 @@ $ordersReport = [
     'not_returned_late'=> 0,
 ];
 
-if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
+// הדוח מוצג רק לאחר לחיצה על "הצג"
+if (isset($_GET['orders_show'])) {
     $ordersReport['has_range'] = true;
 
     $sql = "SELECT
@@ -57,12 +68,15 @@ if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
              SUM(CASE WHEN o.status = 'on_loan'  AND DATE(o.end_date) < DATE('now') THEN 1 ELSE 0 END) AS not_returned_late_count
          FROM orders o
          JOIN equipment e ON e.id = o.equipment_id
-         WHERE DATE(o.start_date) BETWEEN :start AND :end";
+         WHERE 1=1";
+    $params = [];
 
-    $params = [
-        ':start' => $reportStart,
-        ':end'   => $reportEnd,
-    ];
+    // טווח תאריכים: אם לא נבחר – הדוח על כל התאריכים
+    if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
+        $sql .= " AND DATE(o.start_date) BETWEEN :start AND :end";
+        $params[':start'] = $reportStart;
+        $params[':end']   = $reportEnd;
+    }
 
     if (!empty($selectedStudents)) {
         $placeholders = [];
@@ -77,6 +91,11 @@ if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
     if ($reportCategory !== '') {
         $sql .= " AND TRIM(COALESCE(e.category, '')) = :cat";
         $params[':cat'] = $reportCategory;
+    }
+
+    if ($reportStatus !== '' && $reportStatus !== 'הכל') {
+        $sql .= " AND o.status = :status";
+        $params[':status'] = $reportStatus;
     }
 
     $stmt = $pdo->prepare($sql);
@@ -316,6 +335,26 @@ foreach ($catRows as $cName) {
             background: #111827;
             color: #f9fafb;
         }
+        .cal-mode-btns {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.6rem;
+            justify-content: flex-end;
+        }
+        .cal-mode-btn {
+            padding: 0.3rem 0.65rem;
+            font-size: 0.8rem;
+            border-radius: 6px;
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            color: #4b5563;
+            cursor: default;
+        }
+        .cal-mode-btn.active {
+            background: #111827;
+            color: #f9fafb;
+            border-color: #111827;
+        }
         .orders-report-table {
             width: 100%;
             max-width: 520px;
@@ -390,6 +429,19 @@ foreach ($catRows as $cName) {
 
                 <h3 class="report-params-title">פרמטרים להצגת דוח</h3>
                 <div class="report-params-row">
+                    <div class="report-param-block">
+                        <label class="param-label" for="orders_status">סטטוס הזמנה</label>
+                        <select name="orders_status" id="orders_status"
+                                style="min-width:130px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
+                            <option value="הכל" <?= ($reportStatus === '' || $reportStatus === 'הכל') ? 'selected' : '' ?>>הכל</option>
+                            <?php foreach ($orderStatusLabels as $sl): ?>
+                                <option value="<?= htmlspecialchars($sl['status'], ENT_QUOTES, 'UTF-8') ?>"
+                                    <?= $reportStatus === $sl['status'] ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars($sl['label_he'], ENT_QUOTES, 'UTF-8') ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
                     <div class="report-param-block calendar-bar">
                         <span class="param-label">תאריך התחלה וסיום (לוח שנה אחד)</span>
                         <button type="button" id="orders_range_btn" class="calendar-icon-btn" title="בחירת תאריך התחלה ותאריך סיום" aria-label="לוח שנה – בחירת תאריך התחלה וסיום"><i data-lucide="calendar" aria-hidden="true"></i></button>
@@ -403,6 +455,10 @@ foreach ($catRows as $cName) {
                             <?php endif; ?>
                         </span>
                         <div id="orders_calendar_panel" class="calendar-panel" style="display:none;">
+                            <div class="cal-mode-btns">
+                                <button type="button" class="cal-mode-btn active" id="cal_btn_start">התחלה</button>
+                                <button type="button" class="cal-mode-btn" id="cal_btn_end">סיום</button>
+                            </div>
                             <div class="calendar-grid" id="orders_calendar_grid"></div>
                         </div>
                     </div>
@@ -433,6 +489,9 @@ foreach ($catRows as $cName) {
                         </div>
                         <div id="orders_selected_students"
                              style="margin-top:0.35rem;display:flex;flex-wrap:wrap;gap:0.35rem;font-size:0.85rem;"></div>
+                    </div>
+                    <div class="report-param-block" style="align-self:flex-end;">
+                        <button type="submit" name="orders_show" value="1" class="btn">הצג</button>
                     </div>
                 </div>
             </form>
@@ -519,6 +578,8 @@ foreach ($catRows as $cName) {
         var rangeHint  = document.getElementById('orders_range_hint');
         var panel      = document.getElementById('orders_calendar_panel');
         var grid       = document.getElementById('orders_calendar_grid');
+        var calBtnStart = document.getElementById('cal_btn_start');
+        var calBtnEnd   = document.getElementById('cal_btn_end');
         if (!form || !startInput || !endInput || !rangeBtn || !panel || !grid) return;
 
         var startDate = startInput.value || '';
@@ -535,6 +596,13 @@ foreach ($catRows as $cName) {
             }
         }
         updateHint();
+
+        function updateCalModeButtons() {
+            if (!calBtnStart || !calBtnEnd) return;
+            var inStartMode = !startDate || (startDate && endDate);
+            calBtnStart.classList.toggle('active', inStartMode);
+            calBtnEnd.classList.toggle('active', startDate && !endDate);
+        }
 
         function formatDate(d) {
             var y = d.getFullYear();
@@ -598,10 +666,7 @@ foreach ($catRows as $cName) {
                             }
                             startInput.value = startDate;
                             endInput.value = endDate;
-                            setTimeout(function () {
-                                panel.style.display = 'none';
-                                form.submit();
-                            }, 800);
+                            panel.style.display = 'none';
                         }
                         updateHint();
                         buildCalendar();
@@ -610,6 +675,7 @@ foreach ($catRows as $cName) {
                     grid.appendChild(cell);
                 })(day);
             }
+            updateCalModeButtons();
         }
 
         rangeBtn.addEventListener('click', function () {
