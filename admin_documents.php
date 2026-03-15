@@ -471,41 +471,81 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="flash notice"><?= htmlspecialchars($notice, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
 
-        <?php if ($canEdit && $editMode): ?>
-            <form method="get" action="admin_documents.php" style="margin-bottom:1rem;">
-                <button type="submit" class="btn secondary" name="new" value="1">
-                    הוספת מסמך
-                </button>
-            </form>
-        <?php endif; ?>
+        <h3 style="margin:0 0 0.5rem 0;font-size:1rem;color:#374151;">רשימת מסמכים</h3>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;margin-bottom:0.75rem;">
+            <?php if ($canEdit && $editMode): ?>
+                <form method="get" action="admin_documents.php" style="margin:0;">
+                    <button type="submit" class="btn secondary" name="new" value="1">
+                        הוספת מסמך
+                    </button>
+                </form>
+            <?php else: ?>
+                <span></span>
+            <?php endif; ?>
+        </div>
 
-        <div class="doc-list">
-            <?php foreach ($documents as $key => $doc): ?>
-                <?php if (!$canEdit && $key === 'consent_form') { continue; } ?>
-                <a href="admin_documents.php?doc=<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>"
-                   class="doc-pill <?= $key === $currentDocKey && $currentCustomId === 0 ? 'active' : '' ?>">
-                    <?= htmlspecialchars($doc['title'], ENT_QUOTES, 'UTF-8') ?>
-                </a>
-            <?php endforeach; ?>
-            <?php foreach ($customDocs as $c): ?>
-                <div class="doc-pill <?= $currentCustomId === (int)$c['id'] ? 'active' : '' ?>">
-                    <a href="admin_documents.php?custom_id=<?= (int)$c['id'] ?>"
-                       class="doc-pill-title">
-                        <?= htmlspecialchars($c['title'], ENT_QUOTES, 'UTF-8') ?>
-                    </a>
-                    <?php if ($canEdit && $editMode): ?>
-                        <form method="post" action="admin_documents.php" style="display:inline; margin:0;">
-                            <input type="hidden" name="action" value="delete_custom">
-                            <input type="hidden" name="custom_id" value="<?= (int)$c['id'] ?>">
-                            <button type="submit" class="doc-pill-delete"
-                                    onclick="return confirm('למחוק את המסמך \"<?= htmlspecialchars($c['title'], ENT_QUOTES, 'UTF-8') ?>\"?');"
-                                    aria-label="מחיקת מסמך">
-                                <i data-lucide="x" aria-hidden="true"></i>
-                            </button>
-                        </form>
-                    <?php endif; ?>
-                </div>
-            <?php endforeach; ?>
+        <div class="doc-table-wrap">
+            <table class="doc-table">
+                <thead>
+                <tr>
+                    <th>#</th>
+                    <th>שם המסמך</th>
+                    <th>סוג</th>
+                    <th>פעולות</th>
+                </tr>
+                </thead>
+                <tbody>
+                <?php
+                $rowNum = 0;
+                foreach ($documents as $key => $doc):
+                    if (!$canEdit && $key === 'consent_form') continue;
+                    $rowNum++;
+                    $isSelected = ($key === $currentDocKey && $currentCustomId === 0);
+                    $viewLink = 'admin_documents.php?doc=' . htmlspecialchars($key, ENT_QUOTES, 'UTF-8');
+                    $editLink = 'admin_documents.php?doc=' . htmlspecialchars($key, ENT_QUOTES, 'UTF-8') . '&edit=1';
+                ?>
+                    <tr class="<?= $isSelected ? 'selected' : '' ?>">
+                        <td><?= $rowNum ?></td>
+                        <td><?= htmlspecialchars($doc['title'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><span class="badge builtin">מובנה</span></td>
+                        <td>
+                            <div class="row-actions">
+                                <a href="<?= $viewLink ?>" class="btn-view">צפייה</a>
+                                <?php if ($canEdit): ?>
+                                    <a href="<?= $editLink ?>">עריכה</a>
+                                <?php endif; ?>
+                            </div>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                <?php foreach ($customDocs as $c):
+                    $rowNum++;
+                    $cid = (int)$c['id'];
+                    $isSelected = ($currentCustomId === $cid);
+                    $viewLink = 'admin_documents.php?custom_id=' . $cid;
+                    $editLink = 'admin_documents.php?custom_id=' . $cid . '&edit=1';
+                ?>
+                    <tr class="<?= $isSelected ? 'selected' : '' ?>">
+                        <td><?= $rowNum ?></td>
+                        <td><?= htmlspecialchars($c['title'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><span class="badge custom">מותאם אישית</span></td>
+                        <td>
+                            <div class="row-actions">
+                                <a href="<?= $viewLink ?>" class="btn-view">צפייה</a>
+                                <?php if ($canEdit): ?>
+                                    <a href="<?= $editLink ?>">עריכה</a>
+                                    <form method="post" action="admin_documents.php" style="display:inline;margin:0;" onsubmit="return confirm('למחוק את המסמך?');">
+                                        <input type="hidden" name="action" value="delete_custom">
+                                        <input type="hidden" name="custom_id" value="<?= $cid ?>">
+                                        <button type="submit" aria-label="מחיקת מסמך"><i data-lucide="trash-2" aria-hidden="true"></i></button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
         </div>
 
         <?php if ($canEdit && $editMode && isset($_GET['new']) && (int)$_GET['new'] === 1): ?>
