@@ -922,6 +922,7 @@ if ($eqShow) {
                             endDate = '';
                             startInput.value = startDate;
                             endInput.value = '';
+                            updateCalModeButtons();
                         } else {
                             // בחירה שנייה – קביעת תאריך סיום
                             if (dateStr < startDate) {
@@ -1096,10 +1097,18 @@ if ($eqShow) {
         var panel = document.getElementById('eq_calendar_panel');
         var grid = document.getElementById('eq_calendar_grid');
         var availWrap = document.getElementById('eq_availability_wrap');
+        var eqCalBtnStart = document.getElementById('eq_cal_btn_start');
+        var eqCalBtnEnd = document.getElementById('eq_cal_btn_end');
         if (!form || !startInput || !endInput || !rangeBtn || !panel || !grid) return;
 
         var startDate = startInput.value || '';
         var endDate = endInput.value || '';
+        function updateEqCalModeButtons() {
+            if (!eqCalBtnStart || !eqCalBtnEnd) return;
+            var inStartMode = !startDate || (startDate && endDate);
+            eqCalBtnStart.classList.toggle('active', inStartMode);
+            eqCalBtnEnd.classList.toggle('active', !!(startDate && !endDate));
+        }
         function updateHint() {
             if (!rangeHint) return;
             if (startDate && endDate) rangeHint.textContent = 'מ־' + startDate + ' עד ' + endDate;
@@ -1114,6 +1123,7 @@ if ($eqShow) {
         }
         updateHint();
         updateAvailVisibility();
+        updateEqCalModeButtons();
 
         function formatDate(d) {
             var y = d.getFullYear();
@@ -1165,11 +1175,13 @@ if ($eqShow) {
                         endInput.value = endDate;
                         updateHint();
                         updateAvailVisibility();
+                        updateEqCalModeButtons();
                         buildCalendar();
                     });
                     grid.appendChild(cell);
                 })(day);
             }
+            updateEqCalModeButtons();
         }
         rangeBtn.addEventListener('click', function() {
             panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
