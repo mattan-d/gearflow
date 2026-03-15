@@ -218,7 +218,7 @@ foreach ($catRows as $cName) {
         .report-params-row {
             display: flex;
             flex-wrap: wrap;
-            align-items: flex-end;
+            align-items: flex-start;
             gap: 1.25rem;
             margin-bottom: 0.75rem;
         }
@@ -232,6 +232,10 @@ foreach ($catRows as $cName) {
             color: #4b5563;
             margin-bottom: 0.25rem;
             font-weight: 500;
+            min-height: 1.35em;
+            line-height: 1.35;
+            white-space: nowrap;
+            display: block;
         }
         .report-param-block .param-value-hint {
             font-size: 0.75rem;
@@ -387,22 +391,25 @@ foreach ($catRows as $cName) {
                 <h3 class="report-params-title">פרמטרים להצגת דוח</h3>
                 <div class="report-params-row">
                     <div class="report-param-block calendar-bar">
-                        <span class="param-label">תאריך התחלה</span>
-                        <button type="button" id="orders_start_btn" class="calendar-icon-btn active" title="בחירת תאריך התחלה" aria-label="תאריך התחלה"><i data-lucide="calendar" aria-hidden="true"></i></button>
-                        <span class="param-value-hint" id="orders_start_hint"><?= $ordersReport['start'] !== '' ? htmlspecialchars($ordersReport['start'], ENT_QUOTES, 'UTF-8') : 'לא נבחר' ?></span>
+                        <span class="param-label">תאריך התחלה וסיום (לוח שנה אחד)</span>
+                        <button type="button" id="orders_range_btn" class="calendar-icon-btn" title="בחירת תאריך התחלה ותאריך סיום" aria-label="לוח שנה – בחירת תאריך התחלה וסיום"><i data-lucide="calendar" aria-hidden="true"></i></button>
+                        <span class="param-value-hint" id="orders_range_hint">
+                            <?php if ($ordersReport['start'] !== '' && $ordersReport['end'] !== ''): ?>
+                                מ־<?= htmlspecialchars($ordersReport['start'], ENT_QUOTES, 'UTF-8') ?> עד <?= htmlspecialchars($ordersReport['end'], ENT_QUOTES, 'UTF-8') ?>
+                            <?php elseif ($ordersReport['start'] !== ''): ?>
+                                מ־<?= htmlspecialchars($ordersReport['start'], ENT_QUOTES, 'UTF-8') ?>
+                            <?php else: ?>
+                                לא נבחר
+                            <?php endif; ?>
+                        </span>
                         <div id="orders_calendar_panel" class="calendar-panel" style="display:none;">
                             <div class="calendar-grid" id="orders_calendar_grid"></div>
                         </div>
                     </div>
                     <div class="report-param-block">
-                        <span class="param-label">תאריך סיום</span>
-                        <button type="button" id="orders_end_btn" class="calendar-icon-btn" title="בחירת תאריך סיום" aria-label="תאריך סיום" disabled><i data-lucide="calendar" aria-hidden="true"></i></button>
-                        <span class="param-value-hint" id="orders_end_hint"><?= $ordersReport['end'] !== '' ? htmlspecialchars($ordersReport['end'], ENT_QUOTES, 'UTF-8') : 'לא נבחר' ?></span>
-                    </div>
-                    <div class="report-param-block">
                         <label class="param-label" for="orders_category">קטגוריית ציוד</label>
                         <select name="orders_category" id="orders_category"
-                                style="min-width:160px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
+                                style="min-width:130px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
                             <option value="">כל הקטגוריות</option>
                             <?php foreach ($reportCategories as $cat): ?>
                                 <option value="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>"
@@ -412,7 +419,7 @@ foreach ($catRows as $cName) {
                             <?php endforeach; ?>
                         </select>
                     </div>
-                    <div class="report-param-block" style="flex:1;min-width:200px;max-width:320px;">
+                    <div class="report-param-block" style="flex:1;min-width:150px;max-width:200px;">
                         <label class="param-label" for="orders_student_search">סינון לפי סטודנטים</label>
                         <input type="hidden" name="orders_students" id="orders_students"
                                value="<?= htmlspecialchars($selectedStudentsRaw, ENT_QUOTES, 'UTF-8') ?>">
@@ -508,23 +515,26 @@ foreach ($catRows as $cName) {
         var form       = document.getElementById('orders_report_form');
         var startInput = document.getElementById('orders_start');
         var endInput   = document.getElementById('orders_end');
-        var startBtn   = document.getElementById('orders_start_btn');
-        var endBtn     = document.getElementById('orders_end_btn');
-        var startHint  = document.getElementById('orders_start_hint');
-        var endHint    = document.getElementById('orders_end_hint');
+        var rangeBtn   = document.getElementById('orders_range_btn');
+        var rangeHint  = document.getElementById('orders_range_hint');
         var panel      = document.getElementById('orders_calendar_panel');
         var grid       = document.getElementById('orders_calendar_grid');
-        if (!form || !startInput || !endInput || !startBtn || !endBtn || !panel || !grid) return;
+        if (!form || !startInput || !endInput || !rangeBtn || !panel || !grid) return;
 
-        var mode = 'start';
         var startDate = startInput.value || '';
         var endDate = endInput.value || '';
 
-        function updateHints() {
-            if (startHint) startHint.textContent = startDate || 'לא נבחר';
-            if (endHint) endHint.textContent = endDate || 'לא נבחר';
+        function updateHint() {
+            if (!rangeHint) return;
+            if (startDate && endDate) {
+                rangeHint.textContent = 'מ־' + startDate + ' עד ' + endDate;
+            } else if (startDate) {
+                rangeHint.textContent = 'מ־' + startDate;
+            } else {
+                rangeHint.textContent = 'לא נבחר';
+            }
         }
-        updateHints();
+        updateHint();
 
         function formatDate(d) {
             var y = d.getFullYear();
@@ -564,43 +574,36 @@ foreach ($catRows as $cName) {
                     cell.className = 'cal-day';
                     cell.textContent = d;
 
-                    if (startDate && !endDate && dateStr === startDate) {
-                        cell.classList.add('selected');
-                    }
                     if (startDate && endDate && dateStr >= startDate && dateStr <= endDate) {
                         cell.classList.add('in-range');
+                    } else if (startDate && !endDate && dateStr === startDate) {
+                        cell.classList.add('selected');
                     }
 
                     cell.addEventListener('click', function () {
-                        if (mode === 'start') {
+                        // בחירה ראשונה או התחלה חדשה
+                        if (!startDate || (startDate && endDate)) {
                             startDate = dateStr;
                             endDate = '';
                             startInput.value = startDate;
                             endInput.value = '';
-                            startBtn.classList.add('active');
-                            endBtn.classList.remove('active');
-                            endBtn.disabled = false;
-                            mode = 'end';
                         } else {
-                            if (!startDate || dateStr < startDate) {
+                            // בחירה שנייה – קביעת תאריך סיום
+                            if (dateStr < startDate) {
+                                // אם נבחר תאריך מוקדם יותר – תהפוך אותו להתחלה
+                                endDate = startDate;
                                 startDate = dateStr;
-                                endDate = '';
-                                startInput.value = startDate;
-                                endInput.value = '';
-                                mode = 'end';
                             } else {
                                 endDate = dateStr;
-                                endInput.value = endDate;
-                                mode = 'start';
-                                startBtn.classList.add('active');
-                                endBtn.classList.remove('active');
-                                setTimeout(function () {
-                                    panel.style.display = 'none';
-                                    form.submit();
-                                }, 800);
                             }
+                            startInput.value = startDate;
+                            endInput.value = endDate;
+                            setTimeout(function () {
+                                panel.style.display = 'none';
+                                form.submit();
+                            }, 800);
                         }
-                        updateHints();
+                        updateHint();
                         buildCalendar();
                     });
 
@@ -609,19 +612,7 @@ foreach ($catRows as $cName) {
             }
         }
 
-        startBtn.addEventListener('click', function () {
-            mode = 'start';
-            startBtn.classList.add('active');
-            endBtn.classList.remove('active');
-            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-            buildCalendar();
-        });
-
-        endBtn.addEventListener('click', function () {
-            if (endBtn.disabled) return;
-            mode = 'end';
-            startBtn.classList.remove('active');
-            endBtn.classList.add('active');
+        rangeBtn.addEventListener('click', function () {
             panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
             buildCalendar();
         });
