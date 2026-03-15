@@ -130,10 +130,9 @@ if ($userId > 0) {
         display: inline-block;
         padding: 0.2rem 0.35rem;
         border-radius: 6px;
-        transition: background 0.2s ease, color 0.2s ease;
+        transition: color 0.2s ease;
     }
     .main-nav a:hover {
-        background: rgba(255, 255, 255, 0.1);
         color: var(--gf-header-text);
     }
     .main-nav-primary {
@@ -161,18 +160,13 @@ if ($userId > 0) {
         padding: 0.35rem 0.5rem;
         font-size: 0.8rem;
         color: var(--gf-header-link);
-        border-bottom: 1px solid #f3f4f6;
-        transition: background 0.2s ease, color 0.2s ease;
-    }
-    .main-nav-sub a:last-child {
-        border-bottom: none;
-    }
-    .main-nav-sub a:hover {
-        background: rgba(255, 255, 255, 0.08);
-        color: var(--gf-header-text);
+        transition: color 0.2s ease;
     }
     .main-nav-sub a + a {
-        margin-top: 0;
+        border-top: 1px solid #f3f4f6;
+    }
+    .main-nav-sub a:hover {
+        color: var(--gf-header-text);
     }
     .main-nav-item-wrapper:hover .main-nav-sub {
         display: block;
