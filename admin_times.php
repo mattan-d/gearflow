@@ -9,6 +9,7 @@ require_admin_or_warehouse();
 
 $me  = current_user();
 $pdo = get_db();
+$error = '';
 
 // קביעת המחסן הנוכחי
 $userWarehouse = trim((string)($me['warehouse'] ?? 'מחסן א'));
@@ -117,13 +118,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_default']) && i
 
 // שמירת עדכונים
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hours_payload'])) {
-    $payload = (string)($_POST['hours_payload'] ?? '');
-    $decoded = json_decode($payload, true);
-    if (is_array($decoded)) {
-        $pdo->beginTransaction();
-        try {
-            $del = $pdo->prepare('DELETE FROM warehouse_hours WHERE warehouse = :w');
-            $del->execute([':w' => $selectedWarehouse]);
+    $role = (string)($me['role'] ?? '');
+    $canSave = ($role === 'admin') || (($role === 'warehouse_manager') && $selectedWarehouse === $userWarehouse);
+    if (!$canSave) {
+        $error = 'אין הרשאה לשמור שעות למחסן זה.';
+    } else {
+        $payload = (string)($_POST['hours_payload'] ?? '');
+        $decoded = json_decode($payload, true);
+        if (is_array($decoded)) {
+            $pdo->beginTransaction();
+            try {
+                $del = $pdo->prepare('DELETE FROM warehouse_hours WHERE warehouse = :w');
+                $del->execute([':w' => $selectedWarehouse]);
 
             $ins = $pdo->prepare('INSERT OR IGNORE INTO warehouse_hours (warehouse, day_of_week, hour) VALUES (:w, :d, :h)');
             foreach ($decoded as $d => $hoursRow) {
@@ -142,19 +148,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hours_payload'])) {
                 }
             }
             $pdo->commit();
-
-            // רענון המטריצה לאחר שמירה
-            $openMatrix = [];
-            $stmt = $pdo->prepare('SELECT day_of_week, hour FROM warehouse_hours WHERE warehouse = :w');
-            $stmt->execute([':w' => $selectedWarehouse]);
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($rows as $row) {
-                $d = (int)($row['day_of_week'] ?? 0);
-                $h = (int)($row['hour'] ?? 0);
-                $openMatrix[$d][$h] = true;
+                header('Location: admin_times.php?warehouse=' . urlencode($selectedWarehouse));
+                exit;
             }
         } catch (Throwable $e) {
-            $pdo->rollBack();
+                $pdo->rollBack();
+            }
         }
     }
 }
@@ -232,6 +231,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hours_payload'])) {
             font-size: 0.85rem;
             color: #6b7280;
         }
+        .flash { padding: 0.6rem 1rem; border-radius: 8px; }
+        .flash.error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
         .main-nav {
             margin-top: 0.5rem;
             display: flex;
@@ -340,6 +341,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hours_payload'])) {
 <main>
     <div class="card">
         <h2>קביעת שעות פתיחת מחסן</h2>
+        <?php if ($error !== ''): ?>
+        <div class="flash error" style="margin-bottom:0.75rem;"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
         <form method="get" action="admin_times.php" style="margin-bottom:0.75rem; display:flex;align-items:center;gap:0.5rem;">
             <label for="warehouse" class="muted-small">בחר מחסן:</label>
             <select id="warehouse" name="warehouse" onchange="this.form.submit()" style="padding:0.3rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;">
@@ -385,12 +389,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hours_payload'])) {
             <input type="hidden" name="hours_payload" id="hours_payload" value="">
             <div class="hours-actions">
                 <button type="submit" class="btn">שמירת שעות</button>
-                <form method="post" action="admin_times.php" style="display:inline; margin-right:0.5rem;">
-                    <input type="hidden" name="apply_default" value="1">
-                    <input type="hidden" name="warehouse" value="<?= htmlspecialchars($selectedWarehouse, ENT_QUOTES, 'UTF-8') ?>">
-                    <button type="submit" class="btn secondary">ברירת מחדל</button>
-                </form>
             </div>
+        </form>
+        <form method="post" action="admin_times.php" style="display:inline; margin-right:0.5rem;">
+            <input type="hidden" name="apply_default" value="1">
+            <input type="hidden" name="warehouse" value="<?= htmlspecialchars($selectedWarehouse, ENT_QUOTES, 'UTF-8') ?>">
+            <button type="submit" class="btn secondary">ברירת מחדל</button>
         </form>
         <div class="hours-legend">
             כחול בהיר = שעה פתוחה, אפור בהיר = שעה סגורה. ניתן לבחור טווח שעות באותו יום: לחץ על תא ראשון ואז על תא אחר עם מקש Shift לחוץ.
