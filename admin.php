@@ -20,76 +20,7 @@ $me = current_user();
             background: #f3f4f6;
             margin: 0;
         }
-        header {
-            background: #111827;
-            color: #f9fafb;
-            padding: 1rem 1.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        header h1 {
-            margin: 0;
-            font-size: 1.3rem;
-        }
-        .muted {
-            color: #9ca3af;
-            font-size: 0.8rem;
-        }
-        .user-info {
-            font-size: 0.9rem;
-            color: #e5e7eb;
-            text-align: left;
-        }
-        header a {
-            color: #f9fafb;
-            text-decoration: none;
-            margin-right: 1rem;
-            font-size: 0.85rem;
-        }
-        .main-nav {
-            margin-top: 0.5rem;
-            display: flex;
-            gap: 0.6rem;
-            font-size: 0.85rem;
-            white-space: nowrap;
-            align-items: center;
-        }
-        .main-nav a {
-            color: #e5e7eb;
-            text-decoration: none;
-            display: inline-block;
-        }
-        .main-nav-primary {
-            display: flex;
-            gap: 0.6rem;
-        }
-        .main-nav-item-wrapper {
-            position: relative;
-        }
-        .main-nav-sub {
-            position: absolute;
-            right: 0;
-            top: 100%; /* צמוד לכפתור הראשי כדי שלא ייעלם במעבר העכבר */
-            background: #111827;
-            border-radius: 8px;
-            padding: 0.4rem 0.6rem;
-            box-shadow: 0 12px 30px rgba(0,0,0,0.45);
-            display: none;
-            min-width: 170px;
-            z-index: 30;
-        }
-        .main-nav-sub a {
-            display: block;
-            padding: 0.25rem 0.2rem;
-            font-size: 0.8rem;
-        }
-        .main-nav-sub a + a {
-            margin-top: 0.15rem;
-        }
-        .main-nav-item-wrapper:hover .main-nav-sub {
-            display: block;
-        }
+        /* Header ותפריט משנה מוגדרים ב־admin_header.php */
         main {
             max-width: 900px;
             margin: 2rem auto;
