@@ -487,6 +487,10 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
             align-items: center;
             gap: 0.75rem;
         }
+        .doc-list-toggle-row {
+            display: flex;
+            align-items: center;
+        }
         .edit-toggle-btn {
             border: none;
             background: transparent;
@@ -571,6 +575,7 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $viewUrl     = 'admin_documents.php' . ($baseQuery ? '?' . $baseQuery : '');
         $editUrl     = 'admin_documents.php' . ($baseQuery ? '?' . $baseQuery . '&edit=1' : '?edit=1');
         $editMode    = $canEdit && isset($_GET['edit']) && $_GET['edit'] === '1';
+        $hideListForStudent = !$canEdit && ($currentDocKey !== '' || $currentCustomId > 0);
         ?>
         <div class="doc-header-row">
             <h2 style="margin:0;">מסמכים</h2>
@@ -586,6 +591,11 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="flash notice"><?= htmlspecialchars($notice, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
 
+        <?php if (!$hideListForStudent): ?>
+        <div class="doc-list-toggle-row" style="margin-bottom:0.5rem;">
+            <button type="button" class="btn secondary" id="doc_list_toggle_btn" aria-expanded="true">הסתר רשימת מסמכים</button>
+        </div>
+        <div id="documents_list_panel" class="doc-list-panel">
         <h3 style="margin:0 0 0.5rem 0;font-size:1rem;color:#374151;">רשימת מסמכים</h3>
         <div class="doc-table-wrap">
             <table class="doc-table">
@@ -705,6 +715,9 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 </tbody>
             </table>
         </div>
+        </div><!-- #documents_list_panel -->
+        <?php endif; ?>
+
         <form id="revert_version_form" method="post" action="admin_documents.php" style="display:none;">
             <input type="hidden" name="action" value="revert_version">
             <input type="hidden" name="doc_type" id="revert_doc_type" value="">
@@ -914,6 +927,26 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
         document.querySelectorAll('.version-trigger').forEach(function(t) { t.setAttribute('aria-expanded', 'false'); });
     });
 })();
+
+    (function() {
+        var btn = document.getElementById('doc_list_toggle_btn');
+        var panel = document.getElementById('documents_list_panel');
+        if (!btn || !panel) return;
+        var key = 'gf_doc_list_visible';
+        var saved = sessionStorage.getItem(key);
+        var visible = saved !== null ? saved === '1' : true;
+        function apply() {
+            panel.style.display = visible ? '' : 'none';
+            btn.setAttribute('aria-expanded', visible ? 'true' : 'false');
+            btn.textContent = visible ? 'הסתר רשימת מסמכים' : 'הצג רשימת מסמכים';
+            sessionStorage.setItem(key, visible ? '1' : '0');
+        }
+        apply();
+        btn.addEventListener('click', function() {
+            visible = !visible;
+            apply();
+        });
+    })();
 </script>
 </body>
 </html>
