@@ -157,9 +157,23 @@ function initialize_database(PDO $pdo): void
             slug TEXT NOT NULL UNIQUE,
             content TEXT NOT NULL,
             created_at TEXT NOT NULL,
-            updated_at TEXT
+            updated_at TEXT,
+            version_number INTEGER NOT NULL DEFAULT 1
         )
     ");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS document_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_type TEXT NOT NULL,
+            doc_ref TEXT NOT NULL,
+            content TEXT NOT NULL,
+            version_number INTEGER NOT NULL,
+            created_at TEXT NOT NULL
+        )");
+    try {
+        $pdo->exec("ALTER TABLE documents_custom ADD COLUMN version_number INTEGER NOT NULL DEFAULT 1");
+    } catch (Throwable $e) {
+        // column may already exist
+    }
 
     // טבלת רכיבי ציוד (Item components)
     $pdo->exec("

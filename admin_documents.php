@@ -58,13 +58,92 @@ if (!$canEdit && $currentDocKey === 'consent_form') {
     $currentDocKey = '';
 }
 
-// קריאת מסמכים מותאמים אישית מה-DB
+// קריאת מסמכים מותאמים אישית מה-DB (כולל תאריכים וגירסה)
 $customDocs = [];
 try {
-    $stmt = $pdo->query('SELECT id, title FROM documents_custom ORDER BY title ASC');
+    $stmt = $pdo->query('SELECT id, title, created_at, updated_at, version_number FROM documents_custom ORDER BY title ASC');
     $customDocs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 } catch (Throwable $e) {
-    $customDocs = [];
+    $stmt = $pdo->query('SELECT id, title, created_at, updated_at FROM documents_custom ORDER BY title ASC');
+    $customDocs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    foreach ($customDocs as &$c) {
+        $c['version_number'] = 1;
+    }
+    unset($c);
+}
+
+// מטא-דאטה לגרסאות מסמכים מובנים (תאריך יצירה, עדכון, גירסה נוכחית)
+$builtinMeta = [];
+try {
+    foreach (array_keys($documents) as $bKey) {
+        $st = $pdo->prepare("SELECT MIN(created_at) AS created_at, MAX(created_at) AS updated_at, COALESCE(MAX(version_number), 0) AS version_number FROM document_versions WHERE doc_type = 'builtin' AND doc_ref = ?");
+        $st->execute([$bKey]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        $builtinMeta[$bKey] = [
+            'created_at'   => $row['created_at'] ?? null,
+            'updated_at'   => $row['updated_at'] ?? null,
+            'version_number' => max(1, (int)($row['version_number'] ?? 0)),
+        ];
+    }
+} catch (Throwable $e) {
+    foreach (array_keys($documents) as $bKey) {
+        $builtinMeta[$bKey] = ['created_at' => null, 'updated_at' => null, 'version_number' => 1];
+    }
+}
+
+// רשימת גרסאות לכל מסמך (לתפריט חזרה לגירסה)
+$versionsByDoc = [];
+try {
+    $stV = $pdo->query("SELECT doc_type, doc_ref, version_number, created_at FROM document_versions ORDER BY doc_type, doc_ref, version_number DESC");
+    while ($r = $stV->fetch(PDO::FETCH_ASSOC)) {
+        $k = $r['doc_type'] . ':' . $r['doc_ref'];
+        if (!isset($versionsByDoc[$k])) {
+            $versionsByDoc[$k] = [];
+        }
+        $versionsByDoc[$k][] = ['version_number' => (int)$r['version_number'], 'created_at' => $r['created_at'] ?? ''];
+    }
+} catch (Throwable $e) {
+    $versionsByDoc = [];
+}
+
+// טיפול בחזרה לגירסה קודמת
+if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'revert_version') {
+    $docType = $_POST['doc_type'] ?? '';
+    $docRef  = $_POST['doc_ref'] ?? '';
+    $verNum  = (int)($_POST['version_number'] ?? 0);
+    if ($docType !== '' && $docRef !== '' && $verNum >= 1) {
+        $st = $pdo->prepare("SELECT content FROM document_versions WHERE doc_type = ? AND doc_ref = ? AND version_number = ?");
+        $st->execute([$docType, $docRef, $verNum]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if ($row && isset($row['content'])) {
+            $content = $row['content'];
+            if ($docType === 'builtin' && isset($documents[$docRef])) {
+                file_put_contents($documents[$docRef]['file'], $content);
+                $documents[$docRef]['content'] = $content;
+                $stNext = $pdo->prepare("SELECT COALESCE(MAX(version_number), 0) + 1 AS n FROM document_versions WHERE doc_type = 'builtin' AND doc_ref = ?");
+                $stNext->execute([$docRef]);
+                $next = (int)$stNext->fetch(PDO::FETCH_ASSOC)['n'];
+                $pdo->prepare("INSERT INTO document_versions (doc_type, doc_ref, content, version_number, created_at) VALUES ('builtin', ?, ?, ?, ?)")->execute([$docRef, $content, $next, date('Y-m-d H:i:s')]);
+                $notice = 'המסמך הוחזר לגירסה ' . $verNum . '.';
+                header('Location: admin_documents.php?doc=' . urlencode($docRef));
+                exit;
+            }
+            if ($docType === 'custom') {
+                $cid = (int)$docRef;
+                if ($cid > 0) {
+                    $stNext = $pdo->prepare("SELECT COALESCE(MAX(version_number), 0) + 1 AS n FROM document_versions WHERE doc_type = 'custom' AND doc_ref = ?");
+                    $stNext->execute([(string)$cid]);
+                    $next = (int)$stNext->fetch(PDO::FETCH_ASSOC)['n'];
+                    $now = date('Y-m-d H:i:s');
+                    $pdo->prepare("INSERT INTO document_versions (doc_type, doc_ref, content, version_number, created_at) VALUES ('custom', ?, ?, ?, ?)")->execute([(string)$cid, $content, $next, $now]);
+                    $pdo->prepare('UPDATE documents_custom SET content = ?, updated_at = ?, version_number = ? WHERE id = ?')->execute([$content, $now, $next, $cid]);
+                    $notice = 'המסמך הוחזר לגירסה ' . $verNum . '.';
+                    header('Location: admin_documents.php?custom_id=' . $cid);
+                    exit;
+                }
+            }
+        }
+    }
 }
 
 // טיפול בשמירה / יצירה / מחיקה – רק למנהלים
@@ -89,6 +168,18 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             if ($error === '') {
+                $stVer = $pdo->prepare("SELECT COALESCE(MAX(version_number), 0) + 1 AS next_ver FROM document_versions WHERE doc_type = 'builtin' AND doc_ref = ?");
+                $stVer->execute([$docKey]);
+                $nextVer = (int)$stVer->fetch(PDO::FETCH_ASSOC)['next_ver'];
+                if ($nextVer < 1) {
+                    $nextVer = 1;
+                }
+                $pdo->prepare("INSERT INTO document_versions (doc_type, doc_ref, content, version_number, created_at) VALUES ('builtin', ?, ?, ?, ?)")->execute([
+                    $docKey,
+                    $content,
+                    $nextVer,
+                    date('Y-m-d H:i:s'),
+                ]);
                 file_put_contents($documents[$docKey]['file'], $content);
                 $documents[$docKey]['content'] = $content;
                 $notice = 'המסמך "' . $documents[$docKey]['title'] . '" נשמר בהצלחה.';
@@ -111,25 +202,36 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             try {
                 if ($action === 'create_custom') {
+                    $now = date('Y-m-d H:i:s');
                     $stmt = $pdo->prepare('INSERT INTO documents_custom (title, slug, content, created_at) VALUES (:title, :slug, :content, :created_at)');
                     $stmt->execute([
                         ':title'      => $title,
                         ':slug'       => $slug,
                         ':content'    => $content,
-                        ':created_at' => date('Y-m-d H:i:s'),
+                        ':created_at' => $now,
                     ]);
                     $newId = (int)$pdo->lastInsertId();
+                    $pdo->prepare("INSERT INTO document_versions (doc_type, doc_ref, content, version_number, created_at) VALUES ('custom', ?, ?, 1, ?)")->execute([(string)$newId, $content, $now]);
                     $notice = 'המסמך נוצר ונשמר בהצלחה.';
                     header('Location: admin_documents.php?custom_id=' . $newId);
                     exit;
                 }
                 if ($action === 'update_custom' && $id > 0) {
-                    $stmt = $pdo->prepare('UPDATE documents_custom SET title = :title, content = :content, updated_at = :updated_at WHERE id = :id');
+                    $stVer = $pdo->prepare("SELECT COALESCE(MAX(version_number), 0) + 1 AS next_ver FROM document_versions WHERE doc_type = 'custom' AND doc_ref = ?");
+                    $stVer->execute([(string)$id]);
+                    $nextVer = (int)$stVer->fetch(PDO::FETCH_ASSOC)['next_ver'];
+                    if ($nextVer < 1) {
+                        $nextVer = 1;
+                    }
+                    $now = date('Y-m-d H:i:s');
+                    $pdo->prepare("INSERT INTO document_versions (doc_type, doc_ref, content, version_number, created_at) VALUES ('custom', ?, ?, ?, ?)")->execute([(string)$id, $content, $nextVer, $now]);
+                    $stmt = $pdo->prepare('UPDATE documents_custom SET title = :title, content = :content, updated_at = :updated_at, version_number = :version_number WHERE id = :id');
                     $stmt->execute([
-                        ':title'      => $title,
-                        ':content'    => $content,
-                        ':updated_at' => date('Y-m-d H:i:s'),
-                        ':id'         => $id,
+                        ':title'          => $title,
+                        ':content'        => $content,
+                        ':updated_at'     => $now,
+                        ':version_number' => $nextVer,
+                        ':id'             => $id,
                     ]);
                     $notice = 'המסמך עודכן בהצלחה.';
                     header('Location: admin_documents.php?custom_id=' . $id);
@@ -363,6 +465,45 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
             background: #ecfdf3;
             color: #166534;
         }
+        .doc-date { white-space: nowrap; font-size: 0.85rem; color: #6b7280; }
+        .doc-version-cell { white-space: nowrap; }
+        .version-dropdown-wrap { position: relative; display: inline-block; }
+        .version-trigger {
+            background: none;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.85rem;
+            cursor: pointer;
+            color: #374151;
+        }
+        .version-trigger:hover { background: #f3f4f6; border-color: #9ca3af; }
+        .version-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 2px;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            min-width: 180px;
+            max-height: 220px;
+            overflow-y: auto;
+            z-index: 50;
+        }
+        .version-dropdown .version-option {
+            display: block;
+            width: 100%;
+            text-align: right;
+            padding: 0.4rem 0.75rem;
+            border: none;
+            background: none;
+            font-size: 0.85rem;
+            cursor: pointer;
+            color: #374151;
+        }
+        .version-dropdown .version-option:hover { background: #f3f4f6; }
         .doc-header-row {
             display: flex;
             justify-content: space-between;
@@ -476,6 +617,9 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     <th>#</th>
                     <th>שם המסמך</th>
                     <th>סוג</th>
+                    <th>תאריך יצירה</th>
+                    <th>תאריך עדכון</th>
+                    <th>גירסה</th>
                     <th>פעולות</th>
                 </tr>
                 </thead>
@@ -488,11 +632,31 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     $isSelected = ($key === $currentDocKey && $currentCustomId === 0);
                     $viewLink = 'admin_documents.php?doc=' . htmlspecialchars($key, ENT_QUOTES, 'UTF-8');
                     $editLink = 'admin_documents.php?doc=' . htmlspecialchars($key, ENT_QUOTES, 'UTF-8') . '&edit=1';
+                    $meta = $builtinMeta[$key] ?? ['created_at' => null, 'updated_at' => null, 'version_number' => 1];
+                    $verList = $versionsByDoc['builtin:' . $key] ?? [];
                 ?>
                     <tr class="<?= $isSelected ? 'selected' : '' ?>">
                         <td><?= $rowNum ?></td>
                         <td><?= htmlspecialchars($doc['title'], ENT_QUOTES, 'UTF-8') ?></td>
                         <td><span class="badge builtin">מובנה</span></td>
+                        <td class="doc-date"><?= $meta['created_at'] ? date('d/m/Y H:i', strtotime($meta['created_at'])) : '—' ?></td>
+                        <td class="doc-date"><?= $meta['updated_at'] ? date('d/m/Y H:i', strtotime($meta['updated_at'])) : '—' ?></td>
+                        <td class="doc-version-cell">
+                            <?php if ($canEdit && count($verList) > 0): ?>
+                                <div class="version-dropdown-wrap">
+                                    <button type="button" class="version-trigger" data-doc-type="builtin" data-doc-ref="<?= htmlspecialchars($key, ENT_QUOTES, 'UTF-8') ?>" data-current-ver="<?= (int)$meta['version_number'] ?>" aria-haspopup="true" aria-expanded="false">
+                                        גירסה <?= (int)$meta['version_number'] ?> ▾
+                                    </button>
+                                    <div class="version-dropdown" role="menu" hidden>
+                                        <?php foreach ($verList as $v): ?>
+                                            <button type="button" class="version-option" data-version="<?= (int)$v['version_number'] ?>" data-date="<?= htmlspecialchars($v['created_at'], ENT_QUOTES, 'UTF-8') ?>">גירסה <?= (int)$v['version_number'] ?> (<?= $v['created_at'] ? date('d/m/Y H:i', strtotime($v['created_at'])) : '' ?>)</button>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            <?php else: ?>
+                                גירסה <?= max(1, (int)($meta['version_number'] ?? 1)) ?>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <div class="row-actions">
                                 <a href="<?= $viewLink ?>" class="btn-view">צפייה</a>
@@ -509,11 +673,33 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     $isSelected = ($currentCustomId === $cid);
                     $viewLink = 'admin_documents.php?custom_id=' . $cid;
                     $editLink = 'admin_documents.php?custom_id=' . $cid . '&edit=1';
+                    $cCreated = $c['created_at'] ?? null;
+                    $cUpdated = $c['updated_at'] ?? null;
+                    $cVer = (int)($c['version_number'] ?? 1);
+                    $verList = $versionsByDoc['custom:' . $cid] ?? [];
                 ?>
                     <tr class="<?= $isSelected ? 'selected' : '' ?>">
                         <td><?= $rowNum ?></td>
                         <td><?= htmlspecialchars($c['title'], ENT_QUOTES, 'UTF-8') ?></td>
                         <td><span class="badge custom">מותאם אישית</span></td>
+                        <td class="doc-date"><?= $cCreated ? date('d/m/Y H:i', strtotime($cCreated)) : '—' ?></td>
+                        <td class="doc-date"><?= $cUpdated ? date('d/m/Y H:i', strtotime($cUpdated)) : '—' ?></td>
+                        <td class="doc-version-cell">
+                            <?php if ($canEdit && count($verList) > 0): ?>
+                                <div class="version-dropdown-wrap">
+                                    <button type="button" class="version-trigger" data-doc-type="custom" data-doc-ref="<?= $cid ?>" data-current-ver="<?= $cVer ?>" aria-haspopup="true" aria-expanded="false">
+                                        גירסה <?= $cVer ?> ▾
+                                    </button>
+                                    <div class="version-dropdown" role="menu" hidden>
+                                        <?php foreach ($verList as $v): ?>
+                                            <button type="button" class="version-option" data-version="<?= (int)$v['version_number'] ?>" data-date="<?= htmlspecialchars($v['created_at'], ENT_QUOTES, 'UTF-8') ?>">גירסה <?= (int)$v['version_number'] ?> (<?= $v['created_at'] ? date('d/m/Y H:i', strtotime($v['created_at'])) : '' ?>)</button>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            <?php else: ?>
+                                גירסה <?= $cVer ?>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <div class="row-actions">
                                 <a href="<?= $viewLink ?>" class="btn-view">צפייה</a>
@@ -532,6 +718,12 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 </tbody>
             </table>
         </div>
+        <form id="revert_version_form" method="post" action="admin_documents.php" style="display:none;">
+            <input type="hidden" name="action" value="revert_version">
+            <input type="hidden" name="doc_type" id="revert_doc_type" value="">
+            <input type="hidden" name="doc_ref" id="revert_doc_ref" value="">
+            <input type="hidden" name="version_number" id="revert_version_number" value="">
+        </form>
 
         <?php if ($canEdit && isset($_GET['new']) && (int)$_GET['new'] === 1): ?>
             <hr style="border:0;border-top:1px solid #e5e7eb;margin:1.5rem 0 0.75rem;">
@@ -695,6 +887,47 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
     </div>
 </main>
+<script>
+(function() {
+    var form = document.getElementById('revert_version_form');
+    if (!form) return;
+    document.addEventListener('click', function(ev) {
+        var wrap = ev.target.closest('.version-dropdown-wrap');
+        if (wrap) {
+            var menu = wrap.querySelector('.version-dropdown');
+            var trigger = wrap.querySelector('.version-trigger');
+            if (ev.target === trigger || trigger.contains(ev.target)) {
+                document.querySelectorAll('.version-dropdown').forEach(function(m) { m.hidden = true; });
+                menu.hidden = !menu.hidden;
+                trigger.setAttribute('aria-expanded', menu.hidden ? 'false' : 'true');
+                return;
+            }
+            if (menu && menu.contains(ev.target)) {
+                var opt = ev.target.closest('.version-option');
+                if (opt) {
+                    var ver = opt.getAttribute('data-version');
+                    var docType = trigger.getAttribute('data-doc-type');
+                    var docRef = trigger.getAttribute('data-doc-ref');
+                    var currentVer = parseInt(trigger.getAttribute('data-current-ver'), 10);
+                    if (ver && parseInt(ver, 10) !== currentVer) {
+                        if (confirm('האם בטוח שברצונך לחזור לגירסה ' + ver + '?')) {
+                            form.querySelector('#revert_doc_type').value = docType;
+                            form.querySelector('#revert_doc_ref').value = docRef;
+                            form.querySelector('#revert_version_number').value = ver;
+                            form.submit();
+                        }
+                    }
+                    menu.hidden = true;
+                    trigger.setAttribute('aria-expanded', 'false');
+                }
+                return;
+            }
+        }
+        document.querySelectorAll('.version-dropdown').forEach(function(m) { m.hidden = true; });
+        document.querySelectorAll('.version-trigger').forEach(function(t) { t.setAttribute('aria-expanded', 'false'); });
+    });
+})();
+</script>
 </body>
 </html>
 
