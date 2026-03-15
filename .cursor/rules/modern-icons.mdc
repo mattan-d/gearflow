@@ -1,0 +1,46 @@
+---
+description: Use a modern icon set consistently across the site (Hebrew RTL UI)
+globs: "**/*.php"
+alwaysApply: false
+---
+
+# Modern Icons Across the Site
+
+Use a single, modern icon library for all UI icons. Prefer **Lucide** or **Heroicons** (SVG) for consistency and accessibility.
+
+## How to Add Icons
+
+1. **Include the library once** (e.g. in a shared header or layout):
+   - Lucide: `<script src="https://unpkg.com/lucide@latest"></script>` then `lucide.createIcons();`
+   - Or inline SVG from [Lucide](https://lucide.dev) / [Heroicons](https://heroicons.com) copied into the page.
+
+2. **Mark decorative icons** so screen readers skip them:
+   ```html
+   <i data-lucide="user" aria-hidden="true"></i>
+   ```
+   Or for inline SVG:
+   ```html
+   <svg aria-hidden="true" class="w-5 h-5" ...>...</svg>
+   ```
+
+3. **When the icon is the only label** (e.g. icon-only button), give it an accessible name:
+   ```html
+   <button type="submit" aria-label="כניסה">
+     <i data-lucide="log-in" aria-hidden="true"></i>
+   </button>
+   ```
+
+## Do Not
+
+- Use emoji as the primary UI control (e.g. 🔑 for login). Emoji are OK for decorative or status only.
+- Mix multiple icon sets on the same page.
+- Omit `aria-hidden="true"` on purely decorative icons.
+
+## Example (RTL-friendly)
+
+```html
+<span class="nav-item">
+  <i data-lucide="package" aria-hidden="true"></i>
+  <span>ניהול ציוד</span>
+</span>
+```

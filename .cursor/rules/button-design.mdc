@@ -1,0 +1,41 @@
+---
+description: Use a fixed, consistent button design across the site
+globs: "**/*.php"
+alwaysApply: false
+---
+
+# Consistent Button Design
+
+Use the same button classes on every page. Do not define new one-off button styles per file.
+
+## Standard Classes
+
+| Class | Use |
+|-------|-----|
+| `btn` | Primary action (submit, save, confirm) |
+| `btn secondary` | Secondary / cancel / back |
+| `btn small` | Inline row actions, tables |
+| `btn danger` | Delete, destructive actions |
+
+## Markup
+
+- Use `<button type="submit">` for form submit, `<button type="button">` for non-submit actions.
+- Combine modifiers: `class="btn small secondary"`, `class="btn small danger"`.
+
+```html
+<!-- ✅ GOOD: standard classes -->
+<button type="submit" class="btn">שמירה</button>
+<a href="admin_users.php" class="btn secondary">ביטול</a>
+<button type="submit" class="btn small danger">מחיקה</button>
+
+<!-- ❌ BAD: custom one-off style -->
+<button style="background: #ccc;">שמירה</button>
+<button class="my-special-btn">מחיקה</button>
+```
+
+## Styling
+
+- Base: `border: none`, `border-radius: 999px`, primary gradient for `.btn`.
+- Secondary: neutral gray (`#e5e7eb`), dark text.
+- Danger: red (`#ef4444`).
+- When adding a new variant, add it to a shared place (e.g. `admin_header.php` or a global CSS) and reuse; do not duplicate per page.
