@@ -24,15 +24,15 @@ if (is_file($designFile)) {
     }
 }
 
-// תבניות צבע ברמת מערכת (פסטל + ברירת מחדל) – צבע אחד לכל המערכת (Header + Footer)
+// תבניות צבע ברמת מערכת – רקע + צבע טקסט/קישורים מותאם לניגודיות
 $colorTemplates = [
-    'default'     => ['color' => '#111827', 'name' => 'ברירת מחדל (כהה)'],
-    'pastel_blue' => ['color' => '#5B8FB9', 'name' => 'פסטל כחול'],
-    'pastel_green'=> ['color' => '#5A9B8E', 'name' => 'פסטל ירוק־מנטה'],
-    'pastel_pink' => ['color' => '#C97B84', 'name' => 'פסטל ורוד'],
-    'pastel_lavender'=> ['color' => '#8B7B9E', 'name' => 'פסטל סגול'],
-    'pastel_peach' => ['color' => '#C4956A', 'name' => 'פסטל אפרסק'],
-    'pastel_sage'  => ['color' => '#6B9B7A', 'name' => 'פסטל ירוק־עשב'],
+    'default'        => ['color' => '#111827', 'text' => '#f9fafb', 'link' => '#e5e7eb', 'muted' => '#9ca3af', 'name' => 'ברירת מחדל (כהה)'],
+    'pastel_blue'    => ['color' => '#5B8FB9', 'text' => '#f9fafb', 'link' => '#e5e7eb', 'muted' => '#bfdbfe', 'name' => 'פסטל כחול'],
+    'pastel_green'   => ['color' => '#5A9B8E', 'text' => '#f9fafb', 'link' => '#e5e7eb', 'muted' => '#a7f3d0', 'name' => 'פסטל ירוק־מנטה'],
+    'pastel_pink'    => ['color' => '#C97B84', 'text' => '#1f2937', 'link' => '#374151', 'muted' => '#4b5563', 'name' => 'פסטל ורוד'],
+    'pastel_lavender'=> ['color' => '#8B7B9E', 'text' => '#f9fafb', 'link' => '#e5e7eb', 'muted' => '#c4b5d4', 'name' => 'פסטל סגול'],
+    'pastel_peach'   => ['color' => '#C4956A', 'text' => '#1f2937', 'link' => '#374151', 'muted' => '#4b5563', 'name' => 'פסטל אפרסק'],
+    'pastel_sage'    => ['color' => '#6B9B7A', 'text' => '#f9fafb', 'link' => '#e5e7eb', 'muted' => '#a7f3d0', 'name' => 'פסטל ירוק־עשב'],
 ];
 
 $success = '';
@@ -43,9 +43,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['template']) && is_string($_POST['template'])) {
         $templateId = $_POST['template'];
         if (isset($colorTemplates[$templateId])) {
-            $color = $colorTemplates[$templateId]['color'];
-            $design['header_bg'] = $color;
-            $design['footer_bg'] = $color;
+            $tpl = $colorTemplates[$templateId];
+            $design['header_bg'] = $tpl['color'];
+            $design['footer_bg'] = $tpl['color'];
+            $design['header_text'] = $tpl['text'];
+            $design['footer_text'] = $tpl['text'];
+            $design['header_link'] = $tpl['link'];
+            $design['header_muted'] = $tpl['muted'];
             $design['template'] = $templateId;
             file_put_contents($designFile, json_encode($design, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
             $success = 'תבנית הצבעים נשמרה בהצלחה.';
