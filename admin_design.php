@@ -24,31 +24,33 @@ if (is_file($designFile)) {
     }
 }
 
-// אפשרויות צבע כהות
-$colorOptions = [
-    '#111827' => 'שחור כהה',
-    '#1e3a8a' => 'כחול כהה',
-    '#064e3b' => 'ירוק כהה',
-    '#7f1d1d' => 'אדום כהה',
-    '#1f2937' => 'אפור כהה',
+// תבניות צבע ברמת מערכת (פסטל + ברירת מחדל) – צבע אחד לכל המערכת (Header + Footer)
+$colorTemplates = [
+    'default'     => ['color' => '#111827', 'name' => 'ברירת מחדל (כהה)'],
+    'pastel_blue' => ['color' => '#5B8FB9', 'name' => 'פסטל כחול'],
+    'pastel_green'=> ['color' => '#5A9B8E', 'name' => 'פסטל ירוק־מנטה'],
+    'pastel_pink' => ['color' => '#C97B84', 'name' => 'פסטל ורוד'],
+    'pastel_lavender'=> ['color' => '#8B7B9E', 'name' => 'פסטל סגול'],
+    'pastel_peach' => ['color' => '#C4956A', 'name' => 'פסטל אפרסק'],
+    'pastel_sage'  => ['color' => '#6B9B7A', 'name' => 'פסטל ירוק־עשב'],
 ];
 
 $success = '';
 $error   = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // בחירת צבעים ע"י כפתורי הצבע
-    if (isset($_POST['header_color']) || isset($_POST['footer_color'])) {
-        $headerColor = $_POST['header_color'] ?? $design['header_bg'];
-        $footerColor = $_POST['footer_color'] ?? $design['footer_bg'];
-
-        if (!isset($colorOptions[$headerColor]) || !isset($colorOptions[$footerColor])) {
-            $error = 'נבחר צבע לא תקין.';
-        } else {
-            $design['header_bg'] = $headerColor;
-            $design['footer_bg'] = $footerColor;
+    // בחירת תבנית צבעים
+    if (isset($_POST['template']) && is_string($_POST['template'])) {
+        $templateId = $_POST['template'];
+        if (isset($colorTemplates[$templateId])) {
+            $color = $colorTemplates[$templateId]['color'];
+            $design['header_bg'] = $color;
+            $design['footer_bg'] = $color;
+            $design['template'] = $templateId;
             file_put_contents($designFile, json_encode($design, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
-            $success = 'הגדרות העיצוב נשמרו בהצלחה.';
+            $success = 'תבנית הצבעים נשמרה בהצלחה.';
+        } else {
+            $error = 'תבנית לא תקינה.';
         }
     }
 
@@ -249,6 +251,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-color: #facc15;
             box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.6);
         }
+        .template-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+        }
+        .template-swatch {
+            border: 2px solid transparent;
+            border-radius: 12px;
+            padding: 0.75rem 0.5rem;
+            cursor: pointer;
+            min-height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #fff;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .template-swatch:hover {
+            border-color: rgba(255,255,255,0.6);
+        }
+        .template-swatch.selected {
+            border-color: #facc15;
+            box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.6);
+        }
+        .template-name {
+            text-align: center;
+            line-height: 1.2;
+        }
         .color-label {
             font-size: 0.8rem;
             color: #4b5563;
@@ -318,38 +352,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
 
         <div class="color-section">
-            <label>צבע Header (תפריט עליון)</label>
+            <label>תבנית צבעים (מערכת)</label>
+            <p class="muted-small" style="margin:0.25rem 0 0.5rem;">בחירת תבנית אחת מחילה צבע אחיד על כל המערכת (תפריט עליון ותחתית).</p>
             <form method="post" action="admin_design.php">
-                <div class="color-row">
-                    <?php foreach ($colorOptions as $value => $label): ?>
+                <div class="template-grid">
+                    <?php
+                    $currentTemplate = $design['template'] ?? null;
+                    $currentColor = $design['header_bg'] ?? $defaultDesign['header_bg'];
+                    foreach ($colorTemplates as $id => $tpl):
+                        $isSelected = ($currentTemplate === $id) || ($currentTemplate === null && $currentColor === $tpl['color']);
+                    ?>
                         <button type="submit"
-                                name="header_color"
-                                value="<?= htmlspecialchars($value, ENT_QUOTES, 'UTF-8') ?>"
-                                class="color-swatch<?= $design['header_bg'] === $value ? ' selected' : '' ?>"
-                                style="background: <?= htmlspecialchars($value, ENT_QUOTES, 'UTF-8') ?>;"
-                                title="<?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?>">
+                                name="template"
+                                value="<?= htmlspecialchars($id, ENT_QUOTES, 'UTF-8') ?>"
+                                class="template-swatch<?= $isSelected ? ' selected' : '' ?>"
+                                style="background: <?= htmlspecialchars($tpl['color'], ENT_QUOTES, 'UTF-8') ?>;"
+                                title="<?= htmlspecialchars($tpl['name'], ENT_QUOTES, 'UTF-8') ?>">
+                            <span class="template-name"><?= htmlspecialchars($tpl['name'], ENT_QUOTES, 'UTF-8') ?></span>
                         </button>
                     <?php endforeach; ?>
                 </div>
-                <div class="color-label muted-small">לחץ על צבע כדי לעדכן את ה-Header מיד.</div>
-            </form>
-        </div>
-
-        <div class="color-section">
-            <label>צבע Footer (תחתית העמוד)</label>
-            <form method="post" action="admin_design.php">
-                <div class="color-row">
-                    <?php foreach ($colorOptions as $value => $label): ?>
-                        <button type="submit"
-                                name="footer_color"
-                                value="<?= htmlspecialchars($value, ENT_QUOTES, 'UTF-8') ?>"
-                                class="color-swatch<?= $design['footer_bg'] === $value ? ' selected' : '' ?>"
-                                style="background: <?= htmlspecialchars($value, ENT_QUOTES, 'UTF-8') ?>;"
-                                title="<?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?>">
-                        </button>
-                    <?php endforeach; ?>
-                </div>
-                <div class="color-label muted-small">לחץ על צבע כדי לעדכן את ה-Footer מיד.</div>
+                <div class="color-label muted-small">לחץ על תבנית כדי להחיל אותה על כל המערכת.</div>
             </form>
         </div>
 
@@ -380,7 +403,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
 
         <p class="muted-small" style="margin-top:1rem;">
-            הערה: ניתן לבחור רק צבעים כהים מאוד, כדי לשמור על ניגודיות טובה וקריאות גבוהה.
+            התבניות כוללות צבעי פסטל וברירת מחדל כהה. הצבע שנבחר מוחל על כל המערכת.
         </p>
     </div>
 </main>
