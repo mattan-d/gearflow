@@ -66,22 +66,9 @@ try {
     $customDocs = [];
 }
 
-// התראות – קריאה / מחיקה
+// התראות – קריאה בלבד (מחיקה מטופלת ב־notification_action.php כדי למנוע headers already sent)
 $userId = isset($me['id']) ? (int)$me['id'] : 0;
-if ($userId > 0 && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['notif_action'])) {
-    $action = $_POST['notif_action'];
-    if ($action === 'delete' && isset($_POST['notif_id'])) {
-        $nid = (int)$_POST['notif_id'];
-        $stmtDel = $pdo->prepare('DELETE FROM notifications WHERE id = :id AND (user_id = :uid OR (user_id IS NULL AND role = :role))');
-        $stmtDel->execute([':id' => $nid, ':uid' => $userId, ':role' => $role]);
-    } elseif ($action === 'delete_all') {
-        $stmtDelAll = $pdo->prepare('DELETE FROM notifications WHERE user_id = :uid OR (user_id IS NULL AND role = :role)');
-        $stmtDelAll->execute([':uid' => $userId, ':role' => $role]);
-    }
-    // לאחר פעולה נחזור לאותו דף כדי למנוע שליחת טופס חוזרת
-    header('Location: ' . ($_SERVER['REQUEST_URI'] ?? 'admin.php'));
-    exit;
-}
+$notifRedirectUri = $_SERVER['REQUEST_URI'] ?? 'admin.php';
 
 // טעינת התראות להצגה
 $notifications = [];
@@ -429,8 +416,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="notif-header">
                         <span>התראות</span>
                         <?php if ($unreadCount > 0 || !empty($notifications)): ?>
-                            <form method="post" action="" style="margin:0;">
+                            <form method="post" action="notification_action.php" style="margin:0;">
                                 <input type="hidden" name="notif_action" value="delete_all">
+                                <input type="hidden" name="redirect" value="<?= htmlspecialchars($notifRedirectUri, ENT_QUOTES, 'UTF-8') ?>">
                                 <button type="submit">מחק את כל ההתראות</button>
                             </form>
                         <?php endif; ?>
@@ -452,9 +440,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                             <?= htmlspecialchars($n['message'] ?? '', ENT_QUOTES, 'UTF-8') ?>
                                         <?php endif; ?>
                                     </div>
-                                    <form method="post" action="">
+                                    <form method="post" action="notification_action.php">
                                         <input type="hidden" name="notif_action" value="delete">
                                         <input type="hidden" name="notif_id" value="<?= (int)($n['id'] ?? 0) ?>">
+                                        <input type="hidden" name="redirect" value="<?= htmlspecialchars($notifRedirectUri, ENT_QUOTES, 'UTF-8') ?>">
                                         <button type="submit" title="מחיקת התראה" aria-label="מחיקת התראה"><i data-lucide="x" aria-hidden="true"></i></button>
                                     </form>
                                 </div>
