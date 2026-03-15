@@ -151,19 +151,25 @@ if ($userId > 0) {
         border-radius: 8px;
         padding: 0.4rem 0.6rem;
         display: none;
-        min-width: 170px;
+        min-width: 100%;
+        width: max-content;
         z-index: 30;
         color: var(--gf-header-text);
     }
     .main-nav-sub a {
         display: block;
-        padding: 0.35rem 0.5rem;
+        padding: 0.35rem 0.6rem;
         font-size: 0.8rem;
         color: var(--gf-header-link);
         transition: color 0.2s ease;
+        text-align: right;
     }
     .main-nav-sub a + a {
         border-top: 1px solid #f3f4f6;
+        margin-right: -0.6rem;
+        margin-left: -0.6rem;
+        padding-right: 0.6rem;
+        padding-left: 0.6rem;
     }
     .main-nav-sub a:hover {
         color: var(--gf-header-text);
