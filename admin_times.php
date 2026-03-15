@@ -150,10 +150,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hours_payload'])) {
             $pdo->commit();
                 header('Location: admin_times.php?warehouse=' . urlencode($selectedWarehouse));
                 exit;
-            }
         } catch (Throwable $e) {
                 $pdo->rollBack();
-            }
+        }
         }
     }
 }
