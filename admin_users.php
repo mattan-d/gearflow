@@ -818,11 +818,13 @@ if (isset($_GET['edit_id'])) {
         </div>
         <div style="display:flex;align-items:center;gap:0.5rem;">
             <a href="admin_users.php?export=1" class="btn secondary">יצוא CSV</a>
-            <form method="post" action="admin_users.php" enctype="multipart/form-data" style="display:inline;">
+            <form method="post" action="admin_users.php" enctype="multipart/form-data" id="users_import_form" style="margin-top:0.5rem;">
                 <input type="hidden" name="action" value="import_csv">
-                <label class="btn btn-file" style="margin:0;">
-                  ייבוא CSV
-                    <input type="file" name="import_file" id="import_file" accept=".csv" required>
+                <label class="file-drop-zone" for="import_file" id="users_import_zone" aria-label="העלאת קובץ CSV לייבוא משתמשים">
+                    <input type="file" name="import_file" id="import_file" accept=".csv" required class="file-drop-input">
+                    <span class="file-drop-icon"><i data-lucide="upload" aria-hidden="true"></i></span>
+                    <span class="file-drop-text">גרור קובץ CSV לכאן או לחץ לבחירה</span>
+                    <span class="file-drop-hint">ייבוא משתמשים מקובץ CSV</span>
                 </label>
             </form>
         </div>

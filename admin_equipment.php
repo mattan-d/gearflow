@@ -1483,11 +1483,13 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         </div>
         <div class="toolbar-left">
             <a href="admin_equipment.php?export=1" class="btn secondary">יצוא רשימת ציוד</a>
-            <form method="post" action="admin_equipment.php" enctype="multipart/form-data" id="equipment_import_form" style="display:inline;">
+            <form method="post" action="admin_equipment.php" enctype="multipart/form-data" id="equipment_import_form" style="margin-top:0.5rem;">
                 <input type="hidden" name="action" value="import">
-                <label class="btn btn-file" style="margin:0; position:relative;">
-                    יבוא רשימת ציוד
-                    <input type="file" name="csv_file" accept=".csv" required id="equipment_csv_file_input">
+                <label class="file-drop-zone" for="equipment_csv_file_input" aria-label="העלאת קובץ CSV ליבוא ציוד">
+                    <input type="file" name="csv_file" accept=".csv" required id="equipment_csv_file_input" class="file-drop-input">
+                    <span class="file-drop-icon"><i data-lucide="upload" aria-hidden="true"></i></span>
+                    <span class="file-drop-text">גרור קובץ CSV לכאן או לחץ לבחירה</span>
+                    <span class="file-drop-hint">ייבוא רשימת ציוד מקובץ CSV</span>
                 </label>
             </form>
         </div>
@@ -1641,9 +1643,13 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                             </div>
                             <input type="hidden" name="delete_picture" id="delete_picture" value="0">
                         <?php endif; ?>
-                        <div style="display:flex;align-items:center;gap:0.5rem;">
-                            <label for="picture_file" class="btn btn-file" style="margin:0;">ייבוא רשימת ציוד</label>
-                            <input type="file" id="picture_file" name="picture_file" accept="image/*" style="position:absolute;width:0.1px;height:0.1px;opacity:0;">
+                        <div class="file-drop-zone-wrap" style="max-width:280px;">
+                            <label class="file-drop-zone" for="picture_file" aria-label="העלאת תמונת פריט">
+                                <input type="file" id="picture_file" name="picture_file" accept="image/*" class="file-drop-input">
+                                <span class="file-drop-icon"><i data-lucide="upload" aria-hidden="true"></i></span>
+                                <span class="file-drop-text">גרור תמונה לכאן או לחץ לבחירה</span>
+                                <span class="file-drop-hint">תמונת פריט (תמונה)</span>
+                            </label>
                         </div>
                     </div>
                     <div>

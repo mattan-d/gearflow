@@ -385,7 +385,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="logo-section">
             <label>לוגו (36×36 פיקסלים)</label>
-            <div style="display:flex;align-items:center;gap:0.75rem;margin-top:0.4rem;">
+            <div style="display:flex;align-items:flex-start;gap:0.75rem;margin-top:0.4rem;flex-wrap:wrap;">
                 <div class="logo-preview">
                     <?php if (!empty($design['logo_path'])): ?>
                         <img src="<?= htmlspecialchars($design['logo_path'], ENT_QUOTES, 'UTF-8') ?>" alt="לוגו מערכת">
@@ -393,14 +393,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <span style="font-size:0.8rem;color:#4b5563;">GF</span>
                     <?php endif; ?>
                 </div>
-                <form method="post" action="admin_design.php" enctype="multipart/form-data" style="display:flex;align-items:center;gap:0.5rem;">
+                <form method="post" action="admin_design.php" enctype="multipart/form-data" style="flex:1;min-width:200px;">
                     <input type="hidden" name="upload_logo" value="1">
-                    <input type="file" id="logo_file" name="logo_file" accept="image/*" style="display:none;" onchange="this.form.submit()">
-                    <label for="logo_file" class="btn btn-file">בחירת קובץ</label>
+                    <label class="file-drop-zone" for="logo_file" aria-label="העלאת תמונת לוגו">
+                        <input type="file" id="logo_file" name="logo_file" accept="image/*" class="file-drop-input" onchange="this.form.submit()">
+                        <span class="file-drop-icon"><i data-lucide="upload" aria-hidden="true"></i></span>
+                        <span class="file-drop-text">גרור קובץ לכאן או לחץ לבחירה</span>
+                        <span class="file-drop-hint">PNG, JPG, GIF או WebP (מומלץ 36×36 פיקסלים)</span>
+                    </label>
                     <?php if (!empty($design['logo_path'])): ?>
-                        <button type="submit" name="remove_logo" value="1" class="logo-remove-x" title="הסר לוגו" aria-label="הסר לוגו">
-                            <i data-lucide="x" aria-hidden="true"></i>
-                        </button>
+                        <div style="margin-top:0.5rem;">
+                            <button type="submit" name="remove_logo" value="1" class="logo-remove-x btn secondary" title="הסר לוגו" aria-label="הסר לוגו">
+                                <i data-lucide="x" aria-hidden="true"></i> הסר לוגו
+                            </button>
+                        </div>
                     <?php endif; ?>
                 </form>
             </div>

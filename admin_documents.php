@@ -267,40 +267,72 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
             background: #e5e7eb;
             color: #111827;
         }
-        .doc-list {
+        .doc-table-wrap {
             margin-top: 1rem;
+            overflow-x: auto;
+        }
+        .doc-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        .doc-table th,
+        .doc-table td {
+            padding: 0.55rem 0.6rem;
+            text-align: right;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .doc-table th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+        }
+        .doc-table tbody tr:hover td {
+            background: #f9fafb;
+        }
+        .doc-table tbody tr.selected td {
+            background: #eef2ff;
+        }
+        .doc-table .row-actions {
             display: flex;
-            gap: 0.5rem;
+            gap: 0.35rem;
             flex-wrap: wrap;
         }
-        .doc-pill {
-            border-radius: 999px;
-            border: 1px solid #d1d5db;
-            padding: 0.3rem 0.8rem;
-            font-size: 0.85rem;
-            cursor: pointer;
-            background: #f9fafb;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.35rem;
-        }
-        .doc-pill.active {
-            background: #111827;
-            color: #f9fafb;
-            border-color: #111827;
-        }
-        .doc-pill .doc-pill-title {
-            color: inherit;
+        .doc-table .row-actions a,
+        .doc-table .row-actions button {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.8rem;
+            border-radius: 6px;
             text-decoration: none;
-        }
-        .doc-pill .doc-pill-delete {
             border: none;
-            background: transparent;
-            color: inherit;
             cursor: pointer;
-            padding: 0 0.2rem;
-            font-size: 0.9rem;
-            line-height: 1;
+            background: #e5e7eb;
+            color: #111827;
+        }
+        .doc-table .row-actions a:hover,
+        .doc-table .row-actions button:hover {
+            background: #d1d5db;
+        }
+        .doc-table .row-actions a.btn-view {
+            background: #4f46e5;
+            color: #fff;
+        }
+        .doc-table .row-actions a.btn-view:hover {
+            background: #4338ca;
+        }
+        .doc-table .badge {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+        }
+        .doc-table .badge.builtin {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        .doc-table .badge.custom {
+            background: #d1fae5;
+            color: #065f46;
         }
         .doc-editor {
             margin-top: 1rem;
