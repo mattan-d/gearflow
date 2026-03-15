@@ -196,6 +196,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'קובץ CSV לא הועלה בהצלחה.';
         } else {
             $tmpPath = $_FILES['csv_file']['tmp_name'];
+            $rawContent = file_get_contents($tmpPath);
+            $encoding = mb_detect_encoding($rawContent, ['UTF-8', 'Windows-1255', 'ISO-8859-8'], true);
+            if ($encoding) {
+                $rawContent = mb_convert_encoding($rawContent, 'UTF-8', $encoding);
+            }
+            $ext = strtolower(pathinfo($_FILES['csv_file']['name'] ?? '', PATHINFO_EXTENSION));
+            $isCsvExt = ($ext === 'csv');
+            $header = null;
+            $rows = [];
+            $delimiter = ',';
+            if ($isCsvExt || true) {
+                $lines = preg_split('/\r\n|\r|\n/', $rawContent);
+                if (count($lines) > 0 && trim($lines[0]) !== '') {
+                    $firstLine = $lines[0];
+                    if (strpos($firstLine, "\t") !== false && strpos($firstLine, ',') === false) {
+                        $delimiter = "\t";
+                    } elseif (strpos($firstLine, ';') !== false && strpos($firstLine, ',') === false) {
+                        $delimiter = ';';
+                    }
+                    $header = str_getcsv($firstLine, $delimiter);
+                    for ($i = 1; $i < count($lines); $i++) {
+                        if (trim($lines[$i]) === '') continue;
+                        $rows[] = str_getcsv($lines[$i], $delimiter);
+                    }
+                }
+            }
+            $notCsv = ($header === null || count($header) < 1);
+            $systemCols = ['name', 'code', 'description', 'category', 'location', 'status'];
+            for ($n = 1; $n <= MAX_EQUIPMENT_COMPONENTS; $n++) {
+                $systemCols[] = 'component_' . $n . '_name';
+            }
+            $requiredCols = ['name', 'code'];
+            $headerNorm = [];
+            if ($header !== null) {
+                foreach ($header as $idx => $col) {
+                    $key = strtolower(trim((string)$col));
+                    if ($key !== '') $headerNorm[$key] = $idx;
+                }
+            }
+            $missingColumns = array_diff($requiredCols, array_keys($headerNorm));
+            $unknownColumns = array_diff(array_keys($headerNorm), $systemCols);
+            $duplicateCodes = [];
+            if (!$notCsv && isset($headerNorm['code'])) {
+                $codeIdx = $headerNorm['code'];
+                $existingCodes = $pdo->query("SELECT code FROM equipment")->fetchAll(PDO::FETCH_COLUMN);
+                $existingSet = array_flip($existingCodes);
+                foreach ($rows as $ri => $row) {
+                    $code = isset($row[$codeIdx]) ? trim((string)$row[$codeIdx]) : '';
+                    if ($code !== '' && isset($existingSet[$code])) {
+                        $duplicateCodes[] = ['row' => $ri, 'code' => $code];
+                    }
+                }
+            }
+            $hasIssues = $notCsv || !empty($missingColumns) || !empty($unknownColumns) || !empty($duplicateCodes);
+            if ($hasIssues) {
+                $_SESSION['import_fix_type'] = 'equipment';
+                $_SESSION['import_fix_headers'] = $header ?: [];
+                $_SESSION['import_fix_rows'] = $rows;
+                $_SESSION['import_fix_raw'] = base64_encode($rawContent);
+                $_SESSION['import_fix_issues'] = [
+                    'not_csv' => $notCsv,
+                    'missing_columns' => array_values($missingColumns),
+                    'unknown_columns' => array_values($unknownColumns),
+                    'duplicate_codes' => $duplicateCodes,
+                ];
+                $_SESSION['import_fix_delimiter'] = $delimiter;
+                header('Location: admin_equipment.php?import_fix=1');
+                exit;
+            }
+
             $handle = fopen($tmpPath, 'r');
             if ($handle === false) {
                 $error = 'לא ניתן לקרוא את קובץ ה-CSV.';
@@ -298,6 +368,145 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
                 }
+            }
+        }
+    } elseif ($action === 'convert_to_csv') {
+        if (isset($_SESSION['import_fix_type']) && $_SESSION['import_fix_type'] === 'equipment' && !empty($_SESSION['import_fix_raw'])) {
+            $raw = base64_decode((string)$_SESSION['import_fix_raw'], true);
+            if ($raw !== false) {
+                $raw = str_replace(["\t", ';'], [',', ','], $raw);
+                $_SESSION['import_fix_raw'] = base64_encode($raw);
+                $lines = preg_split('/\r\n|\r|\n/', $raw);
+                $header = count($lines) > 0 ? str_getcsv($lines[0], ',') : [];
+                $rows = [];
+                for ($i = 1; $i < count($lines); $i++) {
+                    if (trim($lines[$i]) === '') continue;
+                    $rows[] = str_getcsv($lines[$i], ',');
+                }
+                $_SESSION['import_fix_headers'] = $header;
+                $_SESSION['import_fix_rows'] = $rows;
+                $headerNorm = [];
+                foreach ($header as $idx => $col) {
+                    $key = strtolower(trim((string)$col));
+                    if ($key !== '') $headerNorm[$key] = $idx;
+                }
+                $systemCols = ['name', 'code', 'description', 'category', 'location', 'status'];
+                for ($n = 1; $n <= MAX_EQUIPMENT_COMPONENTS; $n++) {
+                    $systemCols[] = 'component_' . $n . '_name';
+                }
+                $requiredCols = ['name', 'code'];
+                $missingColumns = array_diff($requiredCols, array_keys($headerNorm));
+                $unknownColumns = array_diff(array_keys($headerNorm), $systemCols);
+                $duplicateCodes = [];
+                if (isset($headerNorm['code'])) {
+                    $codeIdx = $headerNorm['code'];
+                    $existingCodes = $pdo->query("SELECT code FROM equipment")->fetchAll(PDO::FETCH_COLUMN);
+                    $existingSet = array_flip($existingCodes);
+                    foreach ($rows as $ri => $row) {
+                        $code = isset($row[$codeIdx]) ? trim((string)$row[$codeIdx]) : '';
+                        if ($code !== '' && isset($existingSet[$code])) {
+                            $duplicateCodes[] = ['row' => $ri, 'code' => $code];
+                        }
+                    }
+                }
+                $issues = [
+                    'not_csv' => false,
+                    'missing_columns' => array_values($missingColumns),
+                    'unknown_columns' => array_values($unknownColumns),
+                    'duplicate_codes' => $duplicateCodes,
+                ];
+                $_SESSION['import_fix_issues'] = $issues;
+                if (empty($missingColumns) && empty($unknownColumns) && empty($duplicateCodes)) {
+                    $_SESSION['import_fix_apply_direct'] = true;
+                    header('Location: admin_equipment.php?import_fix=1');
+                    exit;
+                }
+            }
+        }
+        header('Location: admin_equipment.php?import_fix=1');
+        exit;
+    } elseif ($action === 'import_fixed') {
+        if (isset($_SESSION['import_fix_type']) && $_SESSION['import_fix_type'] === 'equipment') {
+            $headers = $_SESSION['import_fix_headers'] ?? [];
+            $rows = $_SESSION['import_fix_rows'] ?? [];
+            $columnMapping = json_decode((string)($_POST['column_mapping'] ?? '{}'), true) ?: [];
+            $missingDefaults = json_decode((string)($_POST['missing_defaults'] ?? '{}'), true) ?: [];
+            $duplicateActions = json_decode((string)($_POST['duplicate_actions'] ?? '{}'), true) ?: [];
+            $headerNorm = [];
+            foreach ($headers as $idx => $col) {
+                $key = strtolower(trim((string)$col));
+                if ($key !== '') $headerNorm[$key] = $idx;
+            }
+            foreach ($columnMapping as $fileCol => $systemCol) {
+                if ($systemCol !== '' && $systemCol !== null && isset($headerNorm[$fileCol])) {
+                    $headerNorm[$systemCol] = $headerNorm[$fileCol];
+                }
+            }
+            $systemCols = ['name', 'code', 'description', 'category', 'location', 'status'];
+            for ($n = 1; $n <= MAX_EQUIPMENT_COMPONENTS; $n++) {
+                $systemCols[] = 'component_' . $n . '_name';
+            }
+            $skipRows = [];
+            foreach ($duplicateActions as $ri => $act) {
+                if (isset($act['action']) && $act['action'] === 'skip') {
+                    $skipRows[(int)$ri] = true;
+                }
+            }
+            $insert = $pdo->prepare(
+                'INSERT INTO equipment (name, code, description, category, location, quantity_total, quantity_available, status, created_at)
+                 VALUES (:name, :code, :description, :category, :location, 1, 1, :status, :created_at)'
+            );
+            $insertComp = $pdo->prepare(
+                'INSERT INTO equipment_components (equipment_id, name, quantity, created_at)
+                 VALUES (:equipment_id, :name, 1, :created_at)'
+            );
+            $now = date('Y-m-d H:i:s');
+            $imported = 0;
+            foreach ($rows as $ri => $row) {
+                if (isset($skipRows[$ri])) continue;
+                $get = function ($col) use ($headerNorm, $row, $missingDefaults) {
+                    $idx = $headerNorm[$col] ?? null;
+                    if ($idx !== null && isset($row[$idx])) return trim((string)$row[$idx]);
+                    return (string)($missingDefaults[$col] ?? '');
+                };
+                $code = $get('code');
+                if (isset($duplicateActions[$ri]['action']) && $duplicateActions[$ri]['action'] === 'replace' && isset($duplicateActions[$ri]['newCode'])) {
+                    $code = trim((string)$duplicateActions[$ri]['newCode']);
+                }
+                $name = $get('name');
+                if ($name === '' || $code === '') continue;
+                try {
+                    $insert->execute([
+                        ':name' => $name,
+                        ':code' => $code,
+                        ':description' => $get('description'),
+                        ':category' => $get('category'),
+                        ':location' => $get('location'),
+                        ':quantity_total' => 1,
+                        ':quantity_available' => 1,
+                        ':status' => $get('status') ?: 'active',
+                        ':created_at' => $now,
+                    ]);
+                    $newId = (int)$pdo->lastInsertId();
+                    for ($n = 1; $n <= MAX_EQUIPMENT_COMPONENTS; $n++) {
+                        $cName = $get('component_' . $n . '_name');
+                        if ($cName === '') continue;
+                        try {
+                            $insertComp->execute([':equipment_id' => $newId, ':name' => $cName, ':quantity' => 1, ':created_at' => $now]);
+                        } catch (Throwable $e) {}
+                    }
+                    $imported++;
+                } catch (PDOException $e) {
+                    if (!str_contains($e->getMessage(), 'UNIQUE') || !str_contains($e->getMessage(), 'code')) {
+                        $error = $error ?: 'שגיאה בייבוא.';
+                    }
+                }
+            }
+            unset($_SESSION['import_fix_type'], $_SESSION['import_fix_headers'], $_SESSION['import_fix_rows'], $_SESSION['import_fix_raw'], $_SESSION['import_fix_issues'], $_SESSION['import_fix_delimiter']);
+            if ($error === '') {
+                $success = 'ייבוא הושלם. נוספו ' . $imported . ' פריטים.';
+                header('Location: admin_equipment.php?success=' . urlencode($success));
+                exit;
             }
         }
     } elseif ($action === 'bulk_add') {
@@ -425,6 +634,76 @@ if ($componentsEquipmentId > 0) {
         $stmtComp->execute([':eid' => $componentsEquipmentId]);
         $componentsList = $stmtComp->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
+}
+
+$show_import_fix_modal = false;
+$import_fix_data = null;
+if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESSION['import_fix_type'] === 'equipment') {
+    if (!empty($_SESSION['import_fix_apply_direct']) || !empty($_GET['apply'])) {
+        $headers = $_SESSION['import_fix_headers'] ?? [];
+        $rows = $_SESSION['import_fix_rows'] ?? [];
+        $headerNorm = [];
+        foreach ($headers as $idx => $col) {
+            $key = strtolower(trim((string)$col));
+            if ($key !== '') $headerNorm[$key] = $idx;
+        }
+        $insert = $pdo->prepare(
+            'INSERT INTO equipment (name, code, description, category, location, quantity_total, quantity_available, status, created_at)
+             VALUES (:name, :code, :description, :category, :location, 1, 1, :status, :created_at)'
+        );
+        $insertComp = $pdo->prepare(
+            'INSERT INTO equipment_components (equipment_id, name, quantity, created_at)
+             VALUES (:equipment_id, :name, 1, :created_at)'
+        );
+        $now = date('Y-m-d H:i:s');
+        $imported = 0;
+        foreach ($rows as $row) {
+            $get = function ($col) use ($headerNorm, $row) {
+                $idx = $headerNorm[$col] ?? null;
+                return ($idx !== null && isset($row[$idx])) ? trim((string)$row[$idx]) : '';
+            };
+            $name = $get('name');
+            $code = $get('code');
+            if ($name === '' || $code === '') continue;
+            try {
+                $insert->execute([
+                    ':name' => $name, ':code' => $code, ':description' => $get('description'),
+                    ':category' => $get('category'), ':location' => $get('location'),
+                    ':quantity_total' => 1, ':quantity_available' => 1,
+                    ':status' => $get('status') ?: 'active', ':created_at' => $now,
+                ]);
+                $newId = (int)$pdo->lastInsertId();
+                for ($n = 1; $n <= MAX_EQUIPMENT_COMPONENTS; $n++) {
+                    $cName = $get('component_' . $n . '_name');
+                    if ($cName === '') continue;
+                    try {
+                        $insertComp->execute([':equipment_id' => $newId, ':name' => $cName, ':quantity' => 1, ':created_at' => $now]);
+                    } catch (Throwable $e) {}
+                }
+                $imported++;
+            } catch (PDOException $e) {
+                if (!str_contains($e->getMessage(), 'UNIQUE') || !str_contains($e->getMessage(), 'code')) {
+                    $error = $error ?: 'שגיאה בייבוא.';
+                }
+            }
+        }
+        unset($_SESSION['import_fix_type'], $_SESSION['import_fix_headers'], $_SESSION['import_fix_rows'], $_SESSION['import_fix_raw'], $_SESSION['import_fix_issues'], $_SESSION['import_fix_delimiter'], $_SESSION['import_fix_apply_direct']);
+        if ($error === '') {
+            $success = 'ייבוא הושלם. נוספו ' . $imported . ' פריטים.';
+            header('Location: admin_equipment.php?success=' . urlencode($success));
+            exit;
+        }
+    }
+    $show_import_fix_modal = true;
+    $import_fix_data = [
+        'headers' => $_SESSION['import_fix_headers'] ?? [],
+        'rows' => $_SESSION['import_fix_rows'] ?? [],
+        'issues' => $_SESSION['import_fix_issues'] ?? [],
+    ];
+    $import_fix_system_columns = array_merge(
+        ['name', 'code', 'description', 'category', 'location', 'status'],
+        array_map(function ($n) { return 'component_' . $n . '_name'; }, range(1, MAX_EQUIPMENT_COMPONENTS))
+    );
 }
 
 // Reload list after changes + סינון
@@ -1483,10 +1762,136 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         <form method="post" action="admin_equipment.php" enctype="multipart/form-data">
             <input type="hidden" name="action" value="import">
             <label for="csv_file">קובץ CSV</label>
-            <input type="file" id="csv_file" name="csv_file" accept=".csv" required>
+            <input type="file" id="csv_file" name="csv_file" accept=".csv,.txt" required>
             <button type="submit" class="btn">יבוא</button>
         </form>
     </div>
+
+    <?php if ($show_import_fix_modal && $import_fix_data): ?>
+    <div class="modal-backdrop" id="import_fix_modal" style="display: flex;">
+        <div class="modal-card" style="max-width: 95%; width: 640px; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h2>תיקון ייבוא ציוד</h2>
+                <button type="button" class="modal-close" id="import_fix_modal_close" aria-label="סגירה">✕</button>
+            </div>
+            <div id="import_fix_content">
+                <?php $iss = $import_fix_data['issues']; ?>
+                <?php if (!empty($iss['not_csv'])): ?>
+                <div class="import-fix-section">
+                    <p class="flash error">הקובץ אינו בפורמט CSV.</p>
+                    <form method="post" action="admin_equipment.php">
+                        <input type="hidden" name="action" value="convert_to_csv">
+                        <button type="submit" class="btn">המרה ל-CSV</button>
+                    </form>
+                </div>
+                <?php endif; ?>
+                <?php if (!empty($iss['missing_columns'])): ?>
+                <div class="import-fix-section">
+                    <p class="muted-small">טורים חסרים בקובץ – הזן ערך ברירת מחדל:</p>
+                    <?php foreach ($iss['missing_columns'] as $col): ?>
+                    <label style="display:block; margin:0.35rem 0;"><?= htmlspecialchars($col, ENT_QUOTES, 'UTF-8') ?></label>
+                    <input type="text" name="missing_default_<?= htmlspecialchars($col, ENT_QUOTES, 'UTF-8') ?>" class="import-fix-missing" data-col="<?= htmlspecialchars($col, ENT_QUOTES, 'UTF-8') ?>" placeholder="ערך ברירת מחדל" style="width:100%; max-width:280px; padding:0.35rem;">
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+                <?php if (!empty($iss['unknown_columns'])): ?>
+                <div class="import-fix-section">
+                    <p class="muted-small">הטורים הללו קיימים ברשימת הייבוא אך לא במערכת. להמרת טורים:</p>
+                    <?php foreach ($iss['unknown_columns'] as $uc): ?>
+                    <div class="import-fix-map-row" style="display:flex; align-items:center; gap:0.5rem; margin:0.4rem 0;">
+                        <span style="min-width:120px;"><?= htmlspecialchars($uc, ENT_QUOTES, 'UTF-8') ?></span>
+                        <select class="import-fix-map-select" data-file-col="<?= htmlspecialchars($uc, ENT_QUOTES, 'UTF-8') ?>" style="padding:0.35rem; min-width:160px;">
+                            <option value="">— ביטול (התעלם מטור)</option>
+                            <?php foreach ($import_fix_system_columns as $sc): ?>
+                            <option value="<?= htmlspecialchars($sc, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($sc, ENT_QUOTES, 'UTF-8') ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+                <?php if (!empty($iss['duplicate_codes'])): ?>
+                <div class="import-fix-section">
+                    <?php foreach ($iss['duplicate_codes'] as $dc): ?>
+                    <div class="import-fix-dup-row" style="margin:0.5rem 0; padding:0.5rem; background:#f9fafb; border-radius:8px;" data-row="<?= (int)$dc['row'] ?>" data-code="<?= htmlspecialchars($dc['code'], ENT_QUOTES, 'UTF-8') ?>">
+                        <p class="muted-small" style="margin:0 0 0.35rem 0;">המספר <strong><?= htmlspecialchars($dc['code'], ENT_QUOTES, 'UTF-8') ?></strong> כבר קיים במערכת.</p>
+                        <label><input type="radio" name="dup_<?= (int)$dc['row'] ?>" value="replace" class="dup-action-replace"> החלף במספר </label>
+                        <input type="text" class="dup-new-code" placeholder="מספר חדש" style="padding:0.3rem; width:120px; margin:0 0.5rem;">
+                        <label><input type="radio" name="dup_<?= (int)$dc['row'] ?>" value="skip" class="dup-action-skip" checked> דלג על השורה</label>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+                <div class="import-fix-section" style="margin-top:1rem;">
+                    <form method="post" action="admin_equipment.php" id="import_fixed_form">
+                        <input type="hidden" name="action" value="import_fixed">
+                        <input type="hidden" name="column_mapping" id="import_fix_column_mapping" value="">
+                        <input type="hidden" name="missing_defaults" id="import_fix_missing_defaults" value="">
+                        <input type="hidden" name="duplicate_actions" id="import_fix_duplicate_actions" value="">
+                        <button type="submit" class="btn">ייבא קובץ מתוקן</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function() {
+        var systemColumns = <?= json_encode($import_fix_system_columns ?? []) ?>;
+        var unknownColumns = <?= json_encode($iss['unknown_columns'] ?? []) ?>;
+        document.getElementById('import_fixed_form').addEventListener('submit', function(e) {
+            var mapping = {};
+            document.querySelectorAll('.import-fix-map-select').forEach(function(sel) {
+                var fileCol = sel.getAttribute('data-file-col');
+                if (sel.value !== '') mapping[fileCol] = sel.value;
+            });
+            var missing = {};
+            document.querySelectorAll('.import-fix-missing').forEach(function(inp) {
+                var col = inp.getAttribute('data-col');
+                if (col && inp.value.trim() !== '') missing[col] = inp.value.trim();
+            });
+            var dups = {};
+            document.querySelectorAll('.import-fix-dup-row').forEach(function(row) {
+                var ri = row.getAttribute('data-row');
+                var replaceRadio = row.querySelector('.dup-action-replace');
+                var skipRadio = row.querySelector('.dup-action-skip');
+                var newCodeInp = row.querySelector('.dup-new-code');
+                if (skipRadio && skipRadio.checked) {
+                    dups[ri] = { action: 'skip' };
+                } else if (replaceRadio && replaceRadio.checked && newCodeInp && newCodeInp.value.trim() !== '') {
+                    dups[ri] = { action: 'replace', newCode: newCodeInp.value.trim() };
+                } else {
+                    dups[ri] = { action: 'skip' };
+                }
+            });
+            document.getElementById('import_fix_column_mapping').value = JSON.stringify(mapping);
+            document.getElementById('import_fix_missing_defaults').value = JSON.stringify(missing);
+            document.getElementById('import_fix_duplicate_actions').value = JSON.stringify(dups);
+        });
+        function updateMapSelectOptions() {
+            var used = {};
+            document.querySelectorAll('.import-fix-map-select').forEach(function(s) {
+                if (s.value !== '') used[s.value] = true;
+            });
+            document.querySelectorAll('.import-fix-map-select').forEach(function(s) {
+                var currentVal = s.value;
+                for (var i = 0; i < s.options.length; i++) {
+                    var opt = s.options[i];
+                    if (opt.value === '') continue;
+                    opt.disabled = used[opt.value] && opt.value !== currentVal;
+                }
+            });
+        }
+        document.querySelectorAll('.import-fix-map-select').forEach(function(sel) {
+            sel.addEventListener('change', updateMapSelectOptions);
+        });
+        updateMapSelectOptions();
+        var closeBtn = document.getElementById('import_fix_modal_close');
+        if (closeBtn) closeBtn.addEventListener('click', function() {
+            window.location.href = 'admin_equipment.php';
+        });
+    })();
+    </script>
+    <?php endif; ?>
 
     <?php $showComponentsModal = $componentsEquipment !== null; ?>
     <div class="modal-backdrop" id="components_modal" style="display: <?= $showComponentsModal ? 'flex' : 'none' ?>;">
