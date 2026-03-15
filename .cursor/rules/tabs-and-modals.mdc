@@ -1,0 +1,43 @@
+---
+description: Preserve active tab when opening and closing modals (save or cancel)
+globs: "**/*.php"
+alwaysApply: false
+---
+
+# טאבים וחלונות קופצים – חזרה לאותו טאב
+
+כאשר במסך יש **טאבים** ופותחים **חלון קופץ** (מודאל) – אחרי סגירת החלון (שמירה או ביטול) המשתמש חייב לחזור **לאותו טאב** שהיה פעיל לפני פתיחת החלון.
+
+## עקרונות
+
+1. **לפני פתיחת המודאל** – לשמור את הטאב הנוכחי (פרמטר `tab` ב-URL, או `current_tab` בטופס).
+2. **בסגירת המודאל** – אחרי שמירה או ביטול, להפנות/לעדכן כך שהדף יוצג עם **אותו טאב** (לא לחזור לברירת מחדל של הטאב הראשון).
+
+## דוגמאות
+
+```php
+// ✅ GOOD: שמירת הטאב בטופס ובהפניה
+<form method="post" action="admin_orders.php">
+    <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+    ...
+</form>
+// אחרי POST מוצלח:
+header('Location: admin_orders.php?tab=' . urlencode($currentTab));
+```
+
+```php
+// ✅ GOOD: פתיחת עריכה עם טאב בקישור, החזרה עם אותו טאב
+<a href="admin_orders.php?edit_id=<?= $id ?>&tab=<?= urlencode($tab) ?>">עריכה</a>
+// אחרי שמירה:
+header('Location: admin_orders.php?tab=' . urlencode($_POST['current_tab'] ?? 'pending'));
+```
+
+```javascript
+// ✅ GOOD: סגירת מודאל בלי ניווט – הדף נשאר עם אותו טאב (ה-URL כבר מכיל ?tab=...)
+modal.close();
+```
+
+## מה להימנע
+
+- אחרי שמירה/ביטול של חלון קופץ – **לא** להפנות לדף בלי פרמטר טאב או עם טאב ברירת מחדל בלבד.
+- **לא** לאבד את `tab` או `current_tab` כשנשלח טופס מתוך המודאל.

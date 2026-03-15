@@ -352,7 +352,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <header style="background: <?= htmlspecialchars($headerBg, ENT_QUOTES, 'UTF-8') ?>; color: <?= htmlspecialchars($headerText, ENT_QUOTES, 'UTF-8') ?>;">
     <div>
         <div style="display:flex;align-items:center;gap:0.75rem;">
-            <div class="header-logo-wrap" style="min-width:36px;height:36px;border-radius:10px;background:transparent;display:flex;align-items:center;justify-content:center;color:<?= htmlspecialchars($headerText, ENT_QUOTES, 'UTF-8') ?>;font-weight:700;font-size:0.85rem;box-shadow:0 4px 12px rgba(0,0,0,0.35);">
+            <div class="header-logo-wrap" style="min-width:36px;height:36px;border-radius:10px;background:transparent;display:flex;align-items:center;justify-content:center;color:<?= htmlspecialchars($headerText, ENT_QUOTES, 'UTF-8') ?>;font-weight:700;font-size:0.85rem;">
                 <?php if ($logoPath !== ''): ?>
                     <img src="<?= htmlspecialchars($logoPath, ENT_QUOTES, 'UTF-8') ?>" alt="לוגו" style="height:100%;max-width:100%;width:auto;object-fit:contain;border-radius:10px;">
                 <?php else: ?>

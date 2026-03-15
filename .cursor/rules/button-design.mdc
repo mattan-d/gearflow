@@ -39,3 +39,9 @@ Use the same button classes on every page. Do not define new one-off button styl
 - Secondary: neutral gray (`#e5e7eb`), dark text.
 - Danger: red (`#ef4444`).
 - When adding a new variant, add it to a shared place (e.g. `admin_header.php` or a global CSS) and reuse; do not duplicate per page.
+
+## Padding ו־גודל פונט – אחידים לכל כפתורי המערכת
+
+- **Padding** ו-**גודל פונט (font-size)** חייבים להיות **זהים** לכל כפתורי המערכת (`.btn`, `.btn secondary`, `.btn small`, `.btn danger`, `.btn-file` וכו').
+- להגדיר את הערכים **פעם אחת** במחלקת הבסיס (למשל `.btn` ב־`admin_header.php` או ב־CSS גלובלי) ולהוריש למודיפיירים; **לא** להגדיר padding או font-size שונה בכפתור בודד או בעמוד בודד.
+- אם נדרש גודל שונה (למשל לכפתורים קטנים בשורה) – להשתמש במודיפייר מוגדר (כמו `.btn.small`) עם ערכים קבועים, לא ערכים אד־הוק.
