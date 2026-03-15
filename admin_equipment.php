@@ -197,9 +197,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $tmpPath = $_FILES['csv_file']['tmp_name'];
             $rawContent = file_get_contents($tmpPath);
-            $encoding = mb_detect_encoding($rawContent, ['UTF-8', 'Windows-1255', 'ISO-8859-8'], true);
-            if ($encoding) {
-                $rawContent = mb_convert_encoding($rawContent, 'UTF-8', $encoding);
+            $encoding = @mb_detect_encoding($rawContent, ['UTF-8', 'ISO-8859-1', 'ASCII'], true);
+            if ($encoding && $encoding !== 'UTF-8') {
+                $converted = @mb_convert_encoding($rawContent, 'UTF-8', $encoding);
+                if ($converted !== false) {
+                    $rawContent = $converted;
+                }
             }
             $ext = strtolower(pathinfo($_FILES['csv_file']['name'] ?? '', PATHINFO_EXTENSION));
             $isCsvExt = ($ext === 'csv');
@@ -1432,6 +1435,9 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         }
         .main-nav-item-wrapper:hover .main-nav-sub {
             display: block;
+        }
+        .import-fix-section {
+            margin-bottom: 1rem;
         }
         footer {
             background: var(--gf-footer-bg, #111827);

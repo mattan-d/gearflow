@@ -154,6 +154,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'יש לבחור קובץ CSV לייבוא.';
         } else {
             $tmpName = $_FILES['import_file']['tmp_name'];
+            $rawContent = file_get_contents($tmpName);
+            $encoding = @mb_detect_encoding($rawContent, ['UTF-8', 'ISO-8859-1', 'ASCII'], true);
+            if ($encoding && $encoding !== 'UTF-8') {
+                $converted = @mb_convert_encoding($rawContent, 'UTF-8', $encoding);
+                if ($converted !== false) {
+                    $rawContent = $converted;
+                }
+            }
+            $lines = preg_split('/\r\n|\r|\n/', $rawContent);
+            $delimiter = ',';
+            if (count($lines) > 0 && trim($lines[0]) !== '') {
+                $firstLine = $lines[0];
+                if (strpos($firstLine, "\t") !== false && strpos($firstLine, ',') === false) {
+                    $delimiter = "\t";
+                } elseif (strpos($firstLine, ';') !== false && strpos($firstLine, ',') === false) {
+                    $delimiter = ';';
+                }
+            }
+            $header = count($lines) > 0 ? str_getcsv($lines[0], $delimiter) : null;
+            $rows = [];
+            for ($i = 1; $i < count($lines); $i++) {
+                if (trim($lines[$i]) === '') continue;
+                $rows[] = str_getcsv($lines[$i], $delimiter);
+            }
+            $notCsv = ($header === null || count($header) < 1);
+            $systemCols = ['username', 'password', 'role', 'first_name', 'last_name', 'warehouse', 'email', 'phone', 'is_active'];
+            $requiredCols = ['username'];
+            $headerNorm = [];
+            if ($header !== null) {
+                foreach ($header as $idx => $col) {
+                    $key = strtolower(trim((string)$col));
+                    if ($key !== '') $headerNorm[$key] = $idx;
+                }
+            }
+            $missingColumns = array_diff($requiredCols, array_keys($headerNorm));
+            $unknownColumns = array_diff(array_keys($headerNorm), $systemCols);
+            $duplicateUsernames = [];
+            if (!$notCsv && isset($headerNorm['username'])) {
+                $userIdx = $headerNorm['username'];
+                $existing = $pdo->query("SELECT username FROM users")->fetchAll(PDO::FETCH_COLUMN);
+                $existingSet = array_flip($existing);
+                foreach ($rows as $ri => $row) {
+                    $u = isset($row[$userIdx]) ? trim((string)$row[$userIdx]) : '';
+                    if ($u !== '' && isset($existingSet[$u])) {
+                        $duplicateUsernames[] = ['row' => $ri, 'username' => $u];
+                    }
+                }
+            }
+            $hasIssues = $notCsv || !empty($missingColumns) || !empty($unknownColumns) || !empty($duplicateUsernames);
+            if ($hasIssues) {
+                $_SESSION['import_fix_type'] = 'users';
+                $_SESSION['import_fix_headers'] = $header ?: [];
+                $_SESSION['import_fix_rows'] = $rows;
+                $_SESSION['import_fix_raw'] = base64_encode($rawContent);
+                $_SESSION['import_fix_issues'] = [
+                    'not_csv' => $notCsv,
+                    'missing_columns' => array_values($missingColumns),
+                    'unknown_columns' => array_values($unknownColumns),
+                    'duplicate_usernames' => $duplicateUsernames,
+                ];
+                $_SESSION['import_fix_delimiter'] = $delimiter;
+                header('Location: admin_users.php?import_fix=1');
+                exit;
+            }
+
             $handle = fopen($tmpName, 'r');
             if ($handle === false) {
                 $error = 'לא ניתן לקרוא את קובץ ה-CSV.';
@@ -277,7 +342,189 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+    } elseif ($action === 'convert_to_csv') {
+        if (isset($_SESSION['import_fix_type']) && $_SESSION['import_fix_type'] === 'users' && !empty($_SESSION['import_fix_raw'])) {
+            $raw = base64_decode((string)$_SESSION['import_fix_raw'], true);
+            if ($raw !== false) {
+                $raw = str_replace(["\t", ';'], [',', ','], $raw);
+                $_SESSION['import_fix_raw'] = base64_encode($raw);
+                $lines = preg_split('/\r\n|\r|\n/', $raw);
+                $header = count($lines) > 0 ? str_getcsv($lines[0], ',') : [];
+                $rows = [];
+                for ($i = 1; $i < count($lines); $i++) {
+                    if (trim($lines[$i]) === '') continue;
+                    $rows[] = str_getcsv($lines[$i], ',');
+                }
+                $_SESSION['import_fix_headers'] = $header;
+                $_SESSION['import_fix_rows'] = $rows;
+                $headerNorm = [];
+                foreach ($header as $idx => $col) {
+                    $key = strtolower(trim((string)$col));
+                    if ($key !== '') $headerNorm[$key] = $idx;
+                }
+                $systemCols = ['username', 'password', 'role', 'first_name', 'last_name', 'warehouse', 'email', 'phone', 'is_active'];
+                $requiredCols = ['username'];
+                $missingColumns = array_diff($requiredCols, array_keys($headerNorm));
+                $unknownColumns = array_diff(array_keys($headerNorm), $systemCols);
+                $duplicateUsernames = [];
+                if (isset($headerNorm['username'])) {
+                    $userIdx = $headerNorm['username'];
+                    $existing = $pdo->query("SELECT username FROM users")->fetchAll(PDO::FETCH_COLUMN);
+                    $existingSet = array_flip($existing);
+                    foreach ($rows as $ri => $row) {
+                        $u = isset($row[$userIdx]) ? trim((string)$row[$userIdx]) : '';
+                        if ($u !== '' && isset($existingSet[$u])) {
+                            $duplicateUsernames[] = ['row' => $ri, 'username' => $u];
+                        }
+                    }
+                }
+                $_SESSION['import_fix_issues'] = [
+                    'not_csv' => false,
+                    'missing_columns' => array_values($missingColumns),
+                    'unknown_columns' => array_values($unknownColumns),
+                    'duplicate_usernames' => $duplicateUsernames,
+                ];
+                if (empty($missingColumns) && empty($unknownColumns) && empty($duplicateUsernames)) {
+                    $_SESSION['import_fix_apply_direct'] = true;
+                }
+            }
+        }
+        header('Location: admin_users.php?import_fix=1');
+        exit;
+    } elseif ($action === 'import_fixed') {
+        if (isset($_SESSION['import_fix_type']) && $_SESSION['import_fix_type'] === 'users') {
+            $headers = $_SESSION['import_fix_headers'] ?? [];
+            $rows = $_SESSION['import_fix_rows'] ?? [];
+            $columnMapping = json_decode((string)($_POST['column_mapping'] ?? '{}'), true) ?: [];
+            $missingDefaults = json_decode((string)($_POST['missing_defaults'] ?? '{}'), true) ?: [];
+            $duplicateActions = json_decode((string)($_POST['duplicate_actions'] ?? '{}'), true) ?: [];
+            $headerNorm = [];
+            foreach ($headers as $idx => $col) {
+                $key = strtolower(trim((string)$col));
+                if ($key !== '') $headerNorm[$key] = $idx;
+            }
+            foreach ($columnMapping as $fileCol => $systemCol) {
+                if ($systemCol !== '' && $systemCol !== null && isset($headerNorm[$fileCol])) {
+                    $headerNorm[$systemCol] = $headerNorm[$fileCol];
+                }
+            }
+            $skipRows = [];
+            foreach ($duplicateActions as $ri => $act) {
+                if (isset($act['action']) && $act['action'] === 'skip') {
+                    $skipRows[(int)$ri] = true;
+                }
+            }
+            $imported = 0;
+            $updated = 0;
+            foreach ($rows as $ri => $row) {
+                if (isset($skipRows[$ri])) continue;
+                $get = function ($col) use ($headerNorm, $row, $missingDefaults) {
+                    $idx = $headerNorm[$col] ?? null;
+                    if ($idx !== null && isset($row[$idx])) return trim((string)$row[$idx]);
+                    return (string)($missingDefaults[$col] ?? '');
+                };
+                $username = $get('username');
+                if ($username === '') continue;
+                $password = $get('password');
+                $role = $get('role') ?: 'student';
+                if (!in_array($role, ['admin', 'warehouse_manager', 'student'], true)) $role = 'student';
+                $firstName = $get('first_name');
+                $lastName = $get('last_name');
+                $warehouse = $get('warehouse');
+                $email = $get('email');
+                $phone = $get('phone');
+                $isActive = $get('is_active');
+                $activeVal = ($isActive === '0' || strtolower($isActive) === 'no') ? 0 : 1;
+                $stmt = $pdo->prepare('SELECT id FROM users WHERE username = :u LIMIT 1');
+                $stmt->execute([':u' => $username]);
+                $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+                if ($existing) {
+                    $id = (int)$existing['id'];
+                    if ($password !== '') {
+                        $upd = $pdo->prepare('UPDATE users SET role=:role, first_name=:first_name, last_name=:last_name, warehouse=:warehouse, email=:email, phone=:phone, is_active=:is_active, password_hash=:password_hash WHERE id=:id');
+                        $upd->execute([':role'=>$role, ':first_name'=>$firstName, ':last_name'=>$lastName, ':warehouse'=>$warehouse, ':email'=>$email, ':phone'=>$phone, ':is_active'=>$activeVal, ':password_hash'=>password_hash($password, PASSWORD_DEFAULT), ':id'=>$id]);
+                    } else {
+                        $upd = $pdo->prepare('UPDATE users SET role=:role, first_name=:first_name, last_name=:last_name, warehouse=:warehouse, email=:email, phone=:phone, is_active=:is_active WHERE id=:id');
+                        $upd->execute([':role'=>$role, ':first_name'=>$firstName, ':last_name'=>$lastName, ':warehouse'=>$warehouse, ':email'=>$email, ':phone'=>$phone, ':is_active'=>$activeVal, ':id'=>$id]);
+                    }
+                    $updated++;
+                } else {
+                    if ($password === '') continue;
+                    $ins = $pdo->prepare('INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, email, phone, created_at) VALUES (:username, :password_hash, :role, :is_active, :first_name, :last_name, :warehouse, :email, :phone, :created_at)');
+                    $ins->execute([':username'=>$username, ':password_hash'=>password_hash($password, PASSWORD_DEFAULT), ':role'=>$role, ':is_active'=>$activeVal, ':first_name'=>$firstName, ':last_name'=>$lastName, ':warehouse'=>$warehouse, ':email'=>$email, ':phone'=>$phone, ':created_at'=>date('Y-m-d H:i:s')]);
+                    $imported++;
+                }
+            }
+            unset($_SESSION['import_fix_type'], $_SESSION['import_fix_headers'], $_SESSION['import_fix_rows'], $_SESSION['import_fix_raw'], $_SESSION['import_fix_issues'], $_SESSION['import_fix_delimiter']);
+            $_SESSION['admin_users_success'] = 'ייבוא הושלם. נוספו ' . $imported . ' משתמשים, עודכנו ' . $updated . ' משתמשים.';
+            header('Location: admin_users.php');
+            exit;
+        }
     }
+}
+
+$show_import_fix_modal = false;
+$import_fix_data_users = null;
+if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESSION['import_fix_type'] === 'users') {
+    if (!empty($_SESSION['import_fix_apply_direct']) || !empty($_GET['apply'])) {
+        $headers = $_SESSION['import_fix_headers'] ?? [];
+        $rows = $_SESSION['import_fix_rows'] ?? [];
+        $headerNorm = [];
+        foreach ($headers as $idx => $col) {
+            $key = strtolower(trim((string)$col));
+            if ($key !== '') $headerNorm[$key] = $idx;
+        }
+        $imported = 0;
+        $updated = 0;
+        foreach ($rows as $row) {
+            $get = function ($col) use ($headerNorm, $row) {
+                $idx = $headerNorm[$col] ?? null;
+                return ($idx !== null && isset($row[$idx])) ? trim((string)$row[$idx]) : '';
+            };
+            $username = $get('username');
+            if ($username === '') continue;
+            $password = $get('password');
+            $role = $get('role') ?: 'student';
+            if (!in_array($role, ['admin', 'warehouse_manager', 'student'], true)) $role = 'student';
+            $firstName = $get('first_name');
+            $lastName = $get('last_name');
+            $warehouse = $get('warehouse');
+            $email = $get('email');
+            $phone = $get('phone');
+            $isActive = $get('is_active');
+            $activeVal = ($isActive === '0' || strtolower($isActive) === 'no') ? 0 : 1;
+            $stmt = $pdo->prepare('SELECT id FROM users WHERE username = :u LIMIT 1');
+            $stmt->execute([':u' => $username]);
+            $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($existing) {
+                $id = (int)$existing['id'];
+                if ($password !== '') {
+                    $upd = $pdo->prepare('UPDATE users SET role=:role, first_name=:first_name, last_name=:last_name, warehouse=:warehouse, email=:email, phone=:phone, is_active=:is_active, password_hash=:password_hash WHERE id=:id');
+                    $upd->execute([':role'=>$role, ':first_name'=>$firstName, ':last_name'=>$lastName, ':warehouse'=>$warehouse, ':email'=>$email, ':phone'=>$phone, ':is_active'=>$activeVal, ':password_hash'=>password_hash($password, PASSWORD_DEFAULT), ':id'=>$id]);
+                } else {
+                    $upd = $pdo->prepare('UPDATE users SET role=:role, first_name=:first_name, last_name=:last_name, warehouse=:warehouse, email=:email, phone=:phone, is_active=:is_active WHERE id=:id');
+                    $upd->execute([':role'=>$role, ':first_name'=>$firstName, ':last_name'=>$lastName, ':warehouse'=>$warehouse, ':email'=>$email, ':phone'=>$phone, ':is_active'=>$activeVal, ':id'=>$id]);
+                }
+                $updated++;
+            } else {
+                if ($password === '') continue;
+                $ins = $pdo->prepare('INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, email, phone, created_at) VALUES (:username, :password_hash, :role, :is_active, :first_name, :last_name, :warehouse, :email, :phone, :created_at)');
+                $ins->execute([':username'=>$username, ':password_hash'=>password_hash($password, PASSWORD_DEFAULT), ':role'=>$role, ':is_active'=>$activeVal, ':first_name'=>$firstName, ':last_name'=>$lastName, ':warehouse'=>$warehouse, ':email'=>$email, ':phone'=>$phone, ':created_at'=>date('Y-m-d H:i:s')]);
+                $imported++;
+            }
+        }
+        unset($_SESSION['import_fix_type'], $_SESSION['import_fix_headers'], $_SESSION['import_fix_rows'], $_SESSION['import_fix_raw'], $_SESSION['import_fix_issues'], $_SESSION['import_fix_delimiter'], $_SESSION['import_fix_apply_direct']);
+        $_SESSION['admin_users_success'] = 'ייבוא הושלם. נוספו ' . $imported . ' משתמשים, עודכנו ' . $updated . ' משתמשים.';
+        header('Location: admin_users.php');
+        exit;
+    }
+    $show_import_fix_modal = true;
+    $import_fix_data_users = [
+        'headers' => $_SESSION['import_fix_headers'] ?? [],
+        'rows' => $_SESSION['import_fix_rows'] ?? [],
+        'issues' => $_SESSION['import_fix_issues'] ?? [],
+    ];
+    $import_fix_system_columns_users = ['username', 'password', 'role', 'first_name', 'last_name', 'warehouse', 'email', 'phone', 'is_active'];
 }
 
 $nameFilter = trim((string)($_GET['q'] ?? ''));
@@ -485,6 +732,9 @@ if (isset($_GET['edit_id'])) {
             background: #fef2f2;
             color: #b91c1c;
         }
+        .import-fix-section {
+            margin-bottom: 1rem;
+        }
         .flash.success {
             background: #ecfdf3;
             color: #166534;
@@ -616,11 +866,126 @@ if (isset($_GET['edit_id'])) {
                 <input type="hidden" name="action" value="import_csv">
                 <label class="btn secondary" style="cursor:pointer; margin:0;">
                     יבוא CSV
-                    <input type="file" name="import_file" id="import_file" accept=".csv" required style="display:none;">
+                    <input type="file" name="import_file" id="import_file" accept=".csv,.txt" required style="display:none;">
                 </label>
             </form>
         </div>
     </div>
+
+    <?php if ($show_import_fix_modal && $import_fix_data_users): $iss = $import_fix_data_users['issues']; ?>
+    <div class="modal-backdrop" id="import_fix_modal" style="display: flex;">
+        <div class="modal-card" style="max-width: 95%; width: 640px; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h2>תיקון ייבוא משתמשים</h2>
+                <button type="button" class="modal-close" id="import_fix_modal_close" aria-label="סגירה">✕</button>
+            </div>
+            <div id="import_fix_content">
+                <?php if (!empty($iss['not_csv'])): ?>
+                <div class="import-fix-section">
+                    <p class="flash error">הקובץ אינו בפורמט CSV.</p>
+                    <form method="post" action="admin_users.php">
+                        <input type="hidden" name="action" value="convert_to_csv">
+                        <button type="submit" class="btn">המרה ל-CSV</button>
+                    </form>
+                </div>
+                <?php endif; ?>
+                <?php if (!empty($iss['missing_columns'])): ?>
+                <div class="import-fix-section">
+                    <p class="muted-small">טורים חסרים בקובץ – הזן ערך ברירת מחדל:</p>
+                    <?php foreach ($iss['missing_columns'] as $col): ?>
+                    <label style="display:block; margin:0.35rem 0;"><?= htmlspecialchars($col, ENT_QUOTES, 'UTF-8') ?></label>
+                    <input type="text" name="missing_default_<?= htmlspecialchars($col, ENT_QUOTES, 'UTF-8') ?>" class="import-fix-missing" data-col="<?= htmlspecialchars($col, ENT_QUOTES, 'UTF-8') ?>" placeholder="ערך ברירת מחדל" style="width:100%; max-width:280px; padding:0.35rem;">
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+                <?php if (!empty($iss['unknown_columns'])): ?>
+                <div class="import-fix-section">
+                    <p class="muted-small">הטורים הללו קיימים ברשימת הייבוא אך לא במערכת. להמרת טורים:</p>
+                    <?php foreach ($iss['unknown_columns'] as $uc): ?>
+                    <div class="import-fix-map-row" style="display:flex; align-items:center; gap:0.5rem; margin:0.4rem 0;">
+                        <span style="min-width:120px;"><?= htmlspecialchars($uc, ENT_QUOTES, 'UTF-8') ?></span>
+                        <select class="import-fix-map-select" data-file-col="<?= htmlspecialchars($uc, ENT_QUOTES, 'UTF-8') ?>" style="padding:0.35rem; min-width:160px;">
+                            <option value="">— ביטול (התעלם מטור)</option>
+                            <?php foreach ($import_fix_system_columns_users as $sc): ?>
+                            <option value="<?= htmlspecialchars($sc, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($sc, ENT_QUOTES, 'UTF-8') ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+                <?php if (!empty($iss['duplicate_usernames'])): ?>
+                <div class="import-fix-section">
+                    <?php foreach ($iss['duplicate_usernames'] as $du): ?>
+                    <div class="import-fix-dup-row" style="margin:0.5rem 0; padding:0.5rem; background:#f9fafb; border-radius:8px;" data-row="<?= (int)$du['row'] ?>" data-username="<?= htmlspecialchars($du['username'], ENT_QUOTES, 'UTF-8') ?>">
+                        <p class="muted-small" style="margin:0 0 0.35rem 0;">המשתמש <strong><?= htmlspecialchars($du['username'], ENT_QUOTES, 'UTF-8') ?></strong> כבר קיים במערכת.</p>
+                        <label><input type="radio" name="dup_<?= (int)$du['row'] ?>" value="update" class="dup-action-update" checked> עדכן משתמש קיים</label>
+                        <label style="margin-right:0.75rem;"><input type="radio" name="dup_<?= (int)$du['row'] ?>" value="skip" class="dup-action-skip"> דלג על השורה</label>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+                <div class="import-fix-section" style="margin-top:1rem;">
+                    <form method="post" action="admin_users.php" id="import_fixed_form">
+                        <input type="hidden" name="action" value="import_fixed">
+                        <input type="hidden" name="column_mapping" id="import_fix_column_mapping" value="">
+                        <input type="hidden" name="missing_defaults" id="import_fix_missing_defaults" value="">
+                        <input type="hidden" name="duplicate_actions" id="import_fix_duplicate_actions" value="">
+                        <button type="submit" class="btn">ייבא קובץ מתוקן</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function() {
+        var unknownColumns = <?= json_encode($iss['unknown_columns'] ?? []) ?>;
+        document.getElementById('import_fixed_form').addEventListener('submit', function(e) {
+            var mapping = {};
+            document.querySelectorAll('.import-fix-map-select').forEach(function(sel) {
+                var fileCol = sel.getAttribute('data-file-col');
+                if (sel.value !== '') mapping[fileCol] = sel.value;
+            });
+            var missing = {};
+            document.querySelectorAll('.import-fix-missing').forEach(function(inp) {
+                var col = inp.getAttribute('data-col');
+                if (col && inp.value.trim() !== '') missing[col] = inp.value.trim();
+            });
+            var dups = {};
+            document.querySelectorAll('.import-fix-dup-row').forEach(function(row) {
+                var ri = row.getAttribute('data-row');
+                var skipRadio = row.querySelector('.dup-action-skip');
+                dups[ri] = (skipRadio && skipRadio.checked) ? { action: 'skip' } : { action: 'update' };
+            });
+            document.getElementById('import_fix_column_mapping').value = JSON.stringify(mapping);
+            document.getElementById('import_fix_missing_defaults').value = JSON.stringify(missing);
+            document.getElementById('import_fix_duplicate_actions').value = JSON.stringify(dups);
+        });
+        function updateMapSelectOptions() {
+            var used = {};
+            document.querySelectorAll('.import-fix-map-select').forEach(function(s) {
+                if (s.value !== '') used[s.value] = true;
+            });
+            document.querySelectorAll('.import-fix-map-select').forEach(function(s) {
+                var currentVal = s.value;
+                for (var i = 0; i < s.options.length; i++) {
+                    var opt = s.options[i];
+                    if (opt.value === '') continue;
+                    opt.disabled = used[opt.value] && opt.value !== currentVal;
+                }
+            });
+        }
+        document.querySelectorAll('.import-fix-map-select').forEach(function(sel) {
+            sel.addEventListener('change', updateMapSelectOptions);
+        });
+        updateMapSelectOptions();
+        var closeBtn = document.getElementById('import_fix_modal_close');
+        if (closeBtn) closeBtn.addEventListener('click', function() {
+            window.location.href = 'admin_users.php';
+        });
+    })();
+    </script>
+    <?php endif; ?>
 
     <?php $showUserModal = $editingUser !== null; ?>
     <div class="modal-backdrop" id="user_modal" style="display: <?= $showUserModal ? 'flex' : 'none' ?>;">
