@@ -820,6 +820,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         }
         .toolbar-buttons {
             display: flex;
+            flex-wrap: wrap;
             gap: 0.5rem;
         }
         .date-picker {
@@ -1136,7 +1137,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
     <div class="toolbar-top">
         <div class="toolbar-buttons">
             <button type="button" class="btn" id="toggle_add_equipment_btn">הוספת פריט ציוד</button>
-            <button type="button" class="btn secondary" id="toggle_bulk_add_btn">הוספת מספר פריטים</button>
+            <button type="button" class="btn" id="toggle_bulk_add_btn" title="הוספת מספר פריטים בבת אחת">הוספת מספר פריטים</button>
             <button type="button" class="btn secondary" id="toggle_import_equipment_btn">יבוא רשימת ציוד</button>
             <a href="admin_equipment.php?export=1" class="btn neutral">יצוא רשימת ציוד</a>
         </div>
