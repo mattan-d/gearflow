@@ -11,10 +11,15 @@ require_once __DIR__ . '/config.php';
 $me = $me ?? current_user();
 $role = $me['role'] ?? 'student';
 
-// הגדרות עיצוב (צבעי Header/Footer)
+// הגדרות עיצוב (צבעי Header/Footer + טקסט)
 $designFile = __DIR__ . '/design_settings.json';
 $headerBg = '#111827';
 $footerBg = '#111827';
+$headerText = '#f9fafb';
+$headerLink = '#e5e7eb';
+$headerMuted = '#9ca3af';
+$footerText = '#f9fafb';
+$footerMuted = '#9ca3af';
 $logoPath = '';
 if (is_file($designFile)) {
     $json = file_get_contents($designFile);
@@ -25,6 +30,25 @@ if (is_file($designFile)) {
         }
         if (!empty($data['footer_bg'])) {
             $footerBg = (string)$data['footer_bg'];
+        }
+        if (!empty($data['header_text'])) {
+            $headerText = (string)$data['header_text'];
+        }
+        if (!empty($data['header_link'])) {
+            $headerLink = (string)$data['header_link'];
+        }
+        if (!empty($data['header_muted'])) {
+            $headerMuted = (string)$data['header_muted'];
+        }
+        if (!empty($data['footer_text'])) {
+            $footerText = (string)$data['footer_text'];
+        } else {
+            $footerText = $headerText;
+        }
+        if (!empty($data['footer_muted'])) {
+            $footerMuted = (string)$data['footer_muted'];
+        } else {
+            $footerMuted = $headerMuted;
         }
         if (!empty($data['logo_path'])) {
             $logoPath = (string)$data['logo_path'];
@@ -77,6 +101,11 @@ if ($userId > 0) {
 <style>
     :root {
         --gf-footer-bg: <?= htmlspecialchars($footerBg, ENT_QUOTES, 'UTF-8') ?>;
+        --gf-footer-text: <?= htmlspecialchars($footerText, ENT_QUOTES, 'UTF-8') ?>;
+        --gf-footer-muted: <?= htmlspecialchars($footerMuted, ENT_QUOTES, 'UTF-8') ?>;
+        --gf-header-text: <?= htmlspecialchars($headerText, ENT_QUOTES, 'UTF-8') ?>;
+        --gf-header-link: <?= htmlspecialchars($headerLink, ENT_QUOTES, 'UTF-8') ?>;
+        --gf-header-muted: <?= htmlspecialchars($headerMuted, ENT_QUOTES, 'UTF-8') ?>;
     }
     .main-nav {
         margin-top: 0.5rem;
@@ -85,9 +114,10 @@ if ($userId > 0) {
         font-size: 0.85rem;
         white-space: nowrap;
         align-items: center;
+        color: var(--gf-header-text);
     }
     .main-nav a {
-        color: #e5e7eb;
+        color: var(--gf-header-link);
         text-decoration: none;
         display: inline-block;
     }
@@ -103,18 +133,20 @@ if ($userId > 0) {
         position: absolute;
         right: 0;
         top: 100%;
-        background: #111827;
+        background: <?= htmlspecialchars($headerBg, ENT_QUOTES, 'UTF-8') ?>;
         border-radius: 8px;
         padding: 0.4rem 0.6rem;
         box-shadow: 0 12px 30px rgba(0,0,0,0.45);
         display: none;
         min-width: 170px;
         z-index: 30;
+        color: var(--gf-header-text);
     }
     .main-nav-sub a {
         display: block;
         padding: 0.25rem 0.2rem;
         font-size: 0.8rem;
+        color: var(--gf-header-link);
     }
     .main-nav-sub a + a {
         margin-top: 0.15rem;
@@ -154,8 +186,8 @@ if ($userId > 0) {
         position: absolute;
         right: -0.5rem;
         top: 130%;
-        background: #111827;
-        color: #f9fafb;
+        background: <?= htmlspecialchars($headerBg, ENT_QUOTES, 'UTF-8') ?>;
+        color: var(--gf-header-text);
         min-width: 260px;
         max-width: 320px;
         border-radius: 10px;
@@ -178,7 +210,7 @@ if ($userId > 0) {
     .notif-header button {
         border: none;
         background: transparent;
-        color: #9ca3af;
+        color: var(--gf-header-muted);
         cursor: pointer;
         font-size: 0.75rem;
     }
@@ -199,7 +231,7 @@ if ($userId > 0) {
         border-bottom: none;
     }
     .notif-item a {
-        color: #e5e7eb;
+        color: var(--gf-header-link);
         text-decoration: none;
     }
     .notif-item a:hover {
@@ -211,7 +243,7 @@ if ($userId > 0) {
     .notif-item button {
         border: none;
         background: transparent;
-        color: #9ca3af;
+        color: var(--gf-header-muted);
         cursor: pointer;
         font-size: 0.8rem;
     }
@@ -243,6 +275,15 @@ if ($userId > 0) {
         width: 1.1em;
         height: 1.1em;
     }
+    header .user-info {
+        color: var(--gf-header-text);
+    }
+    header .user-info a {
+        color: var(--gf-header-link);
+    }
+    header .muted {
+        color: var(--gf-header-muted);
+    }
 </style>
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 <script>
@@ -250,10 +291,10 @@ document.addEventListener('DOMContentLoaded', function() {
     if (window.lucide) lucide.createIcons();
 });
 </script>
-<header style="background: <?= htmlspecialchars($headerBg, ENT_QUOTES, 'UTF-8') ?>;">
+<header style="background: <?= htmlspecialchars($headerBg, ENT_QUOTES, 'UTF-8') ?>; color: <?= htmlspecialchars($headerText, ENT_QUOTES, 'UTF-8') ?>;">
     <div>
         <div style="display:flex;align-items:center;gap:0.75rem;">
-            <div style="min-width:36px;height:36px;border-radius:10px;background:transparent;display:flex;align-items:center;justify-content:center;color:#f9fafb;font-weight:700;font-size:0.85rem;box-shadow:0 4px 10px rgba(0,0,0,0.25);overflow:hidden;">
+            <div style="min-width:36px;height:36px;border-radius:10px;background:transparent;display:flex;align-items:center;justify-content:center;color:<?= htmlspecialchars($headerText, ENT_QUOTES, 'UTF-8') ?>;font-weight:700;font-size:0.85rem;box-shadow:0 4px 10px rgba(0,0,0,0.25);overflow:hidden;">
                 <?php if ($logoPath !== ''): ?>
                     <img src="<?= htmlspecialchars($logoPath, ENT_QUOTES, 'UTF-8') ?>" alt="לוגו" style="height:100%;width:auto;object-fit:contain;">
                 <?php else: ?>

@@ -11,8 +11,11 @@ $me = current_user();
 // קובץ הגדרות עיצוב פשוט (JSON)
 $designFile = __DIR__ . '/design_settings.json';
 $defaultDesign = [
-    'header_bg' => '#111827', // שחור כהה
+    'header_bg' => '#111827',
     'footer_bg' => '#111827',
+    'header_text' => '#f9fafb',
+    'header_link' => '#e5e7eb',
+    'header_muted' => '#9ca3af',
     'logo_path' => '',
 ];
 $design = $defaultDesign;
@@ -332,11 +335,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         footer {
             background: <?= htmlspecialchars($design['footer_bg'], ENT_QUOTES, 'UTF-8') ?>;
-            color: #9ca3af;
+            color: <?= htmlspecialchars($design['footer_text'] ?? $design['header_text'] ?? '#9ca3af', ENT_QUOTES, 'UTF-8') ?>;
             text-align: center;
             padding: 0.75rem 1rem;
             font-size: 0.8rem;
-            border-top: 1px solid #1f2937;
+            border-top: 1px solid rgba(0,0,0,0.15);
         }
     </style>
 </head>
