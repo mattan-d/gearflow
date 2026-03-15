@@ -94,6 +94,27 @@ if ($userId > 0) {
         --gf-header-link: <?= htmlspecialchars($headerLink, ENT_QUOTES, 'UTF-8') ?>;
         --gf-header-muted: <?= htmlspecialchars($headerMuted, ENT_QUOTES, 'UTF-8') ?>;
     }
+    header {
+        padding: 1rem 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: nowrap;
+    }
+    header > div:first-of-type {
+        flex-shrink: 0;
+    }
+    header .user-info {
+        flex-shrink: 0;
+        text-align: left;
+    }
+    header h1 {
+        margin: 0;
+        font-size: 1.3rem;
+    }
+    header .muted {
+        font-size: 0.8rem;
+    }
     .main-nav {
         margin-top: 0.5rem;
         display: flex;
