@@ -442,13 +442,33 @@ if ($equipmentTab === '' || $equipmentTab === 'all') {
     }
 }
 
-// יצוא רשימת ציוד ל-CSV
+// יצוא רשימת ציוד ל-CSV (כולל רכיבי פריט)
 if (isset($_GET['export']) && $_GET['export'] === '1') {
+    $equipmentIds = array_map(function ($item) { return (int)($item['id'] ?? 0); }, $equipmentList);
+    $equipmentIds = array_values(array_filter($equipmentIds));
+    $componentsByEquipment = [];
+    if (!empty($equipmentIds)) {
+        $placeholders = implode(',', array_fill(0, count($equipmentIds), '?'));
+        $stmtComp = $pdo->prepare(
+            "SELECT equipment_id, name, quantity FROM equipment_components WHERE equipment_id IN ($placeholders) ORDER BY equipment_id, name ASC"
+        );
+        $stmtComp->execute($equipmentIds);
+        while ($r = $stmtComp->fetch(PDO::FETCH_ASSOC)) {
+            $eid = (int)$r['equipment_id'];
+            if (!isset($componentsByEquipment[$eid])) {
+                $componentsByEquipment[$eid] = [];
+            }
+            $qty = (int)($r['quantity'] ?? 1);
+            $componentsByEquipment[$eid][] = ($r['name'] ?? '') . ($qty > 1 ? ' (' . $qty . ')' : '');
+        }
+    }
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="equipment-' . date('Ymd-His') . '.csv"');
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['name', 'code', 'description', 'category', 'location', 'status', 'quantity_total', 'quantity_available', 'created_at', 'updated_at']);
+    fputcsv($out, ['name', 'code', 'description', 'category', 'location', 'status', 'quantity_total', 'quantity_available', 'components', 'created_at', 'updated_at']);
     foreach ($equipmentList as $row) {
+        $eid = (int)($row['id'] ?? 0);
+        $componentsStr = isset($componentsByEquipment[$eid]) ? implode(', ', $componentsByEquipment[$eid]) : '';
         fputcsv($out, [
             $row['name'] ?? '',
             $row['code'] ?? '',
@@ -458,6 +478,7 @@ if (isset($_GET['export']) && $_GET['export'] === '1') {
             $row['status'] ?? '',
             $row['quantity_total'] ?? 0,
             $row['quantity_available'] ?? 0,
+            $componentsStr,
             $row['created_at'] ?? '',
             $row['updated_at'] ?? '',
         ]);
