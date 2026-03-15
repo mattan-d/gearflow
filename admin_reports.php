@@ -209,6 +209,60 @@ foreach ($catRows as $cName) {
         .reports-section.active {
             display: block;
         }
+        .report-params-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 0.75rem;
+        }
+        .report-params-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            gap: 1.25rem;
+            margin-bottom: 0.75rem;
+        }
+        .report-param-block {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .report-param-block .param-label {
+            font-size: 0.8rem;
+            color: #4b5563;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+        }
+        .report-param-block .param-value-hint {
+            font-size: 0.75rem;
+            color: #6b7280;
+            margin-top: 0.2rem;
+        }
+        .calendar-icon-btn {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            color: #374151;
+            font-size: 1.15rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .calendar-icon-btn:hover {
+            background: #e5e7eb;
+        }
+        .calendar-icon-btn.active {
+            background: #111827;
+            color: #f9fafb;
+            border-color: #111827;
+        }
+        .calendar-icon-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
         .range-display {
             font-size: 0.85rem;
             color: #374151;
@@ -217,28 +271,15 @@ foreach ($catRows as $cName) {
             font-weight: 600;
         }
         .calendar-bar {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 0.75rem;
+            position: relative;
+            margin-bottom: 0;
         }
-        .calendar-toggle-btn {
-            border-radius: 999px;
-            border: 1px solid #d1d5db;
-            background: #e5e7eb;
-            color: #111827;
-            padding: 0.3rem 0.9rem;
-            font-size: 0.85rem;
-            cursor: pointer;
-        }
-        .calendar-toggle-btn.active {
-            background: #111827;
-            color: #f9fafb;
+        .report-param-block.calendar-bar {
+            position: relative;
         }
         .calendar-panel {
             position: absolute;
-            top: 2.2rem;
+            top: 4rem;
             right: 0;
             background: #ffffff;
             border-radius: 10px;
@@ -335,36 +376,33 @@ foreach ($catRows as $cName) {
         </div>
 
         <div id="reports-orders" class="reports-section<?= $activeTab === 'orders' ? ' active' : '' ?>">
-            <p class="muted-small" style="margin-bottom:0.5rem;">
+            <p class="muted-small" style="margin-bottom:0.75rem;">
                 בחר טווח תאריכים וסטודנטים כדי להציג סיכום סטטוסים להזמנות.
             </p>
             <form method="get" action="admin_reports.php" id="orders_report_form">
                 <input type="hidden" name="tab" value="orders">
-                <div class="calendar-bar" style="position:relative;">
-                    <input type="hidden" name="orders_start" id="orders_start" value="<?= htmlspecialchars($ordersReport['start'], ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="hidden" name="orders_end" id="orders_end" value="<?= htmlspecialchars($ordersReport['end'], ENT_QUOTES, 'UTF-8') ?>">
-                    <button type="button" id="orders_start_btn" class="calendar-toggle-btn active">תאריך התחלה</button>
-                    <button type="button" id="orders_end_btn" class="calendar-toggle-btn" disabled>תאריך סיום</button>
-                    <div class="range-display">
-                        <?php if ($ordersReport['has_range']): ?>
-                            טווח נבחר:
-                            <span><?= htmlspecialchars($ordersReport['start'], ENT_QUOTES, 'UTF-8') ?></span>
-                            –
-                            <span><?= htmlspecialchars($ordersReport['end'], ENT_QUOTES, 'UTF-8') ?></span>
-                        <?php else: ?>
-                            טרם נבחר טווח תאריכים.
-                        <?php endif; ?>
-                    </div>
-                    <div id="orders_calendar_panel" class="calendar-panel" style="display:none;">
-                        <div class="calendar-grid" id="orders_calendar_grid"></div>
-                    </div>
-                </div>
+                <input type="hidden" name="orders_start" id="orders_start" value="<?= htmlspecialchars($ordersReport['start'], ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="orders_end" id="orders_end" value="<?= htmlspecialchars($ordersReport['end'], ENT_QUOTES, 'UTF-8') ?>">
 
-                <div style="margin-top:0.5rem;display:flex;flex-wrap:wrap;gap:0.75rem;align-items:flex-end;">
-                    <div>
-                        <label class="muted-small" for="orders_category">קטגוריית ציוד:</label>
+                <h3 class="report-params-title">פרמטרים להצגת דוח</h3>
+                <div class="report-params-row">
+                    <div class="report-param-block calendar-bar">
+                        <span class="param-label">תאריך התחלה</span>
+                        <button type="button" id="orders_start_btn" class="calendar-icon-btn active" title="בחירת תאריך התחלה" aria-label="תאריך התחלה">📅</button>
+                        <span class="param-value-hint" id="orders_start_hint"><?= $ordersReport['start'] !== '' ? htmlspecialchars($ordersReport['start'], ENT_QUOTES, 'UTF-8') : 'לא נבחר' ?></span>
+                        <div id="orders_calendar_panel" class="calendar-panel" style="display:none;">
+                            <div class="calendar-grid" id="orders_calendar_grid"></div>
+                        </div>
+                    </div>
+                    <div class="report-param-block">
+                        <span class="param-label">תאריך סיום</span>
+                        <button type="button" id="orders_end_btn" class="calendar-icon-btn" title="בחירת תאריך סיום" aria-label="תאריך סיום" disabled>📅</button>
+                        <span class="param-value-hint" id="orders_end_hint"><?= $ordersReport['end'] !== '' ? htmlspecialchars($ordersReport['end'], ENT_QUOTES, 'UTF-8') : 'לא נבחר' ?></span>
+                    </div>
+                    <div class="report-param-block">
+                        <label class="param-label" for="orders_category">קטגוריית ציוד</label>
                         <select name="orders_category" id="orders_category"
-                                style="margin-top:0.25rem;min-width:180px;padding:0.35rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
+                                style="min-width:160px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
                             <option value="">כל הקטגוריות</option>
                             <?php foreach ($reportCategories as $cat): ?>
                                 <option value="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>"
@@ -374,23 +412,21 @@ foreach ($catRows as $cName) {
                             <?php endforeach; ?>
                         </select>
                     </div>
-                </div>
-
-                <div style="margin-top:0.5rem;">
-                    <label class="muted-small" for="orders_student_search">סינון לפי סטודנטים:</label>
-                    <input type="hidden" name="orders_students" id="orders_students"
-                           value="<?= htmlspecialchars($selectedStudentsRaw, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="text"
-                           id="orders_student_search"
-                           placeholder="הקלד שם פרטי / משפחה כדי להוסיף לרשימה"
-                           style="margin-top:0.25rem;width:100%;max-width:320px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;direction:rtl;">
-                    <div id="orders_student_suggestions"
-                         style="position:relative;max-width:320px;">
-                        <div id="orders_student_suggestions_inner"
-                             style="position:absolute;top:0.15rem;right:0;background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 10px 25px rgba(15,23,42,0.15);z-index:30;display:none;max-height:220px;overflow-y:auto;font-size:0.85rem;"></div>
+                    <div class="report-param-block" style="flex:1;min-width:200px;max-width:320px;">
+                        <label class="param-label" for="orders_student_search">סינון לפי סטודנטים</label>
+                        <input type="hidden" name="orders_students" id="orders_students"
+                               value="<?= htmlspecialchars($selectedStudentsRaw, ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="text"
+                               id="orders_student_search"
+                               placeholder="הקלד שם כדי להוסיף לרשימה"
+                               style="width:100%;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;direction:rtl;">
+                        <div id="orders_student_suggestions" style="position:relative;">
+                            <div id="orders_student_suggestions_inner"
+                                 style="position:absolute;top:0.15rem;right:0;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 10px 25px rgba(15,23,42,0.15);z-index:30;display:none;max-height:220px;overflow-y:auto;font-size:0.85rem;"></div>
+                        </div>
+                        <div id="orders_selected_students"
+                             style="margin-top:0.35rem;display:flex;flex-wrap:wrap;gap:0.35rem;font-size:0.85rem;"></div>
                     </div>
-                    <div id="orders_selected_students"
-                         style="margin-top:0.5rem;display:flex;flex-wrap:wrap;gap:0.35rem;font-size:0.85rem;"></div>
                 </div>
             </form>
 
@@ -474,6 +510,8 @@ foreach ($catRows as $cName) {
         var endInput   = document.getElementById('orders_end');
         var startBtn   = document.getElementById('orders_start_btn');
         var endBtn     = document.getElementById('orders_end_btn');
+        var startHint  = document.getElementById('orders_start_hint');
+        var endHint    = document.getElementById('orders_end_hint');
         var panel      = document.getElementById('orders_calendar_panel');
         var grid       = document.getElementById('orders_calendar_grid');
         if (!form || !startInput || !endInput || !startBtn || !endBtn || !panel || !grid) return;
@@ -481,6 +519,12 @@ foreach ($catRows as $cName) {
         var mode = 'start';
         var startDate = startInput.value || '';
         var endDate = endInput.value || '';
+
+        function updateHints() {
+            if (startHint) startHint.textContent = startDate || 'לא נבחר';
+            if (endHint) endHint.textContent = endDate || 'לא נבחר';
+        }
+        updateHints();
 
         function formatDate(d) {
             var y = d.getFullYear();
@@ -556,6 +600,7 @@ foreach ($catRows as $cName) {
                                 }, 800);
                             }
                         }
+                        updateHints();
                         buildCalendar();
                     });
 
