@@ -2341,21 +2341,17 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     }
 
     // מצב עריכת הזמנה מטאב "לא נלקח" – נעילה של רוב הפקדים
-    const isEditFromNotPicked = <?= $editingOrder && $tab === 'not_picked' ? 'true' : 'false' ?>;
-    if (isEditFromNotPicked) {
-        const form = orderModal ? orderModal.querySelector('form') : null;
-        if (form) {
-            const allowedIds = new Set(['order_status', 'return_equipment_status', 'submit_order_btn', 'order_modal_close']);
-            const fields = form.querySelectorAll('input, select, textarea, button');
-            fields.forEach(function (el) {
-                if (el.type === 'hidden') return;
-                if (allowedIds.has(el.id)) return;
-                if (el === orderModalClose || el === orderModalCancel) return;
-                // משאירים את כפתור שמירה פעיל
-                if (el.id === 'submit_order_btn') return;
-                el.disabled = true;
-            });
-        }
+    const isEditFromNotPicked = <?= ($editingOrder && $tab === 'not_picked') ? 'true' : 'false' ?>;
+    if (isEditFromNotPicked && orderModal) {
+        const allowedIds = new Set(['order_status', 'return_equipment_status']);
+        const fields = orderModal.querySelectorAll('input, select, textarea, button');
+        fields.forEach(function (el) {
+            if (el.type === 'hidden') return;
+            if (allowedIds.has(el.id)) return;
+            // כפתורי סגירה/ביטול ושמירה נשארים פעילים
+            if (el === orderModalClose || el === orderModalCancel || el.id === 'submit_order_btn') return;
+            el.disabled = true;
+        });
     }
 
     if (!startInput || !endInput || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel || !toggle || !panel) {
