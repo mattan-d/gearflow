@@ -1818,6 +1818,11 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 } else {
                                     $returnStatusValue = '';
                                 }
+                            } else {
+                                // בטאב "לא נלקח" מנרמלים כל ערך שאינו "לא הוחזר בזמן" ל"לא נאסף"
+                                if ($tab === 'not_picked' && $returnStatusValue !== 'לא הוחזר בזמן') {
+                                    $returnStatusValue = 'לא נאסף';
+                                }
                             }
                             $todayYmdForReturn = date('Y-m-d');
                             $isLateNotReturned = (
@@ -1888,6 +1893,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                     </div>
 
                     <!-- עמודת ציוד (זהה בהזמנה חדשה ובעריכה) -->
+                    <?php if (!($editingOrder && ($tab === 'not_picked' || $tab === 'not_returned'))): ?>
                     <div id="equipment_column">
                         <label for="equipment_category_filter">קטגוריית ציוד</label>
                         <select id="equipment_category_filter">
@@ -1938,6 +1944,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         </button>
                         <div class="muted-small" id="selected_equipment_summary" style="margin-top:0.3rem;"></div>
                     </div>
+                    <?php endif; ?>
                 </div>
 
                 <?php
@@ -2350,9 +2357,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         });
     }
 
-    // מצב עריכת הזמנה מטאב "לא נלקח" – נעילה של רוב הפקדים
-    const isEditFromNotPicked = <?= ($editingOrder && $tab === 'not_picked') ? 'true' : 'false' ?>;
-    if (isEditFromNotPicked && orderModal) {
+    // מצב עריכת הזמנה מטאבים "לא נלקח" / "לא הוחזר" – נעילה של רוב הפקדים
+    const isEditFromSpecial = <?= ($editingOrder && ($tab === 'not_picked' || $tab === 'not_returned')) ? 'true' : 'false' ?>;
+    if (isEditFromSpecial && orderModal) {
         const allowedIds = new Set(['order_status', 'return_equipment_status']);
         const fields = orderModal.querySelectorAll('input, select, textarea, button');
         fields.forEach(function (el) {
