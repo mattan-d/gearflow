@@ -1903,7 +1903,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                                 <?php
                                 // סטטוס ציוד מוחזר – מופיע כאשר ההזמנה בהשאלה והיום הוא יום ההחזרה,
-                                // או כאשר נמצאים בטאב "לא הוחזר" (on_loan ותאריך ההחזרה עבר).
+                                // או כאשר נמצאים בטאב "לא הוחזר" (on_loan ותאריך ההחזרה עבר),
+                                // וגם במסך "היום / החזרה" לצורך עדכון מהיר.
                                 $equipmentReturnCondition = (string)($editingOrder['equipment_return_condition'] ?? '');
                                 if ($equipmentReturnCondition === '') {
                                     $equipmentReturnCondition = 'תקין';
