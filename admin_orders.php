@@ -904,7 +904,8 @@ switch ($tab) {
         // החזרה: כל בקשה שהיום הוא יום ההחזרה
         // הזמנות בסטטוס "בהשאלה" נראות בטאבים "בהשאלה"/"לא הוחזר" בלבד
         if ($todayMode === 'return') {
-            $where = " WHERE o.status = 'approved'
+            // החזרה: ניתן להחזיר רק הזמנות שכבר יצאו להשאלה (on_loan) והחזרה שלהן היום
+            $where = " WHERE o.status = 'on_loan'
                        AND DATE(o.end_date) = :today";
         } else {
             $where = " WHERE o.status = 'approved'
@@ -1926,7 +1927,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                     <?= $submitLabel ?>
                 </button>
                 <?php if ($editingOrder): ?>
-                    <a href="admin_orders.php" class="btn secondary">ביטול</a>
+                    <?php
+                    $cancelUrl = 'admin_orders.php?tab=' . urlencode($tab);
+                    if ($tab === 'today') {
+                        $cancelUrl .= '&today_mode=' . urlencode($todayMode);
+                    }
+                    ?>
+                    <a href="<?= $cancelUrl ?>" class="btn secondary">ביטול</a>
                 <?php else: ?>
                     <button type="button" class="btn secondary" id="order_modal_cancel">ביטול</button>
                 <?php endif; ?>
@@ -2314,6 +2321,24 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         orderModalCancel.addEventListener('click', function () {
         closeOrderModalAndReturn();
         });
+    }
+
+    // מצב עריכת הזמנה מטאב "לא נלקח" – נעילה של רוב הפקדים
+    const isEditFromNotPicked = <?= $editingOrder && $tab === 'not_picked' ? 'true' : 'false' ?>;
+    if (isEditFromNotPicked) {
+        const form = orderModal ? orderModal.querySelector('form') : null;
+        if (form) {
+            const allowedIds = new Set(['order_status', 'return_equipment_status', 'submit_order_btn', 'order_modal_close']);
+            const fields = form.querySelectorAll('input, select, textarea, button');
+            fields.forEach(function (el) {
+                if (el.type === 'hidden') return;
+                if (allowedIds.has(el.id)) return;
+                if (el === orderModalClose || el === orderModalCancel) return;
+                // משאירים את כפתור שמירה פעיל
+                if (el.id === 'submit_order_btn') return;
+                el.disabled = true;
+            });
+        }
     }
 
     if (!startInput || !endInput || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel || !toggle || !panel) {
