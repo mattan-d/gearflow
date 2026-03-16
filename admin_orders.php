@@ -2123,9 +2123,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     </div>
                                 <?php endif;
                             } else {
-                                // למנהל/מנהל מחסן: פעולות רק בטאבים today, pending, future;
-                                // בטאב "לא נלקח" ההזמנה נסגרת אוטומטית ולכן אין שינוי סטטוס ידני.
-                                $adminTabsAllowed = in_array($tab, ['today', 'pending', 'future'], true);
+                                // למנהל/מנהל מחסן: פעולות בטאבים today, pending, future, not_picked
+                                // בטאב "לא נלקח" מאפשרים עריכה/שכפול/מחיקה אך בלי שינוי סטטוס ידני.
+                                $adminTabsAllowed = in_array($tab, ['today', 'pending', 'future', 'not_picked'], true);
                                 if ($adminTabsAllowed): ?>
                                     <div class="row-actions">
                                         <form method="post" action="admin_orders.php">
@@ -2153,36 +2153,39 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                                         <?php
                                         // קומבו בוקס שינוי סטטוס – בסוף טור הפעולות
-                                        $options = [];
-                                        if ($order['status'] === 'pending') {
-                                            $options = [
-                                                'pending'  => 'ממתין (נוכחי)',
-                                                'approved' => 'מאושר',
-                                                'rejected' => 'נדחה',
-                                            ];
-                                        } elseif ($order['status'] === 'approved') {
-                                            $options = [
-                                                'approved' => 'מאושר (נוכחי)',
-                                                'on_loan'  => 'בהשאלה',
-                                            ];
-                                        } elseif ($order['status'] === 'on_loan') {
-                                            $options = [
-                                                'on_loan'  => 'בהשאלה (נוכחי)',
-                                                'returned' => 'עבר',
-                                            ];
-                                        }
-                                        if (!empty($options)): ?>
-                                            <select name="status"
-                                                    class="muted-small order-status-select"
-                                                    data-order-id="<?= (int)$order['id'] ?>"
-                                                    data-current-status="<?= htmlspecialchars($order['status'], ENT_QUOTES, 'UTF-8') ?>">
-                                                <?php foreach ($options as $value => $label): ?>
-                                                    <option value="<?= $value ?>" <?= $value === $order['status'] ? 'selected' : '' ?>>
-                                                        <?= $label ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        <?php endif; ?>
+                                        // בטאב "לא נלקח" לא מציגים קומבו סטטוס.
+                                        if ($tab !== 'not_picked') {
+                                            $options = [];
+                                            if ($order['status'] === 'pending') {
+                                                $options = [
+                                                    'pending'  => 'ממתין (נוכחי)',
+                                                    'approved' => 'מאושר',
+                                                    'rejected' => 'נדחה',
+                                                ];
+                                            } elseif ($order['status'] === 'approved') {
+                                                $options = [
+                                                    'approved' => 'מאושר (נוכחי)',
+                                                    'on_loan'  => 'בהשאלה',
+                                                ];
+                                            } elseif ($order['status'] === 'on_loan') {
+                                                $options = [
+                                                    'on_loan'  => 'בהשאלה (נוכחי)',
+                                                    'returned' => 'עבר',
+                                                ];
+                                            }
+                                            if (!empty($options)): ?>
+                                                <select name="status"
+                                                        class="muted-small order-status-select"
+                                                        data-order-id="<?= (int)$order['id'] ?>"
+                                                        data-current-status="<?= htmlspecialchars($order['status'], ENT_QUOTES, 'UTF-8') ?>">
+                                                    <?php foreach ($options as $value => $label): ?>
+                                                        <option value="<?= $value ?>" <?= $value === $order['status'] ? 'selected' : '' ?>>
+                                                            <?= $label ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            <?php endif;
+                                        } ?>
                                     </div>
                                 <?php endif;
                             } ?>
