@@ -436,14 +436,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     exit;
                 } elseif ($action === 'update' && $id > 0) {
-                    $equipmentId = $equipmentIds[0];
-
                     // אם מנהל שינה את מצב ההזמנה – בודקים שהמעבר חוקי ומעדכנים
-                    $currentStatusRow = $pdo->prepare('SELECT status, creator_username FROM orders WHERE id = :id');
+                    $currentStatusRow = $pdo->prepare('SELECT * FROM orders WHERE id = :id');
                     $currentStatusRow->execute([':id' => $id]);
                     $orderRow = $currentStatusRow->fetch(PDO::FETCH_ASSOC) ?: [];
                     $currentStatus = (string)($orderRow['status'] ?? '');
                     $creatorUsername = (string)($orderRow['creator_username'] ?? '');
+
+                    // במצב עדכון מיוחד מטאבים "לא נלקח"/"לא הוחזר" – שומרים על פרטי ההזמנה המקוריים
+                    // כדי לא לדרוס תאריכים וציוד בשדות שלא נשלחים מהטופס (inputs במצב disabled).
+                    if ($isSpecialStatusUpdate) {
+                        $equipmentId     = (int)($orderRow['equipment_id'] ?? 0);
+                        $borrowerName    = (string)($orderRow['borrower_name'] ?? '');
+                        $borrowerContact = (string)($orderRow['borrower_contact'] ?? '');
+                        $startDate       = (string)($orderRow['start_date'] ?? '');
+                        $endDate         = (string)($orderRow['end_date'] ?? '');
+                        $startTime       = (string)($orderRow['start_time'] ?? '');
+                        $endTime         = (string)($orderRow['end_time'] ?? '');
+                    } else {
+                        $equipmentId = $equipmentIds[0] ?? (int)($orderRow['equipment_id'] ?? 0);
+                    }
                     $allowedNext = [];
                     if ($currentStatus === 'pending') {
                         $allowedNext = ['approved', 'rejected'];
@@ -585,6 +597,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $allowedTabsForRedirect = ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history'];
                     $currentTodayMode = $_POST['current_today_mode'] ?? null;
                     if ($currentTab && in_array($currentTab, $allowedTabsForRedirect, true)) {
+                        // במעבר מ"טאב לא הוחזר" לסטטוס "עבר" – עוברים לטאב היסטוריה
+                        if ($currentTab === 'not_returned' && $newStatus === 'returned') {
+                            header('Location: admin_orders.php?tab=history');
+                            exit;
+                        }
+
                         $redirectUrl = 'admin_orders.php?tab=' . urlencode($currentTab);
                         if ($currentTab === 'today' && $currentTodayMode) {
                             $redirectUrl .= '&today_mode=' . urlencode($currentTodayMode);
