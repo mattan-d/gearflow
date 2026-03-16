@@ -2039,6 +2039,11 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 $statusLabel = $statusMap[$statusCode];
                             }
 
+                            // בטאב "היום" – כל עוד ההזמנה מאושרת אך הציוד טרם נלקח, מציגים סטטוס "קבלת ציוד"
+                            if ($tab === 'today' && $statusCode === 'approved') {
+                                $statusLabel = 'קבלת ציוד';
+                            }
+
                             if ($statusCode === 'approved') {
                                 $statusClass = 'status-approved';
                             } elseif ($statusCode === 'on_loan') {
