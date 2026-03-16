@@ -742,7 +742,8 @@ $equipmentTab    = trim((string)($_GET['equipment_tab'] ?? 'all'));
 $availabilityStartRaw = trim($_GET['availability_start'] ?? '');
 $availabilityEndRaw   = trim($_GET['availability_end'] ?? '');
 
-$sql = 'SELECT id, name, code, description, category, location, quantity_total, quantity_available, status, picture, created_at, updated_at
+$sql = 'SELECT id, name, code, description, category, location, quantity_total, quantity_available, status, picture, created_at, updated_at,
+               (SELECT COUNT(*) FROM equipment_components ec WHERE ec.equipment_id = equipment.id) AS components_count
         FROM equipment';
 $conditions = [];
 $params     = [];
@@ -1357,6 +1358,23 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         .muted-small {
             font-size: 0.78rem;
             color: #6b7280;
+        }
+        .has-components-link {
+            font-weight: 600;
+            color: #1d4ed8;
+        }
+        .has-components-link:hover {
+            color: #1e40af;
+        }
+        .components-badge {
+            display: inline-block;
+            margin-right: 0.25rem;
+            padding: 0.05rem 0.4rem;
+            border-radius: 999px;
+            background: #e0f2fe;
+            color: #0369a1;
+            font-size: 0.7rem;
+            vertical-align: middle;
         }
         .row-actions {
             display: flex;
@@ -2011,6 +2029,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                         <tr>
                             <td>
                                 <?php
+                                $hasComponents = (int)($item['components_count'] ?? 0) > 0;
                                 $linkParams = array_merge(
                                     ['components_for' => (int)$item['id']],
                                     $tabBaseParams,
@@ -2018,9 +2037,12 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                                 );
                                 ?>
                                 <a href="admin_equipment.php?<?= http_build_query($linkParams) ?>"
-                                   class="muted-small"
-                                   title="הצגת רכיבי הפריט">
+                                   class="<?= $hasComponents ? 'muted-small has-components-link' : 'muted-small' ?>"
+                                   title="<?= $hasComponents ? 'לצפייה ברכיבי הפריט' : 'פריט ללא רכיבים נלווים' ?>">
                                     <?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>
+                                    <?php if ($hasComponents): ?>
+                                        <span class="components-badge">+ רכיבים נלווים</span>
+                                    <?php endif; ?>
                                 </a>
                             </td>
                             <td><?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?></td>

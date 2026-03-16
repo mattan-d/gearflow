@@ -1605,6 +1605,19 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 <?php if ($tab === 'today'): ?>
                     <input type="hidden" name="current_today_mode" value="<?= htmlspecialchars($todayMode, ENT_QUOTES, 'UTF-8') ?>">
                 <?php endif; ?>
+                <?php
+                // האם לפריט ההזמנה הנוכחי יש רכיבי ציוד נלווים?
+                $editingHasComponents = false;
+                if ($editingOrder) {
+                    $editCode = (string)($editingOrder['equipment_code'] ?? '');
+                    if ($editCode !== '' && !empty($equipmentComponentsByCode[$editCode] ?? [])) {
+                        $editingHasComponents = true;
+                    }
+                }
+                ?>
+                <?php if ($editingHasComponents): ?>
+                    <input type="hidden" id="has_equipment_components" value="1">
+                <?php endif; ?>
 
                 <div class="grid">
                     <!-- עמודת תאריכים + רשימת ציוד שנבחר + שם שואל + הערות (בצד ימין ב-RTL) -->
@@ -2410,6 +2423,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const originalStartInput = document.querySelector('input[name="original_start_date"]');
     const originalEndInput = document.querySelector('input[name="original_end_date"]');
     const isDuplicateMode = !!(originalStartInput || originalEndInput);
+    const hasEquipComponentsInput = document.getElementById('has_equipment_components');
 
     // שימור חזרתיות לטאב/מצב נוכחי בעת פתיחת חלון ההזמנה
     const currentTabInput = document.querySelector('input[name="current_tab"]');
@@ -2723,6 +2737,19 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             .catch(function () {
                 unavailableEquipmentIds = [];
             });
+    }
+
+    // לפני שליחת הטופס – אם משנים סטטוס ל"עבר" ויש רכיבי ציוד נלווים, דורשים אישור מפורש
+    if (orderModal && orderStatusSelect && hasEquipComponentsInput && hasEquipComponentsInput.value === '1') {
+        orderModal.querySelector('form')?.addEventListener('submit', function (e) {
+            var statusVal = orderStatusSelect.value;
+            if (statusVal === 'returned') {
+                var ok = window.confirm('האם כל רכיבי הציוד הנלווים הוחזרו במלואם?');
+                if (!ok) {
+                    e.preventDefault();
+                }
+            }
+        });
     }
 
     function updateEquipmentState() {
