@@ -1832,12 +1832,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             <?php if ($showReturnStatusField): ?>
                                 <label for="return_equipment_status">סטטוס החזרה</label>
                                 <select id="return_equipment_status" name="return_equipment_status">
-                                    <option value="לא נלקח" <?= $returnStatusValue === 'לא נלקח' ? 'selected' : '' ?>>לא נלקח</option>
+                                    <option value="" <?= $returnStatusValue === '' ? 'selected' : '' ?>>ללא</option>
                                     <option value="לא נאסף" <?= $returnStatusValue === 'לא נאסף' ? 'selected' : '' ?>>לא נאסף</option>
                                     <option value="לא הוחזר בזמן" <?= $returnStatusValue === 'לא הוחזר בזמן' ? 'selected' : '' ?>>לא הוחזר בזמן</option>
-                                    <option value="תקין" <?= $returnStatusValue === 'תקין' ? 'selected' : '' ?>>תקין</option>
-                                    <option value="תקול" <?= $returnStatusValue === 'תקול' ? 'selected' : '' ?>>תקול</option>
-                                    <option value="חסר" <?= $returnStatusValue === 'חסר' ? 'selected' : '' ?>>חסר</option>
                                 </select>
                             <?php endif; ?>
 
@@ -2352,6 +2349,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             if (el === orderModalClose || el === orderModalCancel || el.id === 'submit_order_btn') return;
             el.disabled = true;
         });
+
+        // מנטרלים גם את אזור בחירת הציוד מבחינת אינטראקציה (כולל checkbox-ים ושינוי קטגוריה)
+        const equipmentColumn = orderModal.querySelector('div:nth-child(2)'); // עמודת הציוד
+        if (equipmentColumn) {
+            equipmentColumn.style.pointerEvents = 'none';
+            equipmentColumn.style.opacity = '0.6';
+        }
     }
 
     if (!startInput || !endInput || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel || !toggle || !panel) {
