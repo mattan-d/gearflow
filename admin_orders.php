@@ -1717,7 +1717,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             }
                         }
                         $isStudent = ($role === 'student');
-                        $isNotPickedContext = ($editingOrder && $tab === 'not_picked' && !$isStudent);
+                        $isNotPickedContext = ($editingOrder && ($tab === 'not_picked' || $tab === 'not_returned') && !$isStudent);
                         ?>
                         <input
                             type="text"
