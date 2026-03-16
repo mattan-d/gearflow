@@ -1895,7 +1895,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     && (string)($editingOrder['end_date'] ?? '') === $todayYmdEquip
                                 );
                                 $isInNotReturnedTab = ($tab === 'not_returned' && $currentStatus === 'on_loan');
-                                $showEquipReturnCombo = $isReturnToday || $isInNotReturnedTab;
+                                // שדה "סטטוס ציוד מוחזר" יוצג בכל ההקשרים שבהם מוצג שדה "סטטוס החזרה"
+                                $showEquipReturnCombo = $showReturnStatusField;
                                 ?>
                                 <?php if ($showEquipReturnCombo): ?>
                                     <label for="equipment_return_condition">סטטוס ציוד מוחזר</label>
