@@ -476,7 +476,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $todayStatusYmd = date('Y-m-d');
 
-                    // סטטוס "לא נלקח" – הזמנה שלא נאספה בזמן
+                    // סטטוס "לא נאסף" – הזמנה שלא נאספה בזמן
                     // נוצר אוטומטית כאשר ההזמנה נשארת מאושרת אחרי יום ההשאלה
                     if (
                         $newStatus === 'approved'
@@ -485,7 +485,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         && $returnEquipStatusInput === ''
                         && ($returnEquipStatusDb === '' || $returnEquipStatusDb === 'תקין')
                     ) {
-                        $returnEquipStatusDb = 'לא נלקח';
+                        $returnEquipStatusDb = 'לא נאסף';
                     }
 
                     // סטטוס "לא הוחזר בזמן" – ציוד שהיה בסטטוס "לא הוחזר" ועובר ל"הוחזר/עבר"
@@ -1803,8 +1803,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                             $returnStatusValue = (string)($editingOrder['return_equipment_status'] ?? '');
                             if ($returnStatusValue === '') {
-                                // ברירת מחדל – בטאב "לא נלקח" נשתמש ב"לא נלקח"
-                                $returnStatusValue = $tab === 'not_picked' ? 'לא נלקח' : 'תקין';
+                                // ברירת מחדל – בטאב "לא נלקח" נשתמש ב"לא נאסף", אחרת ללא סטטוס
+                                $returnStatusValue = $tab === 'not_picked' ? 'לא נאסף' : '';
                             }
                             $todayYmdForReturn = date('Y-m-d');
                             $isLateNotReturned = (
