@@ -32,7 +32,7 @@ $reportCategory = isset($_GET['orders_category']) ? trim((string)$_GET['orders_c
 // סטטוס הזמנה לדוח (ריק או 'הכל' = כל הסטטוסים)
 $reportStatus = isset($_GET['orders_status']) ? trim((string)$_GET['orders_status']) : '';
 
-// סינון נוסף לדוח הזמנות עבור הזמנות במצב "עבר"
+// סינון נוסף לדוח הזמנות עבור הזמנות במצב "עבר" (סטטוס החזרה + סטטוס ציוד מוחזר)
 $reportReturnStatus = isset($_GET['orders_return_status']) ? trim((string)$_GET['orders_return_status']) : '';
 $reportEquipCondition = isset($_GET['orders_equip_condition']) ? trim((string)$_GET['orders_equip_condition']) : '';
 
