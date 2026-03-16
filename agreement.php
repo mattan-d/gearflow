@@ -22,7 +22,8 @@ if ($orderId > 0) {
                 e.name AS equipment_name,
                 e.code AS equipment_code
          FROM orders o
-         JOIN equipment e ON e.id = :id'
+         JOIN equipment e ON e.id = o.equipment_id
+         WHERE o.id = :id'
     );
     $stmt->execute([':id' => $orderId]);
     $order = $stmt->fetch() ?: null;
