@@ -441,6 +441,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $allowedNext = ['approved', 'rejected'];
                     } elseif ($currentStatus === 'approved') {
                         $allowedNext = ['on_loan'];
+                        // בטאב "לא נלקח" מאפשרים סגירה ישירה ל"עבר"
+                        if ($currentTab === 'not_picked') {
+                            $allowedNext[] = 'returned';
+                        }
                     } elseif ($currentStatus === 'on_loan') {
                         $allowedNext = ['returned'];
                     }
@@ -472,7 +476,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $todayStatusYmd = date('Y-m-d');
 
-                    // סטטוס "לא נאסף" – הזמנה שלא נאספה בזמן (לא נלקח)
+                    // סטטוס "לא נלקח" – הזמנה שלא נאספה בזמן
                     // נוצר אוטומטית כאשר ההזמנה נשארת מאושרת אחרי יום ההשאלה
                     if (
                         $newStatus === 'approved'
@@ -481,7 +485,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         && $returnEquipStatusInput === ''
                         && ($returnEquipStatusDb === '' || $returnEquipStatusDb === 'תקין')
                     ) {
-                        $returnEquipStatusDb = 'לא נאסף';
+                        $returnEquipStatusDb = 'לא נלקח';
                     }
 
                     // סטטוס "לא הוחזר בזמן" – ציוד שהיה בסטטוס "לא הוחזר" ועובר ל"הוחזר/עבר"
@@ -1695,13 +1699,14 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             }
                         }
                         $isStudent = ($role === 'student');
+                        $isNotPickedContext = ($editingOrder && $tab === 'not_picked' && !$isStudent);
                         ?>
                         <input
                             type="text"
                             id="borrower_search"
                             autocomplete="off"
                             value="<?= $editingOrder ? htmlspecialchars($editingOrder['borrower_name'], ENT_QUOTES, 'UTF-8') : htmlspecialchars($defaultBorrower, ENT_QUOTES, 'UTF-8') ?>"
-                            <?= $isStudent ? 'readonly' : '' ?>
+                            <?= ($isStudent || $isNotPickedContext) ? 'readonly' : '' ?>
                         >
                         <input
                             type="hidden"
@@ -1730,7 +1735,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             id="borrower_email"
                             autocomplete="off"
                             value="<?= htmlspecialchars($initialEmail, ENT_QUOTES, 'UTF-8') ?>"
-                            <?= $isStudent ? 'readonly' : '' ?>
+                            <?= ($isStudent || $isNotPickedContext) ? 'readonly' : '' ?>
                         >
 
                         <label for="borrower_phone">טלפון</label>
@@ -1739,7 +1744,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             id="borrower_phone"
                             autocomplete="off"
                             value="<?= htmlspecialchars($initialPhone, ENT_QUOTES, 'UTF-8') ?>"
-                            <?= $isStudent ? 'readonly' : '' ?>
+                            <?= ($isStudent || $isNotPickedContext) ? 'readonly' : '' ?>
                         >
 
                         <input type="hidden" id="borrower_contact" name="borrower_contact"
@@ -1756,10 +1761,17 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     'rejected' => 'נדחה',
                                 ];
                             } elseif ($currentStatus === 'approved') {
-                                $orderStatusOptions = [
-                                    'approved' => 'מאושר (נוכחי)',
-                                    'on_loan'  => 'בהשאלה',
-                                ];
+                                if ($tab === 'not_picked') {
+                                    // בטאב "לא נלקח" מאפשרים רק סגירה ל"עבר"
+                                    $orderStatusOptions = [
+                                        'returned' => 'עבר',
+                                    ];
+                                } else {
+                                    $orderStatusOptions = [
+                                        'approved' => 'מאושר (נוכחי)',
+                                        'on_loan'  => 'בהשאלה',
+                                    ];
+                                }
                             } elseif ($currentStatus === 'on_loan') {
                                 $orderStatusOptions = [
                                     'on_loan'  => 'בהשאלה (נוכחי)',
@@ -1773,7 +1785,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                             $returnStatusValue = (string)($editingOrder['return_equipment_status'] ?? '');
                             if ($returnStatusValue === '') {
-                                $returnStatusValue = 'תקין';
+                                // ברירת מחדל – בטאב "לא נלקח" נשתמש ב"לא נלקח"
+                                $returnStatusValue = $tab === 'not_picked' ? 'לא נלקח' : 'תקין';
                             }
                             $todayYmdForReturn = date('Y-m-d');
                             $isLateNotReturned = (
@@ -1781,23 +1794,29 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 && !empty($editingOrder['end_date'])
                                 && $editingOrder['end_date'] < $todayYmdForReturn
                             );
+                            // קומבו "סטטוס החזרה" מוצג בלוגיקות "לא הוחזר" / "לא נלקח"
                             $showReturnStatusField = (
-                                $currentStatus === 'returned'
+                                $tab === 'not_picked'
+                                || $tab === 'not_returned'
+                                || $currentStatus === 'returned'
                                 || $isLateNotReturned
                             );
                             ?>
                             <label for="order_status">מצב הזמנה</label>
                             <select id="order_status" name="order_status">
                                 <?php foreach ($orderStatusOptions as $val => $label): ?>
-                                    <option value="<?= htmlspecialchars($val, ENT_QUOTES, 'UTF-8') ?>" <?= $val === $currentStatus ? 'selected' : '' ?>>
+                                    <option value="<?= htmlspecialchars($val, ENT_QUOTES, 'UTF-8') ?>" <?= $val === $currentStatus || ($tab === 'not_picked' && $val === 'returned') ? 'selected' : '' ?>>
                                         <?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
 
                             <?php if ($showReturnStatusField): ?>
-                                <label for="return_equipment_status">סטטוס ציוד מוחזר</label>
+                                <label for="return_equipment_status">סטטוס החזרה</label>
                                 <select id="return_equipment_status" name="return_equipment_status">
+                                    <option value="לא נלקח" <?= $returnStatusValue === 'לא נלקח' ? 'selected' : '' ?>>לא נלקח</option>
+                                    <option value="לא נאסף" <?= $returnStatusValue === 'לא נאסף' ? 'selected' : '' ?>>לא נאסף</option>
+                                    <option value="לא הוחזר בזמן" <?= $returnStatusValue === 'לא הוחזר בזמן' ? 'selected' : '' ?>>לא הוחזר בזמן</option>
                                     <option value="תקין" <?= $returnStatusValue === 'תקין' ? 'selected' : '' ?>>תקין</option>
                                     <option value="תקול" <?= $returnStatusValue === 'תקול' ? 'selected' : '' ?>>תקול</option>
                                     <option value="חסר" <?= $returnStatusValue === 'חסר' ? 'selected' : '' ?>>חסר</option>
@@ -2124,18 +2143,20 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 <?php endif;
                             } else {
                                 // למנהל/מנהל מחסן: פעולות בטאבים today, pending, future, not_picked
-                                // בטאב "לא נלקח" מאפשרים עריכה/שכפול/מחיקה אך בלי שינוי סטטוס ידני.
+                                // בטאב "לא נלקח" אין צורך בשכפול.
                                 $adminTabsAllowed = in_array($tab, ['today', 'pending', 'future', 'not_picked'], true);
                                 if ($adminTabsAllowed): ?>
                                     <div class="row-actions">
-                                        <form method="post" action="admin_orders.php">
-                                            <input type="hidden" name="action" value="duplicate">
-                                            <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                            <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                            <button type="submit" class="icon-btn" title="שכפול" aria-label="שכפול"><i data-lucide="copy" aria-hidden="true"></i></button>
-                                        </form>
+                                        <?php if ($tab !== 'not_picked'): ?>
+                                            <form method="post" action="admin_orders.php">
+                                                <input type="hidden" name="action" value="duplicate">
+                                                <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                                <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                                <button type="submit" class="icon-btn" title="שכפול" aria-label="שכפול"><i data-lucide="copy" aria-hidden="true"></i></button>
+                                            </form>
+                                        <?php endif; ?>
 
-                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
+                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
 
                                         <?php
                                         // מנהל יכול למחוק רק הזמנות שהוא יצר בעצמו (creator_username)
