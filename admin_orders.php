@@ -1791,10 +1791,17 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     ];
                                 }
                             } elseif ($currentStatus === 'on_loan') {
-                                $orderStatusOptions = [
-                                    'on_loan'  => 'בהשאלה (נוכחי)',
-                                    'returned' => 'עבר',
-                                ];
+                                if ($tab === 'not_returned') {
+                                    // בטאב "לא הוחזר" מאפשרים רק סגירה ל"עבר"
+                                    $orderStatusOptions = [
+                                        'returned' => 'עבר',
+                                    ];
+                                } else {
+                                    $orderStatusOptions = [
+                                        'on_loan'  => 'בהשאלה (נוכחי)',
+                                        'returned' => 'עבר',
+                                    ];
+                                }
                             } elseif ($currentStatus === 'rejected') {
                                 $orderStatusOptions = ['rejected' => 'נדחה (נוכחי)'];
                             } elseif ($currentStatus === 'returned') {
@@ -1803,8 +1810,14 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                             $returnStatusValue = (string)($editingOrder['return_equipment_status'] ?? '');
                             if ($returnStatusValue === '') {
-                                // ברירת מחדל – בטאב "לא נלקח" נשתמש ב"לא נאסף", אחרת ללא סטטוס
-                                $returnStatusValue = $tab === 'not_picked' ? 'לא נאסף' : '';
+                                // ברירת מחדל – בטאב "לא נלקח" נשתמש ב"לא נאסף", בטאב "לא הוחזר" נשתמש ב"לא הוחזר בזמן", אחרת ללא סטטוס
+                                if ($tab === 'not_picked') {
+                                    $returnStatusValue = 'לא נאסף';
+                                } elseif ($tab === 'not_returned') {
+                                    $returnStatusValue = 'לא הוחזר בזמן';
+                                } else {
+                                    $returnStatusValue = '';
+                                }
                             }
                             $todayYmdForReturn = date('Y-m-d');
                             $isLateNotReturned = (
@@ -2163,12 +2176,12 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     </div>
                                 <?php endif;
                             } else {
-                                // למנהל/מנהל מחסן: פעולות בטאבים today, pending, future, not_picked
-                                // בטאב "לא נלקח" אין צורך בשכפול.
-                                $adminTabsAllowed = in_array($tab, ['today', 'pending', 'future', 'not_picked'], true);
+                                // למנהל/מנהל מחסן: פעולות בטאבים today, pending, future, not_picked, not_returned
+                                // בטאב "לא נלקח" ו"לא הוחזר" אין צורך בשכפול.
+                                $adminTabsAllowed = in_array($tab, ['today', 'pending', 'future', 'not_picked', 'not_returned'], true);
                                 if ($adminTabsAllowed): ?>
                                     <div class="row-actions">
-                                        <?php if ($tab !== 'not_picked'): ?>
+                                        <?php if ($tab !== 'not_picked' && $tab !== 'not_returned'): ?>
                                             <form method="post" action="admin_orders.php">
                                                 <input type="hidden" name="action" value="duplicate">
                                                 <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
