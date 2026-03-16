@@ -2215,8 +2215,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                                         <?php
                                         // קומבו בוקס שינוי סטטוס – בסוף טור הפעולות
-                                        // בטאב "לא נלקח" לא מציגים קומבו סטטוס.
-                                        if ($tab !== 'not_picked') {
+                                        // בטאבים "לא נלקח" ו"לא הוחזר" לא מציגים קומבו סטטוס.
+                                        if ($tab !== 'not_picked' && $tab !== 'not_returned') {
                                             $options = [];
                                             if ($order['status'] === 'pending') {
                                                 $options = [
