@@ -1875,7 +1875,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                     </div>
 
                     <!-- עמודת ציוד (זהה בהזמנה חדשה ובעריכה) -->
-                    <div>
+                    <div id="equipment_column">
                         <label for="equipment_category_filter">קטגוריית ציוד</label>
                         <select id="equipment_category_filter">
                             <option value="all">כל הקטגוריות</option>
@@ -2350,11 +2350,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             el.disabled = true;
         });
 
-        // מנטרלים גם את אזור בחירת הציוד מבחינת אינטראקציה (כולל checkbox-ים ושינוי קטגוריה)
-        const equipmentColumn = orderModal.querySelector('div:nth-child(2)'); // עמודת הציוד
+        // מסתירים לגמרי את אזור בחירת הציוד במצב זה
+        const equipmentColumn = document.getElementById('equipment_column');
         if (equipmentColumn) {
-            equipmentColumn.style.pointerEvents = 'none';
-            equipmentColumn.style.opacity = '0.6';
+            equipmentColumn.style.display = 'none';
         }
     }
 
