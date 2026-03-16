@@ -1180,9 +1180,7 @@ if (isset($_GET['edit_id'])) {
         </table>
     </div>
 </main>
-<footer>
-    © 2026 CentricApp LTD
-</footer>
+<?php include __DIR__ . '/admin_footer.php'; ?>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     var openBtn = document.getElementById('open_user_modal_btn');

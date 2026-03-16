@@ -3396,8 +3396,6 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         });
     })();
 </script>
-<footer>
-    © 2026 CentricApp LTD
-</footer>
+<?php include __DIR__ . '/admin_footer.php'; ?>
 </body>
 </html>

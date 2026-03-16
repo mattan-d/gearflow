@@ -398,8 +398,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </p>
     </div>
 </main>
-<footer>
-    © 2026 CentricApp LTD
-</footer>
+<?php include __DIR__ . '/admin_footer.php'; ?>
 </body>
 </html>

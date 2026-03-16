@@ -378,9 +378,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['hours_payload'])) {
         </div>
     </div>
 </main>
-<footer>
-    © 2026 CentricApp LTD
-</footer>
+<?php include __DIR__ . '/admin_footer.php'; ?>
 <script>
 (function () {
     var cells = Array.prototype.slice.call(document.querySelectorAll('.slot-cell'));

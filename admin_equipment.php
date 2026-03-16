@@ -2077,9 +2077,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         <?php endif; ?>
     </div>
 </main>
-<footer>
-    © 2026 CentricApp LTD
-</footer>
+<?php include __DIR__ . '/admin_footer.php'; ?>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     var addBtn = document.getElementById('toggle_add_equipment_btn');
