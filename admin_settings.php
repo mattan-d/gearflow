@@ -152,6 +152,48 @@ try {
     $statusLabels = [];
 }
 
+// הגדרת דף הבית לפי תפקיד
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['homepage_submit'])) {
+    $homeStudent = trim((string)($_POST['home_student'] ?? 'admin_orders.php'));
+    $homeAdmin   = trim((string)($_POST['home_admin'] ?? 'admin_orders.php'));
+
+    // ולידציה בסיסית לפי רשימת נתיבים מותרים
+    $studentAllowed = ['admin_orders.php'];
+    $adminAllowed   = ['admin_orders.php', 'admin_equipment.php'];
+
+    if (!in_array($homeStudent, $studentAllowed, true)) {
+        $homeStudent = 'admin_orders.php';
+    }
+    if (!in_array($homeAdmin, $adminAllowed, true)) {
+        $homeAdmin = 'admin_orders.php';
+    }
+
+    try {
+        $stmtHome = $pdo->prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (:k, :v)');
+        $stmtHome->execute([':k' => 'home_student', ':v' => $homeStudent]);
+        $stmtHome->execute([':k' => 'home_admin',   ':v' => $homeAdmin]);
+        $success = 'דפי הבית עודכנו בהצלחה.';
+    } catch (Throwable $e) {
+        $error = 'שגיאה בעדכון דפי הבית.';
+    }
+}
+
+// קריאת דפי בית נוכחיים
+$homeStudentCurrent = 'admin_orders.php';
+$homeAdminCurrent   = 'admin_orders.php';
+try {
+    $stmtHomeRead = $pdo->query("SELECT key, value FROM app_settings WHERE key IN ('home_student','home_admin')");
+    foreach ($stmtHomeRead->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        if (($row['key'] ?? '') === 'home_student' && is_string($row['value'] ?? null)) {
+            $homeStudentCurrent = (string)$row['value'];
+        } elseif (($row['key'] ?? '') === 'home_admin' && is_string($row['value'] ?? null)) {
+            $homeAdminCurrent = (string)$row['value'];
+        }
+    }
+} catch (Throwable $e) {
+    // נשאר עם ברירות המחדל
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="he" dir="rtl">

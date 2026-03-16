@@ -38,6 +38,40 @@ function get_db(): PDO
     return $pdo;
 }
 
+/**
+ * מחזיר את דף הבית עבור תפקיד משתמש נתון.
+ * התוצאה היא נתיב יחסי בתוך האפליקציה (ללא domain).
+ */
+function get_home_route_for_role(string $role): string
+{
+    $role = $role ?: 'student';
+    $fallback = ($role === 'admin') ? 'admin_orders.php' : 'admin_orders.php';
+
+    try {
+        $pdo = get_db();
+        $key = ($role === 'admin') ? 'home_admin' : 'home_student';
+        $stmt = $pdo->prepare('SELECT value FROM app_settings WHERE key = :k LIMIT 1');
+        $stmt->execute([':k' => $key]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        $val = is_string($row['value'] ?? '') ? trim((string)$row['value']) : '';
+
+        // רשימת יעדים מותרים לפי תפקיד
+        if ($role === 'admin') {
+            $allowed = ['admin_orders.php', 'admin_equipment.php'];
+        } else {
+            $allowed = ['admin_orders.php'];
+        }
+
+        if ($val !== '' && in_array($val, $allowed, true)) {
+            return $val;
+        }
+    } catch (Throwable $e) {
+        // במקרה של שגיאה נחזור לברירת המחדל
+    }
+
+    return $fallback;
+}
+
 function initialize_database(PDO $pdo): void
 {
     $pdo->exec(
@@ -265,6 +299,23 @@ function initialize_database(PDO $pdo): void
                 $insertCat->execute([':n' => $baseCat]);
             }
         }
+    }
+
+    // טבלת הגדרות מערכת כלליות (key/value) – כולל דף הבית לפי תפקיד
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    ");
+    $defaultSettings = [
+        'home_student' => 'admin_orders.php',
+        // מנהל – ברירת מחדל מנהל הזמנות, ניתן לשנות למנהל ציוד
+        'home_admin'   => 'admin_orders.php',
+    ];
+    foreach ($defaultSettings as $k => $v) {
+        $stmt = $pdo->prepare('INSERT OR IGNORE INTO app_settings (key, value) VALUES (:k, :v)');
+        $stmt->execute([':k' => $k, ':v' => $v]);
     }
 
     // טבלת תוויות סטטוסי הזמנה (לשינוי שם בעברית מבלי לפגוע בקוד)

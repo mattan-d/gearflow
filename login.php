@@ -66,12 +66,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['role']     = $user['role'];
 
                 $role = $user['role'] ?? 'student';
-                if ($role === 'admin') {
-                    $target = 'admin.php';
-                } else {
-                    // סטודנטים ומנהלי מחסן מגיעים למסך ההזמנות
-                    $target = 'admin_orders.php';
-                }
+                // דף הבית לפי תפקיד – ניתן להגדרה ב"הגדרות מערכת"
+                $target = get_home_route_for_role($role);
 
                 header('Location: ' . $target);
                 exit;

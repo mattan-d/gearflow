@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/config.php';
 
 $user = current_user();
 
@@ -10,6 +11,12 @@ if ($user === null) {
     header('Location: login.php');
     exit;
 }
+
+// הפניה לדף הבית בהתאם להגדרה במערכת (לפי תפקיד)
+$role = $user['role'] ?? 'student';
+$target = get_home_route_for_role($role);
+header('Location: ' . $target);
+exit;
 
 ?>
 <!DOCTYPE html>
