@@ -229,6 +229,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $notes           = trim($_POST['notes'] ?? '');
         $orderStatus     = $_POST['order_status'] ?? null; // מצב הזמנה (למנהל בעריכה)
         $rejectionReason = trim($_POST['rejection_reason'] ?? '');
+        $returnEquipStatusInput = trim($_POST['return_equipment_status'] ?? '');
         $recurringEnabled = !empty($_POST['recurring_enabled']);
         $recurringStartDate = trim($_POST['recurring_start_date'] ?? '');
         $recurringStartTime = trim($_POST['recurring_start_time'] ?? '');
@@ -337,24 +338,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         } else {
                             $initialStatus = ($role === 'student') ? 'pending' : 'approved';
                             $insertRecurring = $pdo->prepare(
-                                'INSERT INTO orders (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, created_at, creator_username)
-                                 VALUES (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :created_at, :creator_username)'
+                                'INSERT INTO orders (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, created_at, creator_username, return_equipment_status)
+                                 VALUES (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :created_at, :creator_username, :return_equipment_status)'
                             );
                             $createdCount = 0;
                             foreach ($equipmentIds as $equipmentId) {
                                 foreach ($occurrences as $occ) {
                                     $insertRecurring->execute([
-                                        ':equipment_id'     => $equipmentId,
-                                        ':borrower_name'    => $borrowerName,
-                                        ':borrower_contact' => $borrowerContact,
-                                        ':start_date'       => $occ[0],
-                                        ':end_date'         => $occ[2],
-                                        ':start_time'       => $occ[1],
-                                        ':end_time'         => $occ[3],
-                                        ':status'           => $initialStatus,
-                                        ':notes'            => $notes,
-                                        ':created_at'       => date('Y-m-d H:i:s'),
-                                        ':creator_username' => (string)($me['username'] ?? ''),
+                                        ':equipment_id'           => $equipmentId,
+                                        ':borrower_name'          => $borrowerName,
+                                        ':borrower_contact'       => $borrowerContact,
+                                        ':start_date'             => $occ[0],
+                                        ':end_date'               => $occ[2],
+                                        ':start_time'             => $occ[1],
+                                        ':end_time'               => $occ[3],
+                                        ':status'                 => $initialStatus,
+                                        ':notes'                  => $notes,
+                                        ':created_at'             => date('Y-m-d H:i:s'),
+                                        ':creator_username'       => (string)($me['username'] ?? ''),
+                                        ':return_equipment_status'=> 'תקין',
                                     ]);
                                     $createdCount++;
                                 }
@@ -383,24 +385,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $initialStatus = ($role === 'student') ? 'pending' : 'approved';
                     $stmt = $pdo->prepare(
                         'INSERT INTO orders
-                         (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, created_at, creator_username)
+                         (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, created_at, creator_username, return_equipment_status)
                          VALUES
-                         (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :created_at, :creator_username)'
+                         (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :created_at, :creator_username, :return_equipment_status)'
                     );
                     $createdCount = 0;
                     foreach ($equipmentIds as $equipmentId) {
                         $stmt->execute([
-                            ':equipment_id'     => $equipmentId,
-                            ':borrower_name'    => $borrowerName,
-                            ':borrower_contact' => $borrowerContact,
-                            ':start_date'       => $startDate,
-                            ':end_date'         => $endDate,
-                            ':start_time'       => $startTime !== '' ? $startTime : null,
-                            ':end_time'         => $endTime !== '' ? $endTime : null,
-                            ':status'           => $initialStatus,
-                            ':notes'            => $notes,
-                            ':created_at'       => date('Y-m-d H:i:s'),
-                            ':creator_username' => (string)($me['username'] ?? ''),
+                            ':equipment_id'           => $equipmentId,
+                            ':borrower_name'          => $borrowerName,
+                            ':borrower_contact'       => $borrowerContact,
+                            ':start_date'             => $startDate,
+                            ':end_date'               => $endDate,
+                            ':start_time'             => $startTime !== '' ? $startTime : null,
+                            ':end_time'               => $endTime !== '' ? $endTime : null,
+                            ':status'                 => $initialStatus,
+                            ':notes'                  => $notes,
+                            ':created_at'             => date('Y-m-d H:i:s'),
+                            ':creator_username'       => (string)($me['username'] ?? ''),
+                            ':return_equipment_status'=> 'תקין',
                         ]);
                         $createdCount++;
                     }
@@ -456,32 +459,73 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $notes .= 'סיבה לדחייה: ' . $rejectionReason;
                     }
 
+                    // סטטוס החזרת ציוד – בסיס קיים + קלט מנהל + חוקים אוטומטיים
+                    $existingReturnStatus = (string)($orderRow['return_equipment_status'] ?? '');
+                    $returnEquipStatusDb = $existingReturnStatus;
+
+                    // קלט מפורש של מנהל/מנהל מחסן גובר על ברירת מחדל
+                    if ($role === 'admin' || $role === 'warehouse_manager') {
+                        if ($returnEquipStatusInput !== '') {
+                            $returnEquipStatusDb = $returnEquipStatusInput;
+                        }
+                    }
+
+                    $todayStatusYmd = date('Y-m-d');
+
+                    // סטטוס "לא נאסף" – הזמנה שלא נאספה בזמן (לא נלקח)
+                    // נוצר אוטומטית כאשר ההזמנה נשארת מאושרת אחרי יום ההשאלה
+                    if (
+                        $newStatus === 'approved'
+                        && $startDate !== ''
+                        && $startDate < $todayStatusYmd
+                        && $returnEquipStatusInput === ''
+                        && ($returnEquipStatusDb === '' || $returnEquipStatusDb === 'תקין')
+                    ) {
+                        $returnEquipStatusDb = 'לא נאסף';
+                    }
+
+                    // סטטוס "לא הוחזר בזמן" – ציוד שהיה בסטטוס "לא הוחזר" ועובר ל"הוחזר/עבר"
+                    // נקבע כאשר סטטוס בפועל היה בהשאלה והוחזר לאחר מועד ההחזרה
+                    $orderEndDateFromDb = (string)($orderRow['end_date'] ?? '');
+                    if (
+                        $currentStatus === 'on_loan'
+                        && $newStatus === 'returned'
+                        && $orderEndDateFromDb !== ''
+                        && $orderEndDateFromDb < $todayStatusYmd
+                        && $returnEquipStatusInput === ''
+                        && ($returnEquipStatusDb === '' || $returnEquipStatusDb === 'תקין')
+                    ) {
+                        $returnEquipStatusDb = 'לא הוחזר בזמן';
+                    }
+
                     $stmt = $pdo->prepare(
                         'UPDATE orders
-                         SET equipment_id     = :equipment_id,
-                             borrower_name    = :borrower_name,
-                             borrower_contact = :borrower_contact,
-                             start_date       = :start_date,
-                             end_date         = :end_date,
-                             start_time       = :start_time,
-                             end_time         = :end_time,
-                             status           = :status,
-                             notes            = :notes,
-                             updated_at       = :updated_at
+                         SET equipment_id            = :equipment_id,
+                             borrower_name           = :borrower_name,
+                             borrower_contact        = :borrower_contact,
+                             start_date              = :start_date,
+                             end_date                = :end_date,
+                             start_time              = :start_time,
+                             end_time                = :end_time,
+                             status                  = :status,
+                             notes                   = :notes,
+                             updated_at              = :updated_at,
+                             return_equipment_status = :return_equipment_status
                          WHERE id = :id'
                     );
                     $stmt->execute([
-                        ':equipment_id'     => $equipmentId,
-                        ':borrower_name'    => $borrowerName,
-                        ':borrower_contact' => $borrowerContact,
-                        ':start_date'       => $startDate,
-                        ':end_date'         => $endDate,
-                        ':start_time'       => $startTime !== '' ? $startTime : null,
-                        ':end_time'         => $endTime !== '' ? $endTime : null,
-                        ':status'           => $newStatus,
-                        ':notes'            => $notes,
-                        ':updated_at'       => date('Y-m-d H:i:s'),
-                        ':id'               => $id,
+                        ':equipment_id'            => $equipmentId,
+                        ':borrower_name'           => $borrowerName,
+                        ':borrower_contact'        => $borrowerContact,
+                        ':start_date'              => $startDate,
+                        ':end_date'                => $endDate,
+                        ':start_time'              => $startTime !== '' ? $startTime : null,
+                        ':end_time'                => $endTime !== '' ? $endTime : null,
+                        ':status'                  => $newStatus,
+                        ':notes'                   => $notes,
+                        ':updated_at'              => date('Y-m-d H:i:s'),
+                        ':return_equipment_status' => $returnEquipStatusDb,
+                        ':id'                      => $id,
                     ]);
 
                     $success = 'הזמנה עודכנה בהצלחה.';
@@ -1726,6 +1770,21 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             } elseif ($currentStatus === 'returned') {
                                 $orderStatusOptions = ['returned' => 'עבר (נוכחי)'];
                             }
+
+                            $returnStatusValue = (string)($editingOrder['return_equipment_status'] ?? '');
+                            if ($returnStatusValue === '') {
+                                $returnStatusValue = 'תקין';
+                            }
+                            $todayYmdForReturn = date('Y-m-d');
+                            $isLateNotReturned = (
+                                $currentStatus === 'on_loan'
+                                && !empty($editingOrder['end_date'])
+                                && $editingOrder['end_date'] < $todayYmdForReturn
+                            );
+                            $showReturnStatusField = (
+                                $currentStatus === 'returned'
+                                || $isLateNotReturned
+                            );
                             ?>
                             <label for="order_status">מצב הזמנה</label>
                             <select id="order_status" name="order_status">
@@ -1735,6 +1794,15 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+
+                            <?php if ($showReturnStatusField): ?>
+                                <label for="return_equipment_status">סטטוס ציוד מוחזר</label>
+                                <select id="return_equipment_status" name="return_equipment_status">
+                                    <option value="תקין" <?= $returnStatusValue === 'תקין' ? 'selected' : '' ?>>תקין</option>
+                                    <option value="תקול" <?= $returnStatusValue === 'תקול' ? 'selected' : '' ?>>תקול</option>
+                                    <option value="חסר" <?= $returnStatusValue === 'חסר' ? 'selected' : '' ?>>חסר</option>
+                                </select>
+                            <?php endif; ?>
 
                             <div id="rejection_reason_wrapper" style="margin-top: 0.5rem; display: <?= $currentStatus === 'rejected' ? 'block' : 'none' ?>;">
                                 <label for="rejection_reason">סיבה לדחיית הבקשה</label>

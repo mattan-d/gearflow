@@ -128,7 +128,8 @@ function initialize_database(PDO $pdo): void
             notes TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT,
-            creator_username TEXT
+            creator_username TEXT,
+            return_equipment_status TEXT
         )
     ");
 
@@ -144,6 +145,9 @@ function initialize_database(PDO $pdo): void
         }
         if (!in_array('end_time', $orderNames, true)) {
             $pdo->exec("ALTER TABLE orders ADD COLUMN end_time TEXT");
+        }
+        if (!in_array('return_equipment_status', $orderNames, true)) {
+            $pdo->exec("ALTER TABLE orders ADD COLUMN return_equipment_status TEXT");
         }
     } catch (PDOException $e) {
         // מתעלמים משגיאות מיגרציה כדי לא להפיל את הטעינה
