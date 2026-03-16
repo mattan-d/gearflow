@@ -1881,6 +1881,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 || $tab === 'not_returned'
                                 || $currentStatus === 'returned'
                                 || $isLateNotReturned
+                                || ($tab === 'today' && $todayMode === 'return')
                             );
                             ?>
                             <label for="order_status">מצב הזמנה</label>
@@ -1914,7 +1915,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 );
                                 $isInNotReturnedTab = ($tab === 'not_returned' && $currentStatus === 'on_loan');
                                 // שדה "סטטוס ציוד מוחזר" יוצג בכל ההקשרים שבהם מוצג שדה "סטטוס החזרה"
-                                $showEquipReturnCombo = $showReturnStatusField;
+                                $showEquipReturnCombo = (
+                                    $showReturnStatusField
+                                    || ($tab === 'today' && $todayMode === 'return')
+                                );
                                 ?>
                                 <?php if ($showEquipReturnCombo): ?>
                                     <label for="equipment_return_condition">סטטוס ציוד מוחזר</label>
@@ -2477,6 +2481,19 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         if (equipmentColumn) {
             equipmentColumn.style.display = 'none';
         }
+    }
+
+    // מצב עריכת הזמנה בטאב "היום" במצב החזרה – רק שדות סטטוס פעילים
+    const isEditFromTodayReturn = <?= ($editingOrder && $tab === 'today' && $todayMode === 'return') ? 'true' : 'false' ?>;
+    if (isEditFromTodayReturn && orderModal) {
+        const allowedIdsTodayReturn = new Set(['order_status', 'equipment_return_condition']);
+        const fieldsToday = orderModal.querySelectorAll('input, select, textarea, button');
+        fieldsToday.forEach(function (el) {
+            if (el.type === 'hidden') return;
+            if (allowedIdsTodayReturn.has(el.id)) return;
+            if (el === orderModalClose || el === orderModalCancel || el.id === 'submit_order_btn') return;
+            el.disabled = true;
+        });
     }
 
     if (!startInput || !endInput || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel || !toggle || !panel) {
