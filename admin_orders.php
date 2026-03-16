@@ -2118,7 +2118,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     </div>
                                 <?php endif;
                             } else {
-                                // למנהל/מנהל מחסן: פעולות רק בטאבים today, pending, future; ללא שינויים לסטטוסים active/history.
+                                // למנהל/מנהל מחסן: פעולות רק בטאבים today, pending, future;
+                                // בטאב "לא נלקח" ההזמנה נסגרת אוטומטית ולכן אין שינוי סטטוס ידני.
                                 $adminTabsAllowed = in_array($tab, ['today', 'pending', 'future'], true);
                                 if ($adminTabsAllowed): ?>
                                     <div class="row-actions">
