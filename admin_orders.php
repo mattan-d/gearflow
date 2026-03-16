@@ -2274,7 +2274,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 }
                                 if ($canEditOrDelete): ?>
                                     <div class="row-actions">
-                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
+                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?><?= $tab === 'today' ? '&today_mode=' . urlencode($todayMode) : '' ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
                                         <form method="post" action="admin_orders.php"
                                               onsubmit="return confirm('למחוק את ההזמנה הזו?');">
                                             <input type="hidden" name="action" value="delete">
@@ -2299,7 +2299,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                             </form>
                                         <?php endif; ?>
 
-                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
+                                        <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?><?= $tab === 'today' ? '&today_mode=' . urlencode($todayMode) : '' ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
 
                                         <?php
                                         // מנהל יכול למחוק רק הזמנות שהוא יצר בעצמו (creator_username)
