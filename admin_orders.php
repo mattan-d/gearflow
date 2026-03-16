@@ -2242,6 +2242,24 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const originalEndInput = document.querySelector('input[name="original_end_date"]');
     const isDuplicateMode = !!(originalStartInput || originalEndInput);
 
+    // שימור חזרתיות לטאב/מצב נוכחי בעת פתיחת חלון ההזמנה
+    const currentTabInput = document.querySelector('input[name="current_tab"]');
+    const currentTabValue = '<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>';
+    const todayModeValue = '<?= htmlspecialchars($todayMode, ENT_QUOTES, 'UTF-8') ?>';
+
+    function buildReturnUrl() {
+        let url = 'admin_orders.php?tab=' + encodeURIComponent(currentTabValue || 'today');
+        if (currentTabValue === 'today' && todayModeValue) {
+            url += '&today_mode=' + encodeURIComponent(todayModeValue);
+        }
+        return url;
+    }
+
+    function closeOrderModalAndReturn() {
+        const targetUrl = buildReturnUrl();
+        window.location.href = targetUrl;
+    }
+
     const startTimeInput = document.getElementById('start_time');
     const endTimeInput = document.getElementById('end_time');
     const timeModalBackdrop = document.getElementById('time_modal_backdrop');
@@ -2265,6 +2283,17 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const recurringEndDateInput = document.getElementById('recurring_end_date');
     const recurringEndDateH = document.getElementById('recurring_end_date_h');
     const recurringCountInput = document.getElementById('recurring_count');
+
+    if (orderModalClose) {
+        orderModalClose.addEventListener('click', function () {
+            closeOrderModalAndReturn();
+        });
+    }
+    if (orderModalCancel) {
+        orderModalCancel.addEventListener('click', function () {
+        closeOrderModalAndReturn();
+        });
+    }
 
     if (!startInput || !endInput || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel || !toggle || !panel) {
         return;
