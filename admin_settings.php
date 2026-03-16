@@ -494,6 +494,43 @@ try {
                 </tbody>
             </table>
         </div>
+
+        <div class="status-section">
+            <h3 style="margin-top:1.5rem;margin-bottom:0.5rem;font-size:1.05rem;">קביעת דף הבית</h3>
+            <p class="muted-small">
+                בחר את דף הבית שיוטען לאחר התחברות ולביקור בכתובת הראשית של המערכת, לפי סוג המשתמש.
+            </p>
+            <form method="post" action="admin_settings.php" style="max-width:520px;margin-top:0.75rem;">
+                <div style="display:flex;flex-direction:column;gap:0.75rem;">
+                    <div style="display:flex;align-items:center;gap:0.75rem;">
+                        <label for="home_student" style="width:160px;">דף בית לסטודנט</label>
+                        <select id="home_student" name="home_student"
+                                style="flex:1;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.9rem;">
+                            <option value="admin_orders.php" <?= $homeStudentCurrent === 'admin_orders.php' ? 'selected' : '' ?>>
+                                מנהל הזמנות
+                            </option>
+                        </select>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:0.75rem;">
+                        <label for="home_admin" style="width:160px;">דף בית למנהל</label>
+                        <select id="home_admin" name="home_admin"
+                                style="flex:1;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.9rem;">
+                            <option value="admin_orders.php" <?= $homeAdminCurrent === 'admin_orders.php' ? 'selected' : '' ?>>
+                                מנהל הזמנות (ברירת מחדל)
+                            </option>
+                            <option value="admin_equipment.php" <?= $homeAdminCurrent === 'admin_equipment.php' ? 'selected' : '' ?>>
+                                מנהל ציוד
+                            </option>
+                        </select>
+                    </div>
+                    <div>
+                        <button type="submit" name="homepage_submit" value="1" class="btn">
+                            שמירת דפי הבית
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
     </div>
 </main>
 </body>
