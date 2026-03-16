@@ -1901,7 +1901,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     <label for="equipment_return_condition">סטטוס ציוד מוחזר</label>
                                     <select id="equipment_return_condition" name="equipment_return_condition">
                                         <option value="תקין" <?= $equipmentReturnCondition === 'תקין' ? 'selected' : '' ?>>תקין</option>
-                                        <option value="תקול" <?= $equipmentReturnCondition === 'תקול' ? 'selected' : '' ?>>תקול</option>
+                                        <option value="תקול" <?= $equipmentReturnCondition === 'תקול' ? 'selected' : '' ?>>לא תקין</option>
                                         <option value="חסר" <?= $equipmentReturnCondition === 'חסר' ? 'selected' : '' ?>>חסר</option>
                                     </select>
                                 <?php endif; ?>
