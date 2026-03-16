@@ -230,6 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $orderStatus     = $_POST['order_status'] ?? null; // מצב הזמנה (למנהל בעריכה)
         $rejectionReason = trim($_POST['rejection_reason'] ?? '');
         $returnEquipStatusInput = trim($_POST['return_equipment_status'] ?? '');
+        $equipmentReturnConditionInput = trim($_POST['equipment_return_condition'] ?? '');
         $recurringEnabled = !empty($_POST['recurring_enabled']);
         $recurringStartDate = trim($_POST['recurring_start_date'] ?? '');
         $recurringStartTime = trim($_POST['recurring_start_time'] ?? '');
@@ -509,34 +510,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $returnEquipStatusDb = 'לא הוחזר בזמן';
                     }
 
+                    $equipmentReturnConditionDb = (string)($orderRow['equipment_return_condition'] ?? '');
+                    if ($role === 'admin' || $role === 'warehouse_manager') {
+                        if ($equipmentReturnConditionInput !== '') {
+                            $equipmentReturnConditionDb = $equipmentReturnConditionInput;
+                        }
+                    }
+
                     $stmt = $pdo->prepare(
                         'UPDATE orders
-                         SET equipment_id            = :equipment_id,
-                             borrower_name           = :borrower_name,
-                             borrower_contact        = :borrower_contact,
-                             start_date              = :start_date,
-                             end_date                = :end_date,
-                             start_time              = :start_time,
-                             end_time                = :end_time,
-                             status                  = :status,
-                             notes                   = :notes,
-                             updated_at              = :updated_at,
-                             return_equipment_status = :return_equipment_status
+                         SET equipment_id               = :equipment_id,
+                             borrower_name              = :borrower_name,
+                             borrower_contact           = :borrower_contact,
+                             start_date                 = :start_date,
+                             end_date                   = :end_date,
+                             start_time                 = :start_time,
+                             end_time                   = :end_time,
+                             status                     = :status,
+                             notes                      = :notes,
+                             updated_at                 = :updated_at,
+                             return_equipment_status    = :return_equipment_status,
+                             equipment_return_condition = :equipment_return_condition
                          WHERE id = :id'
                     );
                     $stmt->execute([
-                        ':equipment_id'            => $equipmentId,
-                        ':borrower_name'           => $borrowerName,
-                        ':borrower_contact'        => $borrowerContact,
-                        ':start_date'              => $startDate,
-                        ':end_date'                => $endDate,
-                        ':start_time'              => $startTime !== '' ? $startTime : null,
-                        ':end_time'                => $endTime !== '' ? $endTime : null,
-                        ':status'                  => $newStatus,
-                        ':notes'                   => $notes,
-                        ':updated_at'              => date('Y-m-d H:i:s'),
-                        ':return_equipment_status' => $returnEquipStatusDb,
-                        ':id'                      => $id,
+                        ':equipment_id'               => $equipmentId,
+                        ':borrower_name'              => $borrowerName,
+                        ':borrower_contact'           => $borrowerContact,
+                        ':start_date'                 => $startDate,
+                        ':end_date'                   => $endDate,
+                        ':start_time'                 => $startTime !== '' ? $startTime : null,
+                        ':end_time'                   => $endTime !== '' ? $endTime : null,
+                        ':status'                     => $newStatus,
+                        ':notes'                      => $notes,
+                        ':updated_at'                 => date('Y-m-d H:i:s'),
+                        ':return_equipment_status'    => $returnEquipStatusDb,
+                        ':equipment_return_condition' => $equipmentReturnConditionDb,
+                        ':id'                         => $id,
                     ]);
 
                     $success = 'הזמנה עודכנה בהצלחה.';
@@ -1871,6 +1881,30 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     <option value="לא נאסף" <?= $returnStatusValue === 'לא נאסף' ? 'selected' : '' ?>>לא נאסף</option>
                                     <option value="לא הוחזר בזמן" <?= $returnStatusValue === 'לא הוחזר בזמן' ? 'selected' : '' ?>>לא הוחזר בזמן</option>
                                 </select>
+
+                                <?php
+                                // סטטוס ציוד מוחזר – מופיע רק כאשר ההזמנה בהשאלה והיום הוא יום ההחזרה,
+                                // או כאשר נמצאים בטאב "לא הוחזר" (on_loan ותאריך ההחזרה עבר).
+                                $equipmentReturnCondition = (string)($editingOrder['equipment_return_condition'] ?? '');
+                                if ($equipmentReturnCondition === '') {
+                                    $equipmentReturnCondition = 'תקין';
+                                }
+                                $todayYmdEquip = date('Y-m-d');
+                                $isReturnToday = (
+                                    $currentStatus === 'on_loan'
+                                    && (string)($editingOrder['end_date'] ?? '') === $todayYmdEquip
+                                );
+                                $isInNotReturnedTab = ($tab === 'not_returned' && $currentStatus === 'on_loan');
+                                $showEquipReturnCombo = $isReturnToday || $isInNotReturnedTab;
+                                ?>
+                                <?php if ($showEquipReturnCombo): ?>
+                                    <label for="equipment_return_condition">סטטוס ציוד מוחזר</label>
+                                    <select id="equipment_return_condition" name="equipment_return_condition">
+                                        <option value="תקין" <?= $equipmentReturnCondition === 'תקין' ? 'selected' : '' ?>>תקין</option>
+                                        <option value="תקול" <?= $equipmentReturnCondition === 'תקול' ? 'selected' : '' ?>>תקול</option>
+                                        <option value="חסר" <?= $equipmentReturnCondition === 'חסר' ? 'selected' : '' ?>>חסר</option>
+                                    </select>
+                                <?php endif; ?>
                             <?php endif; ?>
 
                             <div id="rejection_reason_wrapper" style="margin-top: 0.5rem; display: <?= $currentStatus === 'rejected' ? 'block' : 'none' ?>;">
