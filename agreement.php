@@ -53,14 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasSignature) {
             file_put_contents($signaturePng, $binary);
             $hasSignature = true;
 
-            // לאחר חתימה – מעדכנים סטטוס להזמנה במצב "בהשאלה"
-            $stmt = $pdo->prepare('UPDATE orders SET status = :status, updated_at = :updated_at WHERE id = :id');
-            $stmt->execute([
-                ':status'     => 'on_loan',
-                ':updated_at' => date('Y-m-d H:i:s'),
-                ':id'         => $orderId,
-            ]);
-
+            // לאחר חתימה – שומרים רק את קובץ החתימה, ללא שינוי סטטוס ההזמנה.
             header('Location: agreement.php?order_id=' . $orderId . '&signed=1');
             exit;
         }
