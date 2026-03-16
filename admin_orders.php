@@ -1883,7 +1883,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 </select>
 
                                 <?php
-                                // סטטוס ציוד מוחזר – מופיע רק כאשר ההזמנה בהשאלה והיום הוא יום ההחזרה,
+                                // סטטוס ציוד מוחזר – מופיע כאשר ההזמנה בהשאלה והיום הוא יום ההחזרה,
                                 // או כאשר נמצאים בטאב "לא הוחזר" (on_loan ותאריך ההחזרה עבר).
                                 $equipmentReturnCondition = (string)($editingOrder['equipment_return_condition'] ?? '');
                                 if ($equipmentReturnCondition === '') {
@@ -2444,7 +2444,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     // מצב עריכת הזמנה מטאבים "לא נלקח" / "לא הוחזר" – נעילה של רוב הפקדים
     const isEditFromSpecial = <?= ($editingOrder && ($tab === 'not_picked' || $tab === 'not_returned')) ? 'true' : 'false' ?>;
     if (isEditFromSpecial && orderModal) {
-        const allowedIds = new Set(['order_status', 'return_equipment_status']);
+        const allowedIds = new Set(['order_status', 'return_equipment_status', 'equipment_return_condition']);
         const fields = orderModal.querySelectorAll('input, select, textarea, button');
         fields.forEach(function (el) {
             if (el.type === 'hidden') return;
