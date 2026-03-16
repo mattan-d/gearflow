@@ -675,16 +675,38 @@ if ($eqShow) {
             <?php if ($ordersReport['has_range']): ?>
                 <div class="orders-report-bars">
                     <?php
-                    $bars = [
-                        'כמות הזמנות (סה״כ)' => $ordersReport['total'],
-                        'ממתין'              => $ordersReport['pending'],
-                        'מאושר'              => $ordersReport['approved'],
-                        'נדחה'               => $ordersReport['rejected'],
-                        'בהשאלה'             => $ordersReport['on_loan'],
-                        'עבר'                => $ordersReport['returned'],
-                        'הוזמנו ולא נלקחו'   => $ordersReport['not_picked'],
-                        'לא הושבו בזמן'      => $ordersReport['not_returned_late'],
-                    ];
+                    // אם נבחר סטטוס ספציפי – מציגים רק אותו, אחרת את כל הסטטוסים
+                    if ($reportStatus !== '' && $reportStatus !== 'הכל') {
+                        $bars = [
+                            'כמות הזמנות (סה״כ)' => $ordersReport['total'],
+                        ];
+                        if ($reportStatus === 'pending') {
+                            $bars['ממתין'] = $ordersReport['pending'];
+                        } elseif ($reportStatus === 'approved') {
+                            $bars['מאושר'] = $ordersReport['approved'];
+                        } elseif ($reportStatus === 'rejected') {
+                            $bars['נדחה'] = $ordersReport['rejected'];
+                        } elseif ($reportStatus === 'on_loan') {
+                            $bars['בהשאלה'] = $ordersReport['on_loan'];
+                        } elseif ($reportStatus === 'returned') {
+                            $bars['עבר'] = $ordersReport['returned'];
+                        } elseif ($reportStatus === 'not_picked') {
+                            $bars['הוזמנו ולא נלקחו'] = $ordersReport['not_picked'];
+                        } elseif ($reportStatus === 'not_returned') {
+                            $bars['לא הושבו בזמן'] = $ordersReport['not_returned_late'];
+                        }
+                    } else {
+                        $bars = [
+                            'כמות הזמנות (סה״כ)' => $ordersReport['total'],
+                            'ממתין'              => $ordersReport['pending'],
+                            'מאושר'              => $ordersReport['approved'],
+                            'נדחה'               => $ordersReport['rejected'],
+                            'בהשאלה'             => $ordersReport['on_loan'],
+                            'עבר'                => $ordersReport['returned'],
+                            'הוזמנו ולא נלקחו'   => $ordersReport['not_picked'],
+                            'לא הושבו בזמן'      => $ordersReport['not_returned_late'],
+                        ];
+                    }
                     foreach ($bars as $label => $val):
                         $val = (int)$val;
                         $pct = $ordersChartMax > 0 ? max(2, ($val / $ordersChartMax) * 100) : 0;
