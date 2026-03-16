@@ -108,6 +108,17 @@ if (isset($_GET['orders_show'])) {
         }
     }
 
+    // סינון לפי "סטטוס החזרה" ו"סטטוס ציוד מוחזר" – רלוונטי בעיקר לסטטוס "returned"
+    if ($reportReturnStatus !== '') {
+        $sql .= " AND COALESCE(o.return_equipment_status, '') = :ret_status";
+        $params[':ret_status'] = $reportReturnStatus;
+    }
+
+    if ($reportEquipCondition !== '') {
+        $sql .= " AND COALESCE(o.equipment_return_condition, '') = :eq_cond";
+        $params[':eq_cond'] = $reportEquipCondition;
+    }
+
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -586,7 +597,7 @@ if ($eqShow) {
                         </select>
                     </div>
                     <?php if ($reportStatus === 'returned'): ?>
-                        <div class="report-param-block">
+                        <div class="report-param-block" id="orders_return_status_block">
                             <label class="param-label" for="orders_return_status">סטטוס החזרה</label>
                             <select name="orders_return_status" id="orders_return_status"
                                     style="min-width:130px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
@@ -595,7 +606,7 @@ if ($eqShow) {
                                 <option value="לא הוחזר בזמן" <?= $reportReturnStatus === 'לא הוחזר בזמן' ? 'selected' : '' ?>>לא הוחזר בזמן</option>
                             </select>
                         </div>
-                        <div class="report-param-block">
+                        <div class="report-param-block" id="orders_equip_condition_block">
                             <label class="param-label" for="orders_equip_condition">סטטוס ציוד מוחזר</label>
                             <select name="orders_equip_condition" id="orders_equip_condition"
                                     style="min-width:130px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
@@ -861,7 +872,7 @@ if ($eqShow) {
     </div>
 </main>
 <script>
-    // לוח שנה לדוחות הזמנות
+    // לוח שנה לדוחות הזמנות + הצגת פילטרים לפי סטטוס החזרה
     (function () {
         var form       = document.getElementById('orders_report_form');
         var startInput = document.getElementById('orders_start');
@@ -872,10 +883,31 @@ if ($eqShow) {
         var grid       = document.getElementById('orders_calendar_grid');
         var calBtnStart = document.getElementById('cal_btn_start');
         var calBtnEnd   = document.getElementById('cal_btn_end');
+        var statusSelect = document.getElementById('orders_status');
+        var returnBlock  = document.getElementById('orders_return_status_block');
+        var equipBlock   = document.getElementById('orders_equip_condition_block');
         if (!form || !startInput || !endInput || !rangeBtn || !panel || !grid) return;
 
         var startDate = startInput.value || '';
         var endDate = endInput.value || '';
+
+        function updateReturnFiltersVisibility() {
+            if (!statusSelect || !returnBlock || !equipBlock) return;
+            var val = statusSelect.value;
+            var show = (val === 'returned');
+            returnBlock.style.display = show ? '' : 'none';
+            equipBlock.style.display = show ? '' : 'none';
+        }
+
+        if (statusSelect) {
+            statusSelect.addEventListener('change', function () {
+                updateReturnFiltersVisibility();
+                // לאחר שינוי סטטוס הזמנה – מגישים אוטומטית כדי לרענן את הדוח
+                form.submit();
+            });
+        }
+
+        updateReturnFiltersVisibility();
 
         function updateHint() {
             if (!rangeHint) return;
