@@ -563,7 +563,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
 
-                    // ניווט לאחר שמירה לפי הסטטוס המעודכן
+                    // ניווט לאחר שמירה:
+                    // אם התקבל current_tab בטופס – נשארים בטאב שממנו נפתחה העריכה.
+                    $allowedTabsForRedirect = ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history'];
+                    $currentTodayMode = $_POST['current_today_mode'] ?? null;
+                    if ($currentTab && in_array($currentTab, $allowedTabsForRedirect, true)) {
+                        $redirectUrl = 'admin_orders.php?tab=' . urlencode($currentTab);
+                        if ($currentTab === 'today' && $currentTodayMode) {
+                            $redirectUrl .= '&today_mode=' . urlencode($currentTodayMode);
+                        }
+                        header('Location: ' . $redirectUrl);
+                        exit;
+                    }
+
+                    // אחרת – שומרים את הלוגיקה הקיימת לפי סטטוס
                     $today = date('Y-m-d');
                     $targetTab = 'pending';
                     if ($newStatus === 'approved') {
@@ -1543,6 +1556,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             <form method="post" action="admin_orders.php<?= $editingOrder ? '?edit_id=' . (int)$editingOrder['id'] : '' ?>">
                 <input type="hidden" name="action" value="<?= $editingOrder ? 'update' : 'create' ?>">
                 <input type="hidden" name="id" value="<?= $editingOrder ? (int)$editingOrder['id'] : 0 ?>">
+                <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                <?php if ($tab === 'today'): ?>
+                    <input type="hidden" name="current_today_mode" value="<?= htmlspecialchars($todayMode, ENT_QUOTES, 'UTF-8') ?>">
+                <?php endif; ?>
 
                 <div class="grid">
                     <!-- עמודת תאריכים + רשימת ציוד שנבחר + שם שואל + הערות (בצד ימין ב-RTL) -->
