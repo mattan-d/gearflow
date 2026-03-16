@@ -278,18 +278,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             && in_array($recurringFreq, ['day', 'week'], true) && $recurringDuration >= 0.5 && $recurringDuration <= 3
             && (($recurringEndType === 'count' && $recurringCount >= 1) || ($recurringEndType === 'end_date' && $recurringEndDate !== '')));
 
-        if (count($equipmentIds) === 0 || $borrowerName === '') {
+        // עדכון מיוחד מטאבים "לא נלקח"/"לא הוחזר" – מאפשר שינוי סטטוסים בלבד מבלי לאכוף ולידציה מלאה על ציוד/תאריכים
+        $isSpecialStatusUpdate = (
+            $action === 'update'
+            && $currentTab !== null
+            && in_array($currentTab, ['not_picked', 'not_returned'], true)
+        );
+
+        if (!$isSpecialStatusUpdate && (count($equipmentIds) === 0 || $borrowerName === '')) {
             $error = 'יש למלא ציוד ושם שואל.';
-        } elseif ($recurringEnabled && !$isRecurringCreate && $action === 'create') {
+        } elseif (!$isSpecialStatusUpdate && $recurringEnabled && !$isRecurringCreate && $action === 'create') {
             $error = 'יש להשלים את כל פרטי ההזמנה המחזורית (תאריך ושעה התחלה, מחזוריות, משך וסיום).';
-        } elseif (!$isRecurringCreate && ($startDate === '' || $endDate === '')) {
+        } elseif (!$isSpecialStatusUpdate && !$isRecurringCreate && ($startDate === '' || $endDate === '')) {
             $error = 'יש למלא תאריכי התחלה וסיום.';
-        } elseif ($action === 'create' && !$isRecurringCreate && $originalStart !== '' && $originalEnd !== '' && $originalStart === $startDate && $originalEnd === $endDate) {
+        } elseif (!$isSpecialStatusUpdate && $action === 'create' && !$isRecurringCreate && $originalStart !== '' && $originalEnd !== '' && $originalStart === $startDate && $originalEnd === $endDate) {
             // שכפול: חייבים לשנות לפחות אחד מהתאריכים לפני שמירה
             $error = 'בשכפול הזמנה יש לשנות את תאריכי ההשאלה ו/או ההחזרה לפני שמירה.';
         } else {
             $conflicted = [];
-            if (!$isRecurringCreate && count($equipmentIds) > 0) {
+            if (!$isSpecialStatusUpdate && !$isRecurringCreate && count($equipmentIds) > 0) {
                 $reqStart = $startDate . ' ' . ($startTime !== '' ? $startTime : '00:00');
                 $reqEnd   = $endDate . ' ' . ($endTime !== '' ? $endTime : '23:59');
                 $excludeId = ($action === 'update' && $id > 0) ? $id : 0;
