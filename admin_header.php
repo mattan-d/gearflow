@@ -324,7 +324,7 @@ if ($userId > 0) {
         display: block;
         border: 2px dashed #d1d5db;
         border-radius: 12px;
-        padding: 1.5rem;
+        padding: 0.5rem;
         background: #f9fafb;
         text-align: center;
         cursor: pointer;
