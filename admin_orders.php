@@ -2048,7 +2048,39 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                     </thead>
                     <tbody>
                     <?php foreach ($orders as $order): ?>
-                        <tr data-order-id="<?= (int)$order['id'] ?>">
+                        <?php
+                        // צביעת שורות להזמנות במצב "בקשה" (pending) לפי קרבת מועד ההשאלה
+                        $rowHighlightClass = '';
+                        $orderStatusCode = (string)($order['status'] ?? '');
+                        if ($orderStatusCode === 'pending') {
+                            $orderStartDate = (string)($order['start_date'] ?? '');
+                            if ($orderStartDate !== '') {
+                                $todayYmd = date('Y-m-d');
+                                $startDt = DateTime::createFromFormat('Y-m-d', $orderStartDate);
+                                if ($startDt instanceof DateTime) {
+                                    // חישוב "יום עבודה קודם" – ראשון עד חמישי בלבד (0–4)
+                                    $prevBusiness = clone $startDt;
+                                    while (true) {
+                                        $prevBusiness->modify('-1 day');
+                                        $dayOfWeek = (int)$prevBusiness->format('w'); // 0=א, 5=ו, 6=ש
+                                        if ($dayOfWeek >= 0 && $dayOfWeek <= 4) {
+                                            break;
+                                        }
+                                    }
+                                    $prevBusinessYmd = $prevBusiness->format('Y-m-d');
+
+                                    if ($todayYmd === $prevBusinessYmd) {
+                                        $rowHighlightClass = 'row-pending-soon';
+                                    } elseif ($todayYmd === $orderStartDate) {
+                                        $rowHighlightClass = 'row-pending-today';
+                                    } elseif ($todayYmd > $orderStartDate) {
+                                        $rowHighlightClass = 'row-pending-late';
+                                    }
+                                }
+                            }
+                        }
+                        ?>
+                        <tr data-order-id="<?= (int)$order['id'] ?>" class="<?= htmlspecialchars($rowHighlightClass, ENT_QUOTES, 'UTF-8') ?>">
                             <td><?= (int)$order['id'] ?></td>
                         <td>
                             <?= htmlspecialchars($order['borrower_name'], ENT_QUOTES, 'UTF-8') ?><br>
