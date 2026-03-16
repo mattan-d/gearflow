@@ -32,6 +32,10 @@ $reportCategory = isset($_GET['orders_category']) ? trim((string)$_GET['orders_c
 // סטטוס הזמנה לדוח (ריק או 'הכל' = כל הסטטוסים)
 $reportStatus = isset($_GET['orders_status']) ? trim((string)$_GET['orders_status']) : '';
 
+// סינון נוסף לדוח הזמנות עבור הזמנות במצב "עבר"
+$reportReturnStatus = isset($_GET['orders_return_status']) ? trim((string)$_GET['orders_return_status']) : '';
+$reportEquipCondition = isset($_GET['orders_equip_condition']) ? trim((string)$_GET['orders_equip_condition']) : '';
+
 // רשימת סטטוסים מהטבלה (לקומבו בוקס)
 $orderStatusLabels = [];
 $orderStatusStmt = $pdo->query('SELECT status, label_he FROM order_status_labels ORDER BY status ASC');
@@ -581,6 +585,27 @@ if ($eqShow) {
                             <?php endforeach; ?>
                         </select>
                     </div>
+                    <?php if ($reportStatus === 'returned'): ?>
+                        <div class="report-param-block">
+                            <label class="param-label" for="orders_return_status">סטטוס החזרה</label>
+                            <select name="orders_return_status" id="orders_return_status"
+                                    style="min-width:130px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
+                                <option value="" <?= $reportReturnStatus === '' ? 'selected' : '' ?>>הכל</option>
+                                <option value="לא נאסף" <?= $reportReturnStatus === 'לא נאסף' ? 'selected' : '' ?>>לא נאסף</option>
+                                <option value="לא הוחזר בזמן" <?= $reportReturnStatus === 'לא הוחזר בזמן' ? 'selected' : '' ?>>לא הוחזר בזמן</option>
+                            </select>
+                        </div>
+                        <div class="report-param-block">
+                            <label class="param-label" for="orders_equip_condition">סטטוס ציוד מוחזר</label>
+                            <select name="orders_equip_condition" id="orders_equip_condition"
+                                    style="min-width:130px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
+                                <option value="" <?= $reportEquipCondition === '' ? 'selected' : '' ?>>הכל</option>
+                                <option value="תקין" <?= $reportEquipCondition === 'תקין' ? 'selected' : '' ?>>תקין</option>
+                                <option value="תקול" <?= $reportEquipCondition === 'תקול' ? 'selected' : '' ?>>תקול</option>
+                                <option value="חסר" <?= $reportEquipCondition === 'חסר' ? 'selected' : '' ?>>חסר</option>
+                            </select>
+                        </div>
+                    <?php endif; ?>
                     <div class="report-param-block calendar-bar">
                         <span class="param-label">תאריך התחלה וסיום (לוח שנה אחד)</span>
                         <button type="button" id="orders_range_btn" class="calendar-icon-btn" title="בחירת תאריך התחלה ותאריך סיום" aria-label="לוח שנה – בחירת תאריך התחלה וסיום"><i data-lucide="calendar" aria-hidden="true"></i></button>
