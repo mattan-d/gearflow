@@ -1294,6 +1294,16 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             background: #e0f2fe;
             color: #075985;
         }
+        /* צביעת שורות להזמנות במצב בקשה (pending) לפי קרבת מועד ההשאלה */
+        .row-pending-soon {
+            background-color: #fffbea; /* צהוב בהיר – יום עבודה לפני */
+        }
+        .row-pending-today {
+            background-color: #ffedd5; /* כתום בהיר – ביום ההשאלה */
+        }
+        .row-pending-late {
+            background-color: #fee2e2; /* אדום בהיר – לאחר מועד ההשאלה */
+        }
         .muted-small {
             font-size: 0.78rem;
             color: #6b7280;
