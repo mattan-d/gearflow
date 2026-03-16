@@ -585,7 +585,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $allowedTabsForRedirect = ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history'];
                     $currentTodayMode = $_POST['current_today_mode'] ?? null;
                     if ($currentTab && in_array($currentTab, $allowedTabsForRedirect, true)) {
-                        $redirectUrl = 'admin_orders.php?tab=' . urlencode($currentTab);
+                        // ברירת מחדל – נשארים בטאב שממנו נפתחה העריכה
+                        $targetTabForRedirect = $currentTab;
+                        // אבל אם סוגרים הזמנה מטאב "לא הוחזר" לסטטוס "עבר" – מעבירים להיסטוריה
+                        if ($currentTab === 'not_returned' && $newStatus === 'returned') {
+                            $targetTabForRedirect = 'history';
+                        }
+                        $redirectUrl = 'admin_orders.php?tab=' . urlencode($targetTabForRedirect);
                         if ($currentTab === 'today' && $currentTodayMode) {
                             $redirectUrl .= '&today_mode=' . urlencode($currentTodayMode);
                         }
@@ -2461,6 +2467,11 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         }
     }
 
+    // במצב עריכה מטאבים "לא נלקח" / "לא הוחזר" מאפשרים שמירה גם בלי תאריכים/ציוד
+    if (isEditFromSpecial && submitBtn) {
+        submitBtn.disabled = false;
+    }
+
     if (!startInput || !endInput || !modeStartBtn || !modeEndBtn || !calGrid || !calMonthLabel || !toggle || !panel) {
         return;
     }
@@ -2574,6 +2585,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     }
 
     function applyEquipmentVisibility() {
+        // במצב עריכה מיוחד ("לא נלקח"/"לא הוחזר") לא חוסמים את כפתור השמירה לפי תאריכים/ציוד
+        if (isEditFromSpecial) {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+            }
+            return;
+        }
         const normalDatesReady = !!startInput.value && !!endInput.value;
         const recurringReady = isRecurringReady();
         const datesReady = normalDatesReady || recurringReady;
