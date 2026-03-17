@@ -135,6 +135,38 @@ try {
             font-size: 0.85rem;
             box-sizing: border-box;
         }
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15,23,42,0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+        .modal-card {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 25px 60px rgba(15,23,42,0.45);
+            max-width: 700px;
+            width: 95%;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 1.25rem 1.5rem 1.25rem;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        .modal-close {
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 1.1rem;
+            line-height: 1;
+        }
     </style>
 </head>
 <body>
@@ -152,51 +184,72 @@ try {
         </div>
     <?php endif; ?>
 
+    <div class="toolbar">
+        <button type="button" class="btn" id="open_supplier_modal_btn">הוספת ספק</button>
+    </div>
+
+    <?php
+    $showModal = ($error !== '' && $_SERVER['REQUEST_METHOD'] === 'POST');
+    ?>
+    <div class="modal-backdrop" id="supplier_modal" style="display: <?= $showModal ? 'flex' : 'none' ?>;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 style="margin:0; font-size:1.2rem;">הוספת ספק</h2>
+                <button type="button" class="modal-close" id="supplier_modal_close" aria-label="סגירת חלון">×</button>
+            </div>
+            <form method="post" action="admin_suppliers.php">
+                <input type="hidden" name="action" value="create">
+                <div class="form-grid">
+                    <div>
+                        <label for="company_name">חברה</label>
+                        <input type="text" id="company_name" name="company_name" required>
+                    </div>
+                    <div>
+                        <label for="company_code">קוד חברה</label>
+                        <input type="text" id="company_code" name="company_code">
+                    </div>
+                    <div>
+                        <label for="contact_name">איש קשר</label>
+                        <input type="text" id="contact_name" name="contact_name">
+                    </div>
+                    <div>
+                        <label for="phone">טלפון</label>
+                        <input type="text" id="phone" name="phone">
+                    </div>
+                    <div>
+                        <label for="email">מייל</label>
+                        <input type="email" id="email" name="email">
+                    </div>
+                    <div>
+                        <label for="address">כתובת</label>
+                        <input type="text" id="address" name="address">
+                    </div>
+                    <div>
+                        <label for="website">לינק לאתר</label>
+                        <input type="text" id="website" name="website" placeholder="https://">
+                    </div>
+                    <div>
+                        <label for="service_type">סוג שירות</label>
+                        <select id="service_type" name="service_type">
+                            <option value="">בחר...</option>
+                            <option value="ציוד">ציוד</option>
+                            <option value="אחריות">אחריות</option>
+                            <option value="מעבדה">מעבדה</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="toolbar" style="margin-top:0.5rem;">
+                    <button type="button" class="btn secondary" id="supplier_modal_cancel">ביטול</button>
+                    <button type="submit" class="btn">שמירה</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div class="card">
         <p class="muted-small" style="margin-bottom:0.75rem;">
             טבלת ספקים.
         </p>
-
-        <form method="post" action="admin_suppliers.php" style="margin-bottom:0.75rem;">
-            <input type="hidden" name="action" value="create">
-            <div class="form-grid">
-                <div>
-                    <label for="company_name">חברה</label>
-                    <input type="text" id="company_name" name="company_name" required>
-                </div>
-                <div>
-                    <label for="company_code">קוד חברה</label>
-                    <input type="text" id="company_code" name="company_code">
-                </div>
-                <div>
-                    <label for="contact_name">איש קשר</label>
-                    <input type="text" id="contact_name" name="contact_name">
-                </div>
-                <div>
-                    <label for="phone">טלפון</label>
-                    <input type="text" id="phone" name="phone">
-                </div>
-                <div>
-                    <label for="email">מייל</label>
-                    <input type="email" id="email" name="email">
-                </div>
-                <div>
-                    <label for="address">כתובת</label>
-                    <input type="text" id="address" name="address">
-                </div>
-                <div>
-                    <label for="website">לינק לאתר</label>
-                    <input type="text" id="website" name="website" placeholder="https://">
-                </div>
-                <div>
-                    <label for="service_type">סוג שירות</label>
-                    <input type="text" id="service_type" name="service_type">
-                </div>
-            </div>
-            <div class="toolbar">
-                <button type="submit" class="btn">הוספת ספק</button>
-            </div>
-        </form>
 
         <div style="overflow-x:auto;">
             <table style="width:100%; border-collapse:collapse; font-size:0.86rem;">
@@ -244,5 +297,41 @@ try {
     </div>
 </main>
 </body>
+<script>
+    (function () {
+        var openBtn = document.getElementById('open_supplier_modal_btn');
+        var modal = document.getElementById('supplier_modal');
+        var closeBtn = document.getElementById('supplier_modal_close');
+        var cancelBtn = document.getElementById('supplier_modal_cancel');
+
+        function openModal() {
+            if (modal) {
+                modal.style.display = 'flex';
+            }
+        }
+        function closeModal() {
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+        if (openBtn) {
+            openBtn.addEventListener('click', openModal);
+        }
+        if (closeBtn) {
+            closeBtn.addEventListener('click', closeModal);
+        }
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', closeModal);
+        }
+        if (modal) {
+            modal.addEventListener('click', function (e) {
+                if (e.target === modal) {
+                    closeModal();
+                }
+            });
+        }
+    })();
+</script>
 </html>
 
