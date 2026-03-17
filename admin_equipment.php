@@ -231,6 +231,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // לא מפילים את השמירה אם רכיבים נכשלו
                     }
                 }
+
+                // אחרי שמירה מוצלחת נסגור את חלון העריכה (לא נטען שוב ציוד לעריכה)
+                if ($error === '') {
+                    $editingEquipment = null;
+                    $editId = 0;
+                    $viewId = 0;
+                }
             } catch (PDOException $e) {
                 if (str_contains($e->getMessage(), 'UNIQUE') && str_contains($e->getMessage(), 'code')) {
                     $error = 'קוד הציוד כבר קיים במערכת.';
