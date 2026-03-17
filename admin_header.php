@@ -414,6 +414,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <a href="admin_equipment.php">ניהול ציוד</a>
                     <a href="admin_orders.php">ניהול הזמנות</a>
                     <a href="admin_users.php">ניהול משתמשים</a>
+                    <a href="admin_suppliers.php">ספקים</a>
                     <a href="admin_reports.php">דוחות</a>
                     <div class="main-nav-item-wrapper">
                         <a href="admin.php">ניהול מערכת</a>
