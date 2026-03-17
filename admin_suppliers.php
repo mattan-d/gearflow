@@ -387,10 +387,11 @@ try {
                                     <label>טלפון</label>
                                     <?php if ($isViewMode): ?>
                                         <?php $phoneVal = (string)($editingSupplier['phone'] ?? ''); ?>
-                                        <a href="tel:<?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>"
-                                           style="display:inline-block;width:100%;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#111827;box-sizing:border-box;">
-                                            <?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>
-                                        </a>
+                                        <input type="text"
+                                               value="<?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>"
+                                               readonly
+                                               style="width:100%;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;box-sizing:border-box;cursor:pointer;"
+                                               onclick="if(this.value){window.location.href='tel:'+this.value;}">
                                         <input type="hidden" name="contact_phone[]" value="<?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>">
                                     <?php else: ?>
                                         <input type="text" name="contact_phone[]"
@@ -401,10 +402,11 @@ try {
                                     <label>מייל</label>
                                     <?php $emailVal = (string)($editingSupplier['email'] ?? ''); ?>
                                     <?php if ($isViewMode): ?>
-                                        <a href="mailto:<?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>"
-                                           style="display:inline-block;width:100%;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#111827;box-sizing:border-box;">
-                                            <?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>
-                                        </a>
+                                        <input type="text"
+                                               value="<?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>"
+                                               readonly
+                                               style="width:100%;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;box-sizing:border-box;cursor:pointer;"
+                                               onclick="if(this.value){window.location.href='mailto:'+this.value;}">
                                         <input type="hidden" name="contact_email[]" value="<?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>">
                                     <?php else: ?>
                                         <input type="email" name="contact_email[]"
