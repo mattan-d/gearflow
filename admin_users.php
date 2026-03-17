@@ -589,15 +589,15 @@ if (isset($_GET['export']) && $_GET['export'] === '1') {
     exit;
 }
 
-// משתמש לעריכה בחלון קופץ
+// משתמש לעריכה / צפייה בחלון קופץ
 $editingUser = null;
-if (isset($_GET['edit_id'])) {
-    $editId = (int)$_GET['edit_id'];
-    if ($editId > 0) {
-        $stmt = $pdo->prepare('SELECT id, username, role, first_name, last_name, warehouse, email, phone FROM users WHERE id = :id');
-        $stmt->execute([':id' => $editId]);
-        $editingUser = $stmt->fetch() ?: null;
-    }
+$editId = isset($_GET['edit_id']) ? (int)$_GET['edit_id'] : 0;
+$viewId = isset($_GET['view_id']) ? (int)$_GET['view_id'] : 0;
+$loadId = $editId > 0 ? $editId : $viewId;
+if ($loadId > 0) {
+    $stmt = $pdo->prepare('SELECT id, username, role, first_name, last_name, warehouse, email, phone FROM users WHERE id = :id');
+    $stmt->execute([':id' => $loadId]);
+    $editingUser = $stmt->fetch() ?: null;
 }
 
 ?>
@@ -1027,11 +1027,14 @@ if (isset($_GET['edit_id'])) {
         </div>
     </div>
 
-    <?php $showUserModal = $editingUser !== null; ?>
+    <?php
+    $isViewMode = ($viewId > 0 && $editingUser !== null);
+    $showUserModal = $editingUser !== null;
+    ?>
     <div class="modal-backdrop" id="user_modal" style="display: <?= $showUserModal ? 'flex' : 'none' ?>;">
         <div class="modal-card">
             <div class="modal-header">
-                <h2><?= $editingUser ? 'עריכת משתמש' : 'משתמש חדש' ?></h2>
+                <h2><?= $isViewMode ? 'צפייה במשתמש' : ($editingUser ? 'עריכת משתמש' : 'משתמש חדש') ?></h2>
                 <button type="button" class="modal-close" id="user_modal_close" aria-label="סגירת חלון"><i data-lucide="x" aria-hidden="true"></i></button>
             </div>
 
@@ -1041,42 +1044,42 @@ if (isset($_GET['edit_id'])) {
                 <div class="flash success"><?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?></div>
             <?php endif; ?>
 
-            <form method="post" action="admin_users.php<?= $editingUser ? '?edit_id=' . (int)$editingUser['id'] : '' ?>">
-                <input type="hidden" name="action" id="user_form_action" value="<?= $editingUser ? 'update' : 'create' ?>">
+            <form method="post" action="admin_users.php<?= $editingUser && !$isViewMode ? '?edit_id=' . (int)$editingUser['id'] : '' ?>">
+                <input type="hidden" name="action" id="user_form_action" value="<?= $editingUser && !$isViewMode ? 'update' : 'create' ?>">
                 <input type="hidden" name="id" id="user_id" value="<?= $editingUser ? (int)$editingUser['id'] : 0 ?>">
                 <div class="grid">
                     <div>
                         <label for="modal_first_name">שם פרטי</label>
-                        <input type="text" id="modal_first_name" name="first_name"
+                        <input type="text" id="modal_first_name" name="first_name" <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= $editingUser ? htmlspecialchars($editingUser['first_name'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
 
                         <label for="modal_last_name">שם משפחה</label>
-                        <input type="text" id="modal_last_name" name="last_name"
+                        <input type="text" id="modal_last_name" name="last_name" <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= $editingUser ? htmlspecialchars($editingUser['last_name'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
 
                         <label for="modal_username">שם משתמש</label>
-                        <input type="text" id="modal_username" name="username" required
+                        <input type="text" id="modal_username" name="username" required <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= $editingUser ? htmlspecialchars($editingUser['username'], ENT_QUOTES, 'UTF-8') : '' ?>">
 
                         <label for="modal_password">סיסמה<?= $editingUser ? ' (השאר ריק כדי לא לשנות)' : '' ?></label>
                         <?php if ($editingUser): ?>
-                        <input type="password" id="modal_password" name="new_password" autocomplete="new-password" placeholder="הזן סיסמה חדשה">
+                        <input type="password" id="modal_password" name="new_password" autocomplete="new-password" placeholder="הזן סיסמה חדשה" <?= $isViewMode ? 'readonly' : '' ?>>
                         <?php else: ?>
-                        <input type="password" id="modal_password" name="password" autocomplete="off" required>
+                        <input type="password" id="modal_password" name="password" autocomplete="off" required <?= $isViewMode ? 'readonly' : '' ?>>
                         <?php endif; ?>
                     </div>
                     <div>
                         <label for="modal_email">אימייל</label>
-                        <input type="text" id="modal_email" name="email"
+                        <input type="text" id="modal_email" name="email" <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= $editingUser ? htmlspecialchars($editingUser['email'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
 
                         <label for="modal_phone">טלפון</label>
-                        <input type="text" id="modal_phone" name="phone"
+                        <input type="text" id="modal_phone" name="phone" <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= $editingUser ? htmlspecialchars($editingUser['phone'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
 
                         <label for="modal_role">תפקיד</label>
                         <?php $currentRole = $editingUser['role'] ?? 'student'; ?>
-                        <select id="modal_role" name="role">
+                        <select id="modal_role" name="role" <?= $isViewMode ? 'disabled' : '' ?>>
                             <option value="student" <?= $currentRole === 'student' ? 'selected' : '' ?>>סטודנט</option>
                             <option value="warehouse_manager" <?= $currentRole === 'warehouse_manager' ? 'selected' : '' ?>>מנהל מחסן</option>
                             <option value="admin" <?= $currentRole === 'admin' ? 'selected' : '' ?>>אדמין</option>
@@ -1084,7 +1087,7 @@ if (isset($_GET['edit_id'])) {
 
                         <label for="modal_warehouse">מחסן</label>
                         <?php $currentWarehouse = trim((string)($editingUser['warehouse'] ?? '')); ?>
-                        <select id="modal_warehouse" name="warehouse">
+                        <select id="modal_warehouse" name="warehouse" <?= $isViewMode ? 'disabled' : '' ?>>
                             <option value="">ללא מחסן</option>
                             <option value="מחסן א" <?= $currentWarehouse === 'מחסן א' ? 'selected' : '' ?>>מחסן א</option>
                             <option value="מחסן ב" <?= $currentWarehouse === 'מחסן ב' ? 'selected' : '' ?>>מחסן ב</option>
@@ -1095,9 +1098,9 @@ if (isset($_GET['edit_id'])) {
                         </p>
                     </div>
                 </div>
-                <button type="submit" class="btn"><?= $editingUser ? 'שמירת שינויים' : 'שמירת משתמש' ?></button>
-                <?php if (!$editingUser): ?>
-                    <button type="button" class="btn secondary" id="user_modal_cancel">ביטול</button>
+                <button type="submit" class="btn" <?= $isViewMode ? 'style="display:none;"' : '' ?>><?= $editingUser ? 'שמירת שינויים' : 'שמירת משתמש' ?></button>
+                <?php if (!$editingUser || $isViewMode): ?>
+                    <button type="button" class="btn secondary" id="user_modal_cancel"><?= $isViewMode ? 'סגירה' : 'ביטול' ?></button>
                 <?php endif; ?>
             </form>
         </div>
@@ -1161,9 +1164,9 @@ if (isset($_GET['edit_id'])) {
                     </td>
                     <td>
                         <div class="row-actions">
-                            <button type="button" class="icon-btn" title="צפייה בפרטי משתמש" aria-label="צפייה בפרטי משתמש">
+                            <a href="admin_users.php?view_id=<?= (int)$user['id'] ?>" class="icon-btn" title="צפייה בפרטי משתמש" aria-label="צפייה בפרטי משתמש">
                                 <i data-lucide="eye" aria-hidden="true"></i>
-                            </button>
+                            </a>
                             <a href="admin_users.php?edit_id=<?= (int)$user['id'] ?>" class="icon-btn" title="עריכת משתמש" aria-label="עריכת משתמש"><i data-lucide="pencil" aria-hidden="true"></i></a>
                             <form method="post" action="admin_users.php">
                                 <input type="hidden" name="action" value="toggle_active">

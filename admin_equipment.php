@@ -18,14 +18,15 @@ $editingEquipment = null;
 $componentsEquipment = null;
 $componentsList = [];
 
-// Handle edit mode
-if (isset($_GET['edit_id'])) {
-    $editId = (int)$_GET['edit_id'];
-    if ($editId > 0) {
-        $stmt = $pdo->prepare('SELECT * FROM equipment WHERE id = :id');
-        $stmt->execute([':id' => $editId]);
-        $editingEquipment = $stmt->fetch() ?: null;
-    }
+// Handle edit / view mode
+$editingEquipment = null;
+$editId = isset($_GET['edit_id']) ? (int)$_GET['edit_id'] : 0;
+$viewId = isset($_GET['view_id']) ? (int)$_GET['view_id'] : 0;
+$loadId = $editId > 0 ? $editId : $viewId;
+if ($loadId > 0) {
+    $stmt = $pdo->prepare('SELECT * FROM equipment WHERE id = :id');
+    $stmt->execute([':id' => $loadId]);
+    $editingEquipment = $stmt->fetch() ?: null;
 }
 
 // רכיבי פריט לטופס הציוד (עריכה – טעינה; הוספה – ריק)
@@ -1568,13 +1569,14 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
     </div>
 
     <?php
+    $isViewModeEq = ($viewId > 0 && $editingEquipment !== null);
     $showFormCard = ($editingEquipment !== null || $error !== '') && empty($_GET['import_fix']);
     ?>
 
     <div class="modal-backdrop" id="equipment_modal" style="display: <?= $showFormCard ? 'flex' : 'none' ?>;">
         <div class="modal-card">
             <div class="modal-header">
-                <h2><?= $editingEquipment ? 'עריכת ציוד' : 'הוספת ציוד חדש' ?></h2>
+                <h2><?= $isViewModeEq ? 'צפייה בציוד' : ($editingEquipment ? 'עריכת ציוד' : 'הוספת ציוד חדש') ?></h2>
                 <button type="button" class="modal-close" id="equipment_modal_close" aria-label="סגירת חלון"><i data-lucide="x" aria-hidden="true"></i></button>
             </div>
 
@@ -1584,24 +1586,24 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                 <div class="flash success"><?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?></div>
             <?php endif; ?>
 
-            <form method="post" action="admin_equipment.php<?= $editingEquipment ? '?edit_id=' . (int)$editingEquipment['id'] : '' ?>" enctype="multipart/form-data">
+            <form method="post" action="admin_equipment.php<?= $editingEquipment && !$isViewModeEq ? '?edit_id=' . (int)$editingEquipment['id'] : '' ?>" enctype="multipart/form-data">
                 <input type="hidden" name="action" value="save">
                 <input type="hidden" name="id" value="<?= $editingEquipment ? (int)$editingEquipment['id'] : 0 ?>">
 
                 <div class="grid">
                     <div>
                         <label for="name">שם ציוד</label>
-                        <input type="text" id="name" name="name" required
+                        <input type="text" id="name" name="name" required <?= $isViewModeEq ? 'readonly' : '' ?>
                                value="<?= $editingEquipment ? htmlspecialchars($editingEquipment['name'], ENT_QUOTES, 'UTF-8') : '' ?>">
 
                         <label for="code">קוד זיהוי / ברקוד</label>
-                        <input type="text" id="code" name="code" required
+                        <input type="text" id="code" name="code" required <?= $isViewModeEq ? 'readonly' : '' ?>
                                value="<?= $editingEquipment
                                    ? htmlspecialchars($editingEquipment['code'], ENT_QUOTES, 'UTF-8')
                                    : htmlspecialchars($nextCode, ENT_QUOTES, 'UTF-8') ?>">
 
                         <label for="description">תיאור</label>
-                        <textarea id="description" name="description"><?= $editingEquipment ? htmlspecialchars($editingEquipment['description'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
+                        <textarea id="description" name="description" <?= $isViewModeEq ? 'readonly' : '' ?>><?= $editingEquipment ? htmlspecialchars($editingEquipment['description'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
 
                         <label for="picture_file">תמונה</label>
                         <?php
@@ -1617,6 +1619,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                             </div>
                             <input type="hidden" name="delete_picture" id="delete_picture" value="0">
                         <?php endif; ?>
+                        <?php if (!$isViewModeEq): ?>
                         <div class="file-drop-zone-wrap" style="max-width:280px;">
                             <label class="file-drop-zone" for="picture_file" aria-label="העלאת תמונת פריט">
                                 <input type="file" id="picture_file" name="picture_file" accept="image/*" class="file-drop-input">
@@ -1625,13 +1628,14 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                                 <span class="file-drop-hint">תמונת פריט (תמונה)</span>
                             </label>
                         </div>
+                        <?php endif; ?>
                     </div>
                     <div>
                         <label for="category">קטגוריה</label>
                         <?php
                         $currentCategory = trim((string)($editingEquipment['category'] ?? ''));
                         ?>
-                        <select id="category" name="category">
+                        <select id="category" name="category" <?= $isViewModeEq ? 'disabled' : '' ?>>
                             <option value="">בחר קטגוריה...</option>
                             <option value="מצלמה"   <?= $currentCategory === 'מצלמה'   ? 'selected' : '' ?>>מצלמה</option>
                             <option value="מיקרופון" <?= $currentCategory === 'מיקרופון' ? 'selected' : '' ?>>מיקרופון</option>
@@ -1643,14 +1647,14 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                         <?php
                         $currentLocation = trim((string)($editingEquipment['location'] ?? ''));
                         ?>
-                        <select id="location" name="location">
+                        <select id="location" name="location" <?= $isViewModeEq ? 'disabled' : '' ?>>
                             <option value="">בחר מחסן...</option>
                             <option value="מחסן א" <?= $currentLocation === 'מחסן א' ? 'selected' : '' ?>>מחסן א</option>
                             <option value="מחסן ב" <?= $currentLocation === 'מחסן ב' ? 'selected' : '' ?>>מחסן ב</option>
                         </select>
 
                         <label for="status">סטטוס</label>
-                        <select id="status" name="status">
+                        <select id="status" name="status" <?= $isViewModeEq ? 'disabled' : '' ?>>
                             <?php
                             $statusValue = $editingEquipment['status'] ?? 'active';
                             ?>
@@ -1663,8 +1667,10 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                 </div>
 
                 <div style="margin-top:1rem;">
+                    <?php if (!$isViewModeEq): ?>
                     <button type="button" class="btn secondary small" id="equipment_toggle_components_btn">הוספת פרטי ציוד</button>
-                    <div id="equipment_form_components_section" style="display:none; margin-top:0.75rem; padding:0.75rem; background:#f9fafb; border-radius:8px; border:1px solid #e5e7eb;">
+                    <?php endif; ?>
+                    <div id="equipment_form_components_section" style="<?= $isViewModeEq ? '' : 'display:none;' ?> margin-top:0.75rem; padding:0.75rem; background:#f9fafb; border-radius:8px; border:1px solid #e5e7eb;">
                         <div class="muted-small" style="margin-bottom:0.5rem;">רכיבי הפריט (עד <?= MAX_EQUIPMENT_COMPONENTS ?> רכיבים, כמות 1 לכל רכיב)</div>
                         <table style="width:100%; border-collapse:collapse; font-size:0.86rem; margin-bottom:0.5rem;">
                             <thead>
@@ -1678,31 +1684,35 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                             if (empty($formComps)): ?>
                                 <tr class="component-row">
                                     <td style="padding:0.35rem 0.5rem;">
-                                        <input type="text" name="component_name[]" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
+                                        <input type="text" name="component_name[]" <?= $isViewModeEq ? 'readonly' : '' ?> style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
                                     </td>
                                 </tr>
                             <?php else: ?>
                                 <?php foreach ($formComps as $fc): ?>
                                 <tr class="component-row">
                                     <td style="padding:0.35rem 0.5rem;">
-                                        <input type="text" name="component_name[]" value="<?= htmlspecialchars($fc['name'] ?? '', ENT_QUOTES, 'UTF-8') ?>" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
+                                        <input type="text" name="component_name[]" value="<?= htmlspecialchars($fc['name'] ?? '', ENT_QUOTES, 'UTF-8') ?>" <?= $isViewModeEq ? 'readonly' : '' ?> style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;">
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
                             <?php endif; ?>
                             </tbody>
                         </table>
+                        <?php if (!$isViewModeEq): ?>
                         <button type="button" class="btn secondary small" id="equipment_form_add_component_row" data-max="<?= MAX_EQUIPMENT_COMPONENTS ?>">הוסף שורה</button>
+                        <?php endif; ?>
                     </div>
                 </div>
 
-                <button type="submit" class="btn">
-                    <?= $editingEquipment ? 'שמירת שינויים' : 'הוספת ציוד' ?>
-                </button>
-                <?php if ($editingEquipment): ?>
+                <?php if (!$isViewModeEq): ?>
+                    <button type="submit" class="btn">
+                        <?= $editingEquipment ? 'שמירת שינויים' : 'הוספת ציוד' ?>
+                    </button>
+                <?php endif; ?>
+                <?php if ($editingEquipment && !$isViewModeEq): ?>
                     <a href="admin_equipment.php" class="btn secondary">ביטול עריכה</a>
                 <?php else: ?>
-                    <button type="button" class="btn secondary" id="equipment_modal_cancel">ביטול</button>
+                    <button type="button" class="btn secondary" id="equipment_modal_cancel"><?= $isViewModeEq ? 'סגירה' : 'ביטול' ?></button>
                 <?php endif; ?>
             </form>
         </div>
@@ -2086,9 +2096,10 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                             </td>
                             <td>
                                 <div class="row-actions">
-                                    <button type="button" class="icon-btn" title="צפייה בפריט" aria-label="צפייה בפריט">
+                                    <?php $viewParams = array_merge(['view_id' => (int)$item['id']], $tabBaseParams, ($equipmentTab !== 'all' && $equipmentTab !== '') ? ['equipment_tab' => $equipmentTab] : []); ?>
+                                    <a href="admin_equipment.php?<?= http_build_query($viewParams) ?>" class="icon-btn" title="צפייה בפריט" aria-label="צפייה בפריט">
                                         <i data-lucide="eye" aria-hidden="true"></i>
-                                    </button>
+                                    </a>
                                     <?php $editParams = array_merge(['edit_id' => (int)$item['id']], $tabBaseParams, ($equipmentTab !== 'all' && $equipmentTab !== '') ? ['equipment_tab' => $equipmentTab] : []); ?>
                                     <a href="admin_equipment.php?<?= http_build_query($editParams) ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
                                     <form method="post" action="admin_equipment.php" onsubmit="return confirm('למחוק את הפריט הזה?');">

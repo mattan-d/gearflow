@@ -171,10 +171,12 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'available_equipment') {
     exit;
 }
 
-// עריכת הזמנה קיימת - טעינת נתונים לטופס / שכפול
-if (isset($_GET['edit_id'])) {
-    $editId = (int)$_GET['edit_id'];
-    if ($editId > 0) {
+// עריכת / צפייה בהזמנה קיימת - טעינת נתונים לטופס / שכפול
+$editingOrder = null;
+$editId = isset($_GET['edit_id']) ? (int)$_GET['edit_id'] : 0;
+$viewId = isset($_GET['view_id']) ? (int)$_GET['view_id'] : 0;
+$loadId = $editId > 0 ? $editId : $viewId;
+if ($loadId > 0) {
         $stmt = $pdo->prepare(
             'SELECT o.*,
                     e.name AS equipment_name,
@@ -183,7 +185,7 @@ if (isset($_GET['edit_id'])) {
              JOIN equipment e ON e.id = o.equipment_id
              WHERE o.id = :id'
         );
-        $stmt->execute([':id' => $editId]);
+        $stmt->execute([':id' => $loadId]);
         $editingOrder = $stmt->fetch() ?: null;
     }
 }
@@ -1578,9 +1580,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
     <?php
     $mode     = $_GET['mode'] ?? null;
-    // טופס ההזמנה נפתח רק אם ביקשו במפורש (mode=new), יש שגיאה, או עורכים / משכפלים הזמנה.
-    // הצלחה בלבד לא פותחת טופס.
+    // במצב צפייה (view_id) גם נפתח את הטופס, אך נגדיר את השדות כקריאה בלבד.
+    // טופס ההזמנה נפתח רק אם ביקשו במפורש (mode=new), יש שגיאה, או עורכים / משכפלים / צופים בהזמנה.
     $showForm = $mode === 'new' || $editingOrder !== null || $error !== '';
+    $isViewModeOrder = ($viewId > 0 && $editingOrder !== null && !$isDuplicateMode);
     ?>
 
     <div class="modal-backdrop" id="order_modal" style="display: <?= $showForm ? 'flex' : 'none' ?>;">
@@ -1589,6 +1592,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 <h2>
                     <?php if ($editingOrder && $isDuplicateMode): ?>
                         שכפול הזמנה
+                    <?php elseif ($isViewModeOrder): ?>
+                        צפייה בהזמנה
                     <?php elseif ($editingOrder): ?>
                         עריכת הזמנה
                     <?php else: ?>
@@ -1598,8 +1603,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 <button type="button" class="modal-close" id="order_modal_close" aria-label="סגירת חלון"><i data-lucide="x" aria-hidden="true"></i></button>
             </div>
 
-            <form method="post" action="admin_orders.php<?= $editingOrder ? '?edit_id=' . (int)$editingOrder['id'] : '' ?>">
-                <input type="hidden" name="action" value="<?= $editingOrder ? 'update' : 'create' ?>">
+            <form method="post" action="admin_orders.php<?= $editingOrder && !$isViewModeOrder ? '?edit_id=' . (int)$editingOrder['id'] : '' ?>">
+                <input type="hidden" name="action" value="<?= $editingOrder && !$isViewModeOrder ? 'update' : 'create' ?>">
                 <input type="hidden" name="id" value="<?= $editingOrder ? (int)$editingOrder['id'] : 0 ?>">
                 <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
                 <?php if ($tab === 'today'): ?>
@@ -1657,7 +1662,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 <label>תאריך התחלה ושעת התחלה</label>
                                 <div class="recurring-date-row">
                                     <input type="hidden" name="recurring_start_date" id="recurring_start_date_h" value="">
-                                    <input type="text" id="recurring_start_date" readonly placeholder="תאריך" style="max-width: 7rem;" title="לחץ לבחירת תאריך">
+                        <input type="text" id="recurring_start_date" readonly placeholder="תאריך" style="max-width: 7rem;" title="לחץ לבחירת תאריך">
                                     <select id="recurring_start_time" name="recurring_start_time">
                                         <option value="">שעה</option>
                                         <?php for ($h = 9; $h <= 15; $h++): ?>
@@ -2292,9 +2297,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 }
                                 if ($canEditOrDelete): ?>
                                     <div class="row-actions">
-                                        <button type="button" class="icon-btn" title="צפייה בהזמנה" aria-label="צפייה בהזמנה">
+                                        <a href="admin_orders.php?view_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?><?= $tab === 'today' ? '&today_mode=' . urlencode($todayMode) : '' ?>" class="icon-btn" title="צפייה בהזמנה" aria-label="צפייה בהזמנה">
                                             <i data-lucide="eye" aria-hidden="true"></i>
-                                        </button>
+                                        </a>
                                         <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?><?= $tab === 'today' ? '&today_mode=' . urlencode($todayMode) : '' ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
                                         <form method="post" action="admin_orders.php"
                                               onsubmit="return confirm('למחוק את ההזמנה הזו?');">
@@ -2320,9 +2325,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                             </form>
                                         <?php endif; ?>
 
-                                        <button type="button" class="icon-btn" title="צפייה בהזמנה" aria-label="צפייה בהזמנה">
+                                        <a href="admin_orders.php?view_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?><?= $tab === 'today' ? '&today_mode=' . urlencode($todayMode) : '' ?>" class="icon-btn" title="צפייה בהזמנה" aria-label="צפייה בהזמנה">
                                             <i data-lucide="eye" aria-hidden="true"></i>
-                                        </button>
+                                        </a>
 
                                         <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?><?= $tab === 'today' ? '&today_mode=' . urlencode($todayMode) : '' ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
 
