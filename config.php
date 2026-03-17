@@ -367,7 +367,7 @@ function initialize_database(PDO $pdo): void
         )
     ");
 
-    // עמודות שירות בציוד (ספק/מעבדה/אחריות)
+    // עמודות שירות ואחריות בציוד (ספק/מעבדה/אחריות)
     try {
         $equipCols = $pdo->query("PRAGMA table_info(equipment)")->fetchAll(PDO::FETCH_ASSOC);
         $equipNames = array_column($equipCols, 'name');
@@ -383,8 +383,17 @@ function initialize_database(PDO $pdo): void
         if (!in_array('service_warranty_supplier_id', $equipNames, true)) {
             $pdo->exec("ALTER TABLE equipment ADD COLUMN service_warranty_supplier_id INTEGER");
         }
+        if (!in_array('warranty_start', $equipNames, true)) {
+            $pdo->exec("ALTER TABLE equipment ADD COLUMN warranty_start TEXT");
+        }
+        if (!in_array('warranty_end', $equipNames, true)) {
+            $pdo->exec("ALTER TABLE equipment ADD COLUMN warranty_end TEXT");
+        }
+        if (!in_array('warranty_image', $equipNames, true)) {
+            $pdo->exec("ALTER TABLE equipment ADD COLUMN warranty_image TEXT");
+        }
     } catch (Throwable $e) {
-        // מתעלמים משגיאות מיגרציה של עמודות שירות
+        // מתעלמים משגיאות מיגרציה של עמודות שירות/אחריות
     }
 
     // Ensure default admin user exists: admin / admin

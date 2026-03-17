@@ -86,6 +86,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $serviceLabId      = isset($_POST['service_lab_id']) ? (int)$_POST['service_lab_id'] : 0;
         $serviceWarrantyMode = trim((string)($_POST['service_warranty_mode'] ?? ''));
         $serviceWarrantySupplierId = isset($_POST['service_warranty_supplier_id']) ? (int)$_POST['service_warranty_supplier_id'] : 0;
+        $warrantyStart = trim((string)($_POST['warranty_start'] ?? ''));
+        $warrantyEnd   = trim((string)($_POST['warranty_end'] ?? ''));
         // אם נבחר ספק אחריות מהרשימה (sup_ID), נשמור גם את ה-ID בעמודה הייעודית
         if (str_starts_with($serviceWarrantyMode, 'sup_')) {
             $serviceWarrantySupplierId = (int)substr($serviceWarrantyMode, 4);
@@ -131,6 +133,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        // ניהול תמונת אחריות
+        $warrantyImagePath = '';
+        if ($id > 0 && $editingEquipment !== null) {
+            $warrantyImagePath = (string)($editingEquipment['warranty_image'] ?? '');
+        }
+        if (isset($_FILES['warranty_file']) && is_array($_FILES['warranty_file']) && ($_FILES['warranty_file']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+            $tmpNameW = (string)($_FILES['warranty_file']['tmp_name'] ?? '');
+            $origNameW = (string)($_FILES['warranty_file']['name'] ?? '');
+            if ($tmpNameW !== '' && is_uploaded_file($tmpNameW)) {
+                $uploadDirW = __DIR__ . '/equipment_warranty';
+                if (!is_dir($uploadDirW)) {
+                    @mkdir($uploadDirW, 0777, true);
+                }
+                $extW = pathinfo($origNameW, PATHINFO_EXTENSION);
+                $extW = $extW !== '' ? ('.' . strtolower($extW)) : '';
+                try {
+                    $randomW = bin2hex(random_bytes(4));
+                } catch (Throwable $e) {
+                    $randomW = (string)mt_rand(1000, 9999);
+                }
+                $fileNameW = 'warranty_' . time() . '_' . $randomW . $extW;
+                $targetPathW = $uploadDirW . DIRECTORY_SEPARATOR . $fileNameW;
+                if (move_uploaded_file($tmpNameW, $targetPathW)) {
+                    $warrantyImagePath = 'equipment_warranty/' . $fileNameW;
+                } else {
+                    $error = $error !== '' ? $error : 'שגיאה בהעלאת תמונת האחריות. ניתן לנסות שוב.';
+                }
+            }
+        }
+
         // quantities are now internal only – keep previous values if editing, or default to 1
         if ($id > 0 && $editingEquipment !== null) {
             $quantityTotal     = (int)($editingEquipment['quantity_total'] ?? 1);
@@ -160,6 +192,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                              service_lab_id = :service_lab_id,
                              service_warranty_mode = :service_warranty_mode,
                              service_warranty_supplier_id = :service_warranty_supplier_id,
+                             warranty_start = :warranty_start,
+                             warranty_end = :warranty_end,
+                             warranty_image = :warranty_image,
                              updated_at = :updated_at
                          WHERE id = :id'
                     );
@@ -177,6 +212,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':service_lab_id'              => $serviceLabId ?: null,
                         ':service_warranty_mode'       => $serviceWarrantyMode,
                         ':service_warranty_supplier_id'=> $serviceWarrantySupplierId ?: null,
+                        ':warranty_start'    => $warrantyStart !== '' ? $warrantyStart : null,
+                        ':warranty_end'      => $warrantyEnd !== '' ? $warrantyEnd : null,
+                        ':warranty_image'    => $warrantyImagePath,
                         ':updated_at'        => date('Y-m-d H:i:s'),
                         ':id'                => $id,
                     ]);
@@ -185,10 +223,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt = $pdo->prepare(
                         'INSERT INTO equipment
                          (name, code, description, category, location, quantity_total, quantity_available, status, picture,
-                          service_supplier_id, service_lab_id, service_warranty_mode, service_warranty_supplier_id, created_at)
+                          service_supplier_id, service_lab_id, service_warranty_mode, service_warranty_supplier_id,
+                          warranty_start, warranty_end, warranty_image, created_at)
                          VALUES
                          (:name, :code, :description, :category, :location, :quantity_total, :quantity_available, :status, :picture,
-                          :service_supplier_id, :service_lab_id, :service_warranty_mode, :service_warranty_supplier_id, :created_at)'
+                          :service_supplier_id, :service_lab_id, :service_warranty_mode, :service_warranty_supplier_id,
+                          :warranty_start, :warranty_end, :warranty_image, :created_at)'
                     );
                     $stmt->execute([
                         ':name'               => $name,
@@ -204,6 +244,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':service_lab_id'              => $serviceLabId ?: null,
                         ':service_warranty_mode'       => $serviceWarrantyMode,
                         ':service_warranty_supplier_id'=> $serviceWarrantySupplierId ?: null,
+                        ':warranty_start'     => $warrantyStart !== '' ? $warrantyStart : null,
+                        ':warranty_end'       => $warrantyEnd !== '' ? $warrantyEnd : null,
+                        ':warranty_image'     => $warrantyImagePath,
                         ':created_at'         => date('Y-m-d H:i:s'),
                     ]);
                     $id = (int)$pdo->lastInsertId();
@@ -1826,6 +1869,50 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                                 <input type="hidden" id="service_warranty_supplier_id" name="service_warranty_supplier_id"
                                        value="<?= $currentServiceWarrantySupplierId > 0 ? (int)$currentServiceWarrantySupplierId : 0 ?>">
                             </div>
+                        </div>
+                    </div>
+
+                    <?php
+                    $warrantyStartVal = (string)($editingEquipment['warranty_start'] ?? '');
+                    $warrantyEndVal   = (string)($editingEquipment['warranty_end'] ?? '');
+                    $warrantyImageVal = (string)($editingEquipment['warranty_image'] ?? '');
+                    ?>
+                    <div style="margin-top:0.75rem;">
+                        <div class="muted-small" style="margin-bottom:0.25rem;font-weight:600;font-size:0.95rem;">אחריות</div>
+                        <div class="form-grid" style="margin-bottom:0.35rem;">
+                            <div>
+                                <label for="warranty_start">התחלת אחריות</label>
+                                <input type="date" id="warranty_start" name="warranty_start"
+                                       value="<?= htmlspecialchars($warrantyStartVal, ENT_QUOTES, 'UTF-8') ?>"
+                                       <?= $isViewModeEq ? 'readonly' : '' ?>>
+                            </div>
+                            <div>
+                                <label for="warranty_end">סיום אחריות</label>
+                                <input type="date" id="warranty_end" name="warranty_end"
+                                       value="<?= htmlspecialchars($warrantyEndVal, ENT_QUOTES, 'UTF-8') ?>"
+                                       <?= $isViewModeEq ? 'readonly' : '' ?>>
+                            </div>
+                        </div>
+                        <div>
+                            <?php if ($warrantyImageVal !== ''): ?>
+                                <label>תמונת אחריות נוכחית</label>
+                                <div style="margin-bottom:0.4rem;">
+                                    <a href="<?= htmlspecialchars($warrantyImageVal, ENT_QUOTES, 'UTF-8') ?>"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       style="color:#2563eb; text-decoration:underline; font-size:0.85rem;">
+                                        הצג תמונת אחריות
+                                    </a>
+                                </div>
+                            <?php endif; ?>
+                            <?php if (!$isViewModeEq): ?>
+                                <label class="file-drop-zone" for="warranty_file" aria-label="העלאת תמונת אחריות">
+                                    <input type="file" id="warranty_file" name="warranty_file" accept="image/*" class="file-drop-input">
+                                    <span class="file-drop-icon"><i data-lucide="upload" aria-hidden="true"></i></span>
+                                    <span class="file-drop-text">גרור תמונת אחריות לכאן או לחץ לבחירה</span>
+                                    <span class="file-drop-hint">תמונת אחריות (תמונה)</span>
+                                </label>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
