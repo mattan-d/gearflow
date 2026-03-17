@@ -1,0 +1,106 @@
+---
+description: הוספת אייקון צפייה (עין) לצד אייקון עריכה ברשימות ניהול
+globs: admin_*.php
+alwaysApply: false
+---
+
+# אייקון צפייה (עין) ברשימות ניהול
+
+בכל מסך ניהול המציג **רשימה** (טבלת נתונים) של ישויות במערכת – למשל:
+
+- `admin_orders.php` – רשימת הזמנות  
+- `admin_equipment.php` – רשימת ציוד  
+- `admin_suppliers.php` – רשימת ספקים  
+- `admin_users.php` – רשימת משתמשים  
+
+כאשר קיים **אייקון עריכה (עט)** בפעולות השורה, יש ליישם גם **אייקון צפייה (עין)** עם אותה נראות.
+
+## כללים למימוש
+
+- **מיקום**: בעמודת ה"פעולות" של השורה, לצד אייקון העריכה והמחיקה, בתוך אותו `div.row-actions`.
+- **נראות**:
+  - להשתמש באותה מחלקת CSS כמו אייקון העריכה, למשל `icon-btn`.
+  - להשתמש באייקון עין דרך Lucide (או סט האייקונים הקיים), לדוגמה: `<i data-lucide="eye" aria-hidden="true"></i>`.
+- **התנהגות**:
+  - לחיצה על אייקון העין **לא** נכנסת למצב עריכה, אלא פותחת **חלון צפייה** (modal) המוצג במצב "קריאה בלבד".
+  - חלון הצפייה יכול להשתמש באותו מודאל/טופס כמו החלון של העריכה, אבל:
+    - כל הקלטים (`input`, `select`, `textarea`) מוגדרים כ־`readonly` / `disabled`.
+    - כפתורי שמירה/עדכון מוסתרים או מנוטרלים.
+    - כותרת המודאל תהיה בסגנון: "צפייה בפרטי משתמש", "צפייה בפרטי ספק" וכו'.
+
+## קישורים אינטראקטיביים בחלון צפייה
+
+בעת הצגת נתונים בחלון הצפייה:
+
+- **שדה מייל**:
+  - מוצג כקישור `mailto:`:
+    - דוגמה: `<a href="mailto:user@example.com">user@example.com</a>`
+  - לחיצה עליו פותחת את אפליקציית הדוא\"ל במכשיר כשהנמען הוא הכתובת שנבחרה.
+
+- **שדה טלפון**:
+  - מוצג כקישור `tel:`:
+    - דוגמה: `<a href="tel:0501234567">050-1234567</a>`
+  - לחיצה עליו פותחת את אפליקציית הטלפון כשהמספר להתקשרות הוא המספר שנלחץ.
+
+## דוגמת יישום – שורת פעולות
+
+```php
+<td>
+    <div class="row-actions">
+        <!-- צפייה -->
+        <button type="button"
+                class="icon-btn view-entity-btn"
+                data-id="<?= (int)$row['id'] ?>"
+                title="צפייה בפרטים"
+                aria-label="צפייה בפרטים">
+            <i data-lucide="eye" aria-hidden="true"></i>
+        </button>
+
+        <!-- עריכה -->
+        <a href="admin_users.php?edit_id=<?= (int)$row['id'] ?>"
+           class="icon-btn"
+           title="עריכת משתמש"
+           aria-label="עריכת משתמש">
+            <i data-lucide="pencil" aria-hidden="true"></i>
+        </a>
+
+        <!-- מחיקה -->
+        <form method="post" action="admin_users.php" onsubmit="return confirm('למחוק את המשתמש הזה?');">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="id" value="<?= (int)$row['id'] ?>">
+            <button type="submit"
+                    class="icon-btn"
+                    title="מחיקת משתמש"
+                    aria-label="מחיקת משתמש">
+                <i data-lucide="trash-2" aria-hidden="true"></i>
+            </button>
+        </form>
+    </div>
+</td>
+```
+
+## דוגמת הצגת מייל וטלפון בחלון צפייה
+
+```php
+<?php if ($viewMode): ?>
+    <p>
+        <strong>מייל:</strong>
+        <?php if ($email !== ''): ?>
+            <a href="mailto:<?= htmlspecialchars($email, ENT_QUOTES, 'UTF-8') ?>">
+                <?= htmlspecialchars($email, ENT_QUOTES, 'UTF-8') ?>
+            </a>
+        <?php endif; ?>
+    </p>
+    <p>
+        <strong>טלפון:</strong>
+        <?php if ($phone !== ''): ?>
+            <a href="tel:<?= htmlspecialchars($phone, ENT_QUOTES, 'UTF-8') ?>">
+                <?= htmlspecialchars($phone, ENT_QUOTES, 'UTF-8') ?>
+            </a>
+        <?php endif; ?>
+    </p>
+<?php endif; ?>
+```
+
+בעת הוספת מסכים/רשימות ניהול חדשים, יש לשמור על דפוס זה: אייקון עין לצפייה, אייקון עט לעריכה, וקישורים `mailto:` / `tel:` בחלון הצפייה.
+
