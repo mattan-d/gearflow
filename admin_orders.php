@@ -3472,6 +3472,27 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
         var modal = document.getElementById('order_components_modal');
         var backdrop, card, listContainer, closeBtn, saveBtn;
+        var componentChecksCache = {};
+
+        // מילוי cache ראשוני מנתוני ה-HTML (שנטענו מה-DB)
+        (function initCacheFromDom() {
+            var nodes = document.querySelectorAll('script[data-component-checks-for-order]');
+            nodes.forEach(function (node) {
+                var oid = node.getAttribute('data-component-checks-for-order');
+                var code = node.getAttribute('data-component-checks-code') || '';
+                if (!oid || !code) return;
+                var data = {};
+                try {
+                    data = JSON.parse(node.textContent || '{}') || {};
+                } catch (e) {
+                    data = {};
+                }
+                if (!componentChecksCache[oid]) {
+                    componentChecksCache[oid] = {};
+                }
+                componentChecksCache[oid][code] = data;
+            });
+        })();
 
         function ensureModal() {
             if (modal) return;
@@ -3573,17 +3594,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         ul.style.listStyle = 'none';
                         ul.style.padding = '0';
                         ul.style.margin = '0';
-                        // בדיקה אם קיימת שמירה קודמת עבור הזמנה זו
-                        var savedChecksEl = document.querySelector(
-                            'script[data-component-checks-for-order="' + orderId + '"][data-component-checks-code="' + code + '"]'
-                        );
+                        // בדיקה אם קיימת שמירה קודמת עבור הזמנה זו (מה-cache הזיכרוני)
                         var savedChecks = {};
-                        if (savedChecksEl) {
-                            try {
-                                savedChecks = JSON.parse(savedChecksEl.textContent || '{}') || {};
-                            } catch (e) {
-                                savedChecks = {};
-                            }
+                        if (componentChecksCache[orderId] && componentChecksCache[orderId][code]) {
+                            savedChecks = componentChecksCache[orderId][code];
                         }
 
                         components.forEach(function (c) {
@@ -3624,11 +3638,17 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 modal._saveBtn.onclick = function () {
                     var checkboxes = modal._listContainer.querySelectorAll('input[type="checkbox"][data-component-name]');
                     var payload = [];
+                    var mapForCache = {};
                     checkboxes.forEach(function (cb) {
+                        var n = cb.getAttribute('data-component-name') || '';
+                        var present = cb.checked ? 1 : 0;
                         payload.push({
-                            name: cb.getAttribute('data-component-name') || '',
-                            present: cb.checked ? 1 : 0
+                            name: n,
+                            present: present
                         });
+                        if (n) {
+                            mapForCache[n] = !!present;
+                        }
                     });
                     var formData = new FormData();
                     formData.append('action', 'save_components');
@@ -3643,6 +3663,11 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         if (!res.ok) throw new Error('save failed');
                         return res.json();
                     }).then(function () {
+                        // עדכון cache בזיכרון כך שפתיחה חוזרת בלי רענון תשמור את ה-V
+                        if (!componentChecksCache[orderId]) {
+                            componentChecksCache[orderId] = {};
+                        }
+                        componentChecksCache[orderId][code] = mapForCache;
                         alert('הרכיבים נשמרו.');
                     }).catch(function () {
                         alert('שמירת הרכיבים נכשלה.');
