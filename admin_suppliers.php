@@ -10,6 +10,10 @@ $pdo     = get_db();
 $error   = '';
 $success = '';
 
+// ספק בעריכה (אם נבחר מהטבלה)
+$editId          = isset($_GET['edit_id']) ? (int)($_GET['edit_id'] ?? 0) : 0;
+$editingSupplier = null;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     if ($action === 'create') {
@@ -48,6 +52,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'שגיאה בשמירת הספק.';
             }
         }
+    } elseif ($action === 'update') {
+        $id          = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        $companyName = trim((string)($_POST['company_name'] ?? ''));
+        $companyCode = trim((string)($_POST['company_code'] ?? ''));
+        $contactName = trim((string)($_POST['contact_name'] ?? ''));
+        $phone       = trim((string)($_POST['phone'] ?? ''));
+        $email       = trim((string)($_POST['email'] ?? ''));
+        $address     = trim((string)($_POST['address'] ?? ''));
+        $website     = trim((string)($_POST['website'] ?? ''));
+        $serviceType = trim((string)($_POST['service_type'] ?? ''));
+
+        if ($id <= 0 || $companyName === '') {
+            $error = 'יש להזין שם חברה תקין.';
+        } else {
+            try {
+                $stmt = $pdo->prepare("
+                    UPDATE suppliers
+                    SET company_name = :company_name,
+                        company_code = :company_code,
+                        contact_name = :contact_name,
+                        phone        = :phone,
+                        email        = :email,
+                        address      = :address,
+                        website      = :website,
+                        service_type = :service_type,
+                        updated_at   = :updated_at
+                    WHERE id = :id
+                ");
+                $stmt->execute([
+                    ':company_name' => $companyName,
+                    ':company_code' => $companyCode,
+                    ':contact_name' => $contactName,
+                    ':phone'        => $phone,
+                    ':email'        => $email,
+                    ':address'      => $address,
+                    ':website'      => $website,
+                    ':service_type' => $serviceType,
+                    ':updated_at'   => date('Y-m-d H:i:s'),
+                    ':id'           => $id,
+                ]);
+                $success = 'הספק עודכן בהצלחה.';
+                // לאחר עדכון מוצלח לא נפתח שוב את חלון העריכה
+                $editId = 0;
+            } catch (PDOException $e) {
+                $error = 'שגיאה בעדכון הספק.';
+            }
+        }
     } elseif ($action === 'delete') {
         $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
         if ($id > 0) {
@@ -57,7 +108,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $success = 'הספק נמחק בהצלחה.';
             } catch (PDOException $e) {
                 $error = 'שגיאה במחיקת הספק.';
+            }
         }
+    }
+}
+
+// אם יש ספק בעריכה (בקשת GET עם edit_id תקין) – נטען אותו למודאל
+if ($editId > 0 && $error === '') {
+    try {
+        $stmt = $pdo->prepare("
+            SELECT id, company_name, company_code, contact_name, phone, email, address, website, service_type
+            FROM suppliers
+            WHERE id = :id
+        ");
+        $stmt->execute([':id' => $editId]);
+        $editingSupplier = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (PDOException $e) {
+        $editingSupplier = null;
     }
 }
 
@@ -219,52 +286,62 @@ try {
     </div>
 
     <?php
-    $showModal = ($error !== '' && $_SERVER['REQUEST_METHOD'] === 'POST');
+    $showModal = ($error !== '' && $_SERVER['REQUEST_METHOD'] === 'POST') || ($editingSupplier !== null && $_SERVER['REQUEST_METHOD'] === 'GET');
+    $modalAction = $editingSupplier ? 'update' : 'create';
     ?>
     <div class="modal-backdrop" id="supplier_modal" style="display: <?= $showModal ? 'flex' : 'none' ?>;">
         <div class="modal-card">
             <div class="modal-header">
-                <h2 style="margin:0; font-size:1.2rem;">הוספת ספק</h2>
+                <h2 style="margin:0; font-size:1.2rem;"><?= $editingSupplier ? 'עריכת ספק' : 'הוספת ספק' ?></h2>
                 <button type="button" class="modal-close" id="supplier_modal_close" aria-label="סגירת חלון">×</button>
             </div>
-            <form method="post" action="admin_suppliers.php">
-                <input type="hidden" name="action" value="create">
+            <form method="post" action="admin_suppliers.php" id="supplier_form">
+                <input type="hidden" name="action" id="supplier_action" value="<?= htmlspecialchars($modalAction, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="id" id="supplier_id" value="<?= (int)($editingSupplier['id'] ?? 0) ?>">
                 <div class="form-grid">
                     <div>
                         <label for="company_name">חברה</label>
-                        <input type="text" id="company_name" name="company_name" required>
+                        <input type="text" id="company_name" name="company_name" required
+                               value="<?= htmlspecialchars((string)($editingSupplier['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div>
                         <label for="company_code">קוד חברה</label>
-                        <input type="text" id="company_code" name="company_code">
+                        <input type="text" id="company_code" name="company_code"
+                               value="<?= htmlspecialchars((string)($editingSupplier['company_code'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div>
                         <label for="contact_name">איש קשר</label>
-                        <input type="text" id="contact_name" name="contact_name">
+                        <input type="text" id="contact_name" name="contact_name"
+                               value="<?= htmlspecialchars((string)($editingSupplier['contact_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div>
                         <label for="phone">טלפון</label>
-                        <input type="text" id="phone" name="phone">
+                        <input type="text" id="phone" name="phone"
+                               value="<?= htmlspecialchars((string)($editingSupplier['phone'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div>
                         <label for="email">מייל</label>
-                        <input type="email" id="email" name="email">
+                        <input type="email" id="email" name="email"
+                               value="<?= htmlspecialchars((string)($editingSupplier['email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div>
                         <label for="address">כתובת</label>
-                        <input type="text" id="address" name="address">
+                        <input type="text" id="address" name="address"
+                               value="<?= htmlspecialchars((string)($editingSupplier['address'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div>
                         <label for="website">לינק לאתר</label>
-                        <input type="text" id="website" name="website" placeholder="https://">
+                        <input type="text" id="website" name="website" placeholder="https://"
+                               value="<?= htmlspecialchars((string)($editingSupplier['website'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div>
                         <label for="service_type">סוג שירות</label>
                         <select id="service_type" name="service_type">
+                            <?php $currentService = (string)($editingSupplier['service_type'] ?? ''); ?>
                             <option value="">בחר...</option>
-                            <option value="ציוד">ציוד</option>
-                            <option value="אחריות">אחריות</option>
-                            <option value="מעבדה">מעבדה</option>
+                            <option value="ציוד"     <?= $currentService === 'ציוד' ? 'selected' : '' ?>>ציוד</option>
+                            <option value="אחריות"  <?= $currentService === 'אחריות' ? 'selected' : '' ?>>אחריות</option>
+                            <option value="מעבדה"   <?= $currentService === 'מעבדה' ? 'selected' : '' ?>>מעבדה</option>
                         </select>
                     </div>
                 </div>
@@ -344,6 +421,9 @@ try {
         var modal = document.getElementById('supplier_modal');
         var closeBtn = document.getElementById('supplier_modal_close');
         var cancelBtn = document.getElementById('supplier_modal_cancel');
+        var form = document.getElementById('supplier_form');
+        var actionInput = document.getElementById('supplier_action');
+        var idInput = document.getElementById('supplier_id');
 
         function openModal() {
             if (modal) {
@@ -356,8 +436,27 @@ try {
             }
         }
 
+        function openForCreate() {
+            if (!form) {
+                openModal();
+                return;
+            }
+            if (actionInput) actionInput.value = 'create';
+            if (idInput) idInput.value = '0';
+
+            var inputs = form.querySelectorAll('input[type="text"], input[type="email"]');
+            inputs.forEach(function (inp) {
+                if (inp.id === 'supplier_id' || inp.id === 'supplier_action') return;
+                inp.value = '';
+            });
+            var select = document.getElementById('service_type');
+            if (select) select.value = '';
+
+            openModal();
+        }
+
         if (openBtn) {
-            openBtn.addEventListener('click', openModal);
+            openBtn.addEventListener('click', openForCreate);
         }
         if (closeBtn) {
             closeBtn.addEventListener('click', closeModal);
