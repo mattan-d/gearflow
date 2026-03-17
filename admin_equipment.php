@@ -2086,6 +2086,9 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                             </td>
                             <td>
                                 <div class="row-actions">
+                                    <button type="button" class="icon-btn" title="צפייה בפריט" aria-label="צפייה בפריט">
+                                        <i data-lucide="eye" aria-hidden="true"></i>
+                                    </button>
                                     <?php $editParams = array_merge(['edit_id' => (int)$item['id']], $tabBaseParams, ($equipmentTab !== 'all' && $equipmentTab !== '') ? ['equipment_tab' => $equipmentTab] : []); ?>
                                     <a href="admin_equipment.php?<?= http_build_query($editParams) ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
                                     <form method="post" action="admin_equipment.php" onsubmit="return confirm('למחוק את הפריט הזה?');">

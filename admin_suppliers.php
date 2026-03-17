@@ -398,6 +398,9 @@ try {
                             <td><?= htmlspecialchars((string)($s['service_type'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                             <td>
                                 <div class="row-actions">
+                                    <button type="button" class="icon-btn" title="צפייה בספק" aria-label="צפייה בספק">
+                                        <i data-lucide="eye" aria-hidden="true"></i>
+                                    </button>
                                     <a href="admin_suppliers.php?edit_id=<?= (int)($s['id'] ?? 0) ?>" class="icon-btn" title="עריכת ספק" aria-label="עריכת ספק"><i data-lucide="pencil" aria-hidden="true"></i></a>
                                     <form method="post" action="admin_suppliers.php" onsubmit="return confirm('למחוק את הספק הזה?');">
                                         <input type="hidden" name="action" value="delete">

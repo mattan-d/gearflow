@@ -1161,6 +1161,9 @@ if (isset($_GET['edit_id'])) {
                     </td>
                     <td>
                         <div class="row-actions">
+                            <button type="button" class="icon-btn" title="צפייה בפרטי משתמש" aria-label="צפייה בפרטי משתמש">
+                                <i data-lucide="eye" aria-hidden="true"></i>
+                            </button>
                             <a href="admin_users.php?edit_id=<?= (int)$user['id'] ?>" class="icon-btn" title="עריכת משתמש" aria-label="עריכת משתמש"><i data-lucide="pencil" aria-hidden="true"></i></a>
                             <form method="post" action="admin_users.php">
                                 <input type="hidden" name="action" value="toggle_active">

@@ -2292,6 +2292,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 }
                                 if ($canEditOrDelete): ?>
                                     <div class="row-actions">
+                                        <button type="button" class="icon-btn" title="צפייה בהזמנה" aria-label="צפייה בהזמנה">
+                                            <i data-lucide="eye" aria-hidden="true"></i>
+                                        </button>
                                         <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?><?= $tab === 'today' ? '&today_mode=' . urlencode($todayMode) : '' ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
                                         <form method="post" action="admin_orders.php"
                                               onsubmit="return confirm('למחוק את ההזמנה הזו?');">
@@ -2316,6 +2319,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                                 <button type="submit" class="icon-btn" title="שכפול" aria-label="שכפול"><i data-lucide="copy" aria-hidden="true"></i></button>
                                             </form>
                                         <?php endif; ?>
+
+                                        <button type="button" class="icon-btn" title="צפייה בהזמנה" aria-label="צפייה בהזמנה">
+                                            <i data-lucide="eye" aria-hidden="true"></i>
+                                        </button>
 
                                         <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?><?= $tab === 'today' ? '&today_mode=' . urlencode($todayMode) : '' ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
 
