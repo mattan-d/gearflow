@@ -1723,7 +1723,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                     $currentServiceWarrantySupplierId = (int)($editingEquipment['service_warranty_supplier_id'] ?? 0);
                     ?>
                     <div style="margin-top:0.75rem;">
-                        <div class="muted-small" style="margin-bottom:0.25rem;font-weight:600;">שירות</div>
+                        <div class="muted-small" style="margin-bottom:0.25rem;font-weight:600;font-size:0.95rem;">שירות</div>
                         <div class="grid" style="row-gap:0.5rem;">
                             <div>
                                 <label for="service_supplier_id">ספק</label>
