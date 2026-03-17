@@ -1871,49 +1871,49 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <?php
-                    $warrantyStartVal = (string)($editingEquipment['warranty_start'] ?? '');
-                    $warrantyEndVal   = (string)($editingEquipment['warranty_end'] ?? '');
-                    $warrantyImageVal = (string)($editingEquipment['warranty_image'] ?? '');
-                    ?>
-                    <div style="margin-top:0.75rem;">
-                        <div class="muted-small" style="margin-bottom:0.25rem;font-weight:600;font-size:0.95rem;">אחריות</div>
-                        <div class="form-grid" style="margin-bottom:0.35rem;">
-                            <div>
-                                <label for="warranty_start">התחלת אחריות</label>
-                                <input type="date" id="warranty_start" name="warranty_start"
-                                       value="<?= htmlspecialchars($warrantyStartVal, ENT_QUOTES, 'UTF-8') ?>"
-                                       <?= $isViewModeEq ? 'readonly' : '' ?>>
-                            </div>
-                            <div>
-                                <label for="warranty_end">סיום אחריות</label>
-                                <input type="date" id="warranty_end" name="warranty_end"
-                                       value="<?= htmlspecialchars($warrantyEndVal, ENT_QUOTES, 'UTF-8') ?>"
-                                       <?= $isViewModeEq ? 'readonly' : '' ?>>
-                            </div>
+                <?php
+                $warrantyStartVal = (string)($editingEquipment['warranty_start'] ?? '');
+                $warrantyEndVal   = (string)($editingEquipment['warranty_end'] ?? '');
+                $warrantyImageVal = (string)($editingEquipment['warranty_image'] ?? '');
+                ?>
+                <div style="margin-top:0.75rem; margin-bottom:0.5rem;">
+                    <div class="muted-small" style="margin-bottom:0.25rem;font-weight:600;font-size:0.95rem;">אחריות</div>
+                    <div class="form-grid" style="margin-bottom:0.35rem;">
+                        <div>
+                            <label for="warranty_start">התחלת אחריות</label>
+                            <input type="date" id="warranty_start" name="warranty_start"
+                                   value="<?= htmlspecialchars($warrantyStartVal, ENT_QUOTES, 'UTF-8') ?>"
+                                   <?= $isViewModeEq ? 'readonly' : '' ?>>
                         </div>
                         <div>
-                            <?php if ($warrantyImageVal !== ''): ?>
-                                <label>תמונת אחריות נוכחית</label>
-                                <div style="margin-bottom:0.4rem;">
-                                    <a href="<?= htmlspecialchars($warrantyImageVal, ENT_QUOTES, 'UTF-8') ?>"
-                                       target="_blank"
-                                       rel="noopener noreferrer"
-                                       style="color:#2563eb; text-decoration:underline; font-size:0.85rem;">
-                                        הצג תמונת אחריות
-                                    </a>
-                                </div>
-                            <?php endif; ?>
-                            <?php if (!$isViewModeEq): ?>
-                                <label class="file-drop-zone" for="warranty_file" aria-label="העלאת תמונת אחריות">
-                                    <input type="file" id="warranty_file" name="warranty_file" accept="image/*" class="file-drop-input">
-                                    <span class="file-drop-icon"><i data-lucide="upload" aria-hidden="true"></i></span>
-                                    <span class="file-drop-text">גרור תמונת אחריות לכאן או לחץ לבחירה</span>
-                                    <span class="file-drop-hint">תמונת אחריות (תמונה)</span>
-                                </label>
-                            <?php endif; ?>
+                            <label for="warranty_end">סיום אחריות</label>
+                            <input type="date" id="warranty_end" name="warranty_end"
+                                   value="<?= htmlspecialchars($warrantyEndVal, ENT_QUOTES, 'UTF-8') ?>"
+                                   <?= $isViewModeEq ? 'readonly' : '' ?>>
                         </div>
+                    </div>
+                    <div>
+                        <?php if ($warrantyImageVal !== ''): ?>
+                            <label>תמונת אחריות נוכחית</label>
+                            <div style="margin-bottom:0.4rem;">
+                                <a href="<?= htmlspecialchars($warrantyImageVal, ENT_QUOTES, 'UTF-8') ?>"
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   style="color:#2563eb; text-decoration:underline; font-size:0.85rem;">
+                                    הצג תמונת אחריות
+                                </a>
+                            </div>
+                        <?php endif; ?>
+                        <?php if (!$isViewModeEq): ?>
+                            <label class="file-drop-zone" for="warranty_file" aria-label="העלאת תמונת אחריות">
+                                <input type="file" id="warranty_file" name="warranty_file" accept="image/*" class="file-drop-input">
+                                <span class="file-drop-icon"><i data-lucide="upload" aria-hidden="true"></i></span>
+                                <span class="file-drop-text">גרור תמונת אחריות לכאן או לחץ לבחירה</span>
+                                <span class="file-drop-hint">תמונת אחריות (תמונה)</span>
+                            </label>
+                        <?php endif; ?>
                     </div>
                 </div>
 
