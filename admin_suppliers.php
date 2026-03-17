@@ -667,8 +667,17 @@ if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESS
         </div>
     <?php endif; ?>
 
-    <div class="toolbar">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; gap:0.75rem;">
         <button type="button" class="btn" id="open_supplier_modal_btn">הוספת ספק</button>
+        <form method="post" action="admin_suppliers.php" enctype="multipart/form-data" id="suppliers_import_form" style="margin:0;">
+            <input type="hidden" name="action" value="import_csv">
+            <label class="file-drop-zone" for="suppliers_import_file" id="suppliers_import_zone" aria-label="העלאת קובץ CSV לייבוא ספקים">
+                <input type="file" name="csv_file" id="suppliers_import_file" accept=".csv" required class="file-drop-input">
+                <span class="file-drop-icon"><i data-lucide="upload" aria-hidden="true"></i></span>
+                <span class="file-drop-text">גרור קובץ CSV לכאן או לחץ לבחירה</span>
+                <span class="file-drop-hint">ייבוא ספקים מקובץ CSV</span>
+            </label>
+        </form>
     </div>
 
     <?php
@@ -818,16 +827,6 @@ if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESS
         <p class="muted-small" style="margin-bottom:0.5rem;">
             טבלת ספקים.
         </p>
-
-        <form method="post" action="admin_suppliers.php" enctype="multipart/form-data" id="suppliers_import_form" style="margin:0 0 0.75rem 0; display:inline-block; float:left;">
-            <input type="hidden" name="action" value="import_csv">
-            <label class="file-drop-zone" for="suppliers_import_file" id="suppliers_import_zone" aria-label="העלאת קובץ CSV לייבוא ספקים">
-                <input type="file" name="csv_file" id="suppliers_import_file" accept=".csv" required class="file-drop-input">
-                <span class="file-drop-icon"><i data-lucide="upload" aria-hidden="true"></i></span>
-                <span class="file-drop-text">גרור קובץ CSV לכאן או לחץ לבחירה</span>
-                <span class="file-drop-hint">ייבוא ספקים מקובץ CSV</span>
-            </label>
-        </form>
 
         <div style="overflow-x:auto;">
             <table style="width:100%; border-collapse:collapse; font-size:0.86rem;">
