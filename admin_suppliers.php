@@ -96,6 +96,26 @@ try {
             font-size: 0.8rem;
             color: #6b7280;
         }
+        .row-actions {
+            display: flex;
+            gap: 0.3rem;
+            align-items: center;
+        }
+        .row-actions form {
+            margin: 0;
+        }
+        .icon-btn {
+            border: none;
+            background: transparent;
+            padding: 0.15rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
         .toolbar {
             margin-bottom: 0.75rem;
             display: flex;
