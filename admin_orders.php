@@ -3549,7 +3549,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             footer.style.marginTop = '0.75rem';
             saveBtn = document.createElement('button');
             saveBtn.type = 'button';
-            saveBtn.textContent = 'שמירת רכיבים';
+            saveBtn.textContent = 'שמירת סימון';
             saveBtn.className = 'btn secondary';
             footer.appendChild(saveBtn);
             card.appendChild(footer);
