@@ -894,6 +894,7 @@ $baseSql = 'SELECT o.id,
                    o.start_time,
                    o.end_time,
                    o.status,
+                   u.id AS borrower_user_id,
                    o.notes,
                    o.created_at,
                    o.updated_at,
@@ -901,7 +902,8 @@ $baseSql = 'SELECT o.id,
                    e.name AS equipment_name,
                    e.code AS equipment_code
             FROM orders o
-            JOIN equipment e ON e.id = o.equipment_id';
+            JOIN equipment e ON e.id = o.equipment_id
+            LEFT JOIN users u ON u.username = o.borrower_name';
 
 $where  = '';
 $params = [];
@@ -2185,7 +2187,17 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <tr data-order-id="<?= (int)$order['id'] ?>" class="<?= htmlspecialchars($rowHighlightClass, ENT_QUOTES, 'UTF-8') ?>">
                             <td><?= (int)$order['id'] ?></td>
                         <td>
-                            <?= htmlspecialchars($order['borrower_name'], ENT_QUOTES, 'UTF-8') ?><br>
+                            <?php $borrowerUserId = (int)($order['borrower_user_id'] ?? 0); ?>
+                            <?php if ($borrowerUserId > 0): ?>
+                                <a href="admin_users.php?view_id=<?= $borrowerUserId ?>"
+                                   style="text-decoration:none;color:#2563eb;font-weight:600;"
+                                   target="_blank" rel="noopener noreferrer">
+                                    <?= htmlspecialchars($order['borrower_name'], ENT_QUOTES, 'UTF-8') ?>
+                                </a>
+                            <?php else: ?>
+                                <?= htmlspecialchars($order['borrower_name'], ENT_QUOTES, 'ENT_QUOTES') ?>
+                            <?php endif; ?>
+                            <br>
                             <?php if ($order['borrower_contact'] !== null && $order['borrower_contact'] !== ''): ?>
                                 <span class="muted-small">
                                     <?= htmlspecialchars($order['borrower_contact'], ENT_QUOTES, 'UTF-8') ?>
