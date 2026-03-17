@@ -18,6 +18,35 @@ $editingEquipment = null;
 $componentsEquipment = null;
 $componentsList = [];
 
+// ספקים לשדות שירות
+$serviceSuppliers = [
+    'equipment' => [],
+    'lab'       => [],
+    'warranty'  => [],
+];
+try {
+    $stmtSup = $pdo->prepare("
+        SELECT id, company_name, service_type
+        FROM suppliers
+        WHERE service_type IN ('ציוד', 'מעבדה', 'אחריות')
+        ORDER BY company_name ASC
+    ");
+    $stmtSup->execute();
+    $rowsSup = $stmtSup->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    foreach ($rowsSup as $row) {
+        $st = (string)($row['service_type'] ?? '');
+        if ($st === 'ציוד') {
+            $serviceSuppliers['equipment'][] = $row;
+        } elseif ($st === 'מעבדה') {
+            $serviceSuppliers['lab'][] = $row;
+        } elseif ($st === 'אחריות') {
+            $serviceSuppliers['warranty'][] = $row;
+        }
+    }
+} catch (Throwable $e) {
+    // מתעלמים משגיאה בטעינת ספקים לשירות
+}
+
 // Handle edit / view mode
 $editingEquipment = null;
 $editId = isset($_GET['edit_id']) ? (int)$_GET['edit_id'] : 0;
@@ -48,6 +77,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $category     = trim($_POST['category'] ?? '');
         $location     = trim($_POST['location'] ?? '');
         $status       = $_POST['status'] ?? 'active';
+        $serviceSupplierId = isset($_POST['service_supplier_id']) ? (int)$_POST['service_supplier_id'] : 0;
+        $serviceLabId      = isset($_POST['service_lab_id']) ? (int)$_POST['service_lab_id'] : 0;
+        $serviceWarrantyMode = trim((string)($_POST['service_warranty_mode'] ?? ''));
+        $serviceWarrantySupplierId = isset($_POST['service_warranty_supplier_id']) ? (int)$_POST['service_warranty_supplier_id'] : 0;
+        // אם נבחר ספק אחריות מהרשימה (sup_ID), נשמור גם את ה-ID בעמודה הייעודית
+        if (str_starts_with($serviceWarrantyMode, 'sup_')) {
+            $serviceWarrantySupplierId = (int)substr($serviceWarrantyMode, 4);
+        }
 
         // ניהול תמונה: שמירה / מחיקה / החלפה של קובץ שהועלה לשרת
         $picturePath = '';
@@ -114,29 +151,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                              quantity_available = :quantity_available,
                              status = :status,
                              picture = :picture,
+                             service_supplier_id = :service_supplier_id,
+                             service_lab_id = :service_lab_id,
+                             service_warranty_mode = :service_warranty_mode,
+                             service_warranty_supplier_id = :service_warranty_supplier_id,
                              updated_at = :updated_at
                          WHERE id = :id'
                     );
                     $stmt->execute([
                         ':name'              => $name,
                         ':code'              => $code,
-                        ':description'        => $description,
-                        ':category'           => $category,
-                        ':location'           => $location,
-                        ':quantity_total'     => $quantityTotal,
-                        ':quantity_available' => $quantityAvailable,
-                        ':status'             => $status,
-                        ':picture'            => $picturePath,
-                        ':updated_at'         => date('Y-m-d H:i:s'),
-                        ':id'                 => $id,
+                        ':description'       => $description,
+                        ':category'          => $category,
+                        ':location'          => $location,
+                        ':quantity_total'    => $quantityTotal,
+                        ':quantity_available'=> $quantityAvailable,
+                        ':status'            => $status,
+                        ':picture'           => $picturePath,
+                        ':service_supplier_id'         => $serviceSupplierId ?: null,
+                        ':service_lab_id'              => $serviceLabId ?: null,
+                        ':service_warranty_mode'       => $serviceWarrantyMode,
+                        ':service_warranty_supplier_id'=> $serviceWarrantySupplierId ?: null,
+                        ':updated_at'        => date('Y-m-d H:i:s'),
+                        ':id'                => $id,
                     ]);
                     $success = 'הציוד עודכן בהצלחה.';
                 } else {
                     $stmt = $pdo->prepare(
                         'INSERT INTO equipment
-                         (name, code, description, category, location, quantity_total, quantity_available, status, picture, created_at)
+                         (name, code, description, category, location, quantity_total, quantity_available, status, picture,
+                          service_supplier_id, service_lab_id, service_warranty_mode, service_warranty_supplier_id, created_at)
                          VALUES
-                         (:name, :code, :description, :category, :location, :quantity_total, :quantity_available, :status, :picture, :created_at)'
+                         (:name, :code, :description, :category, :location, :quantity_total, :quantity_available, :status, :picture,
+                          :service_supplier_id, :service_lab_id, :service_warranty_mode, :service_warranty_supplier_id, :created_at)'
                     );
                     $stmt->execute([
                         ':name'               => $name,
@@ -148,6 +195,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':quantity_available' => $quantityAvailable,
                         ':status'             => $status,
                         ':picture'            => $picturePath,
+                        ':service_supplier_id'         => $serviceSupplierId ?: null,
+                        ':service_lab_id'              => $serviceLabId ?: null,
+                        ':service_warranty_mode'       => $serviceWarrantyMode,
+                        ':service_warranty_supplier_id'=> $serviceWarrantySupplierId ?: null,
                         ':created_at'         => date('Y-m-d H:i:s'),
                     ]);
                     $id = (int)$pdo->lastInsertId();
@@ -1663,6 +1714,58 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                             <option value="missing" <?= $statusValue === 'missing' ? 'selected' : '' ?>>חסר</option>
                             <option value="disabled" <?= $statusValue === 'disabled' ? 'selected' : '' ?>>מושבת</option>
                         </select>
+                    </div>
+
+                    <?php
+                    $currentServiceSupplierId         = (int)($editingEquipment['service_supplier_id'] ?? 0);
+                    $currentServiceLabId              = (int)($editingEquipment['service_lab_id'] ?? 0);
+                    $currentServiceWarrantyMode       = (string)($editingEquipment['service_warranty_mode'] ?? '');
+                    $currentServiceWarrantySupplierId = (int)($editingEquipment['service_warranty_supplier_id'] ?? 0);
+                    ?>
+                    <div style="margin-top:0.75rem;">
+                        <div class="muted-small" style="margin-bottom:0.25rem;font-weight:600;">שירות</div>
+                        <div class="grid" style="row-gap:0.5rem;">
+                            <div>
+                                <label for="service_supplier_id">ספק</label>
+                                <select id="service_supplier_id" name="service_supplier_id" <?= $isViewModeEq ? 'disabled' : '' ?>>
+                                    <option value="0">ללא</option>
+                                    <?php foreach ($serviceSuppliers['equipment'] as $sup): ?>
+                                        <?php $sid = (int)($sup['id'] ?? 0); ?>
+                                        <option value="<?= $sid ?>" <?= $currentServiceSupplierId === $sid ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars((string)($sup['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="service_lab_id">מעבדה</label>
+                                <select id="service_lab_id" name="service_lab_id" <?= $isViewModeEq ? 'disabled' : '' ?>>
+                                    <option value="0">ללא</option>
+                                    <?php foreach ($serviceSuppliers['lab'] as $sup): ?>
+                                        <?php $sid = (int)($sup['id'] ?? 0); ?>
+                                        <option value="<?= $sid ?>" <?= $currentServiceLabId === $sid ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars((string)($sup['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="service_warranty_mode">אחריות</label>
+                                <select id="service_warranty_mode" name="service_warranty_mode" <?= $isViewModeEq ? 'disabled' : '' ?>>
+                                    <option value="">ללא</option>
+                                    <option value="by_supplier" <?= $currentServiceWarrantyMode === 'by_supplier' ? 'selected' : '' ?>>על פי ספק</option>
+                                    <option value="by_lab" <?= $currentServiceWarrantyMode === 'by_lab' ? 'selected' : '' ?>>על פי מעבדה</option>
+                                    <?php foreach ($serviceSuppliers['warranty'] as $sup): ?>
+                                        <?php $sid = (int)($sup['id'] ?? 0); ?>
+                                        <option value="sup_<?= $sid ?>" <?= $currentServiceWarrantyMode === 'sup_'.$sid ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars((string)($sup['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                                <input type="hidden" id="service_warranty_supplier_id" name="service_warranty_supplier_id"
+                                       value="<?= $currentServiceWarrantySupplierId > 0 ? (int)$currentServiceWarrantySupplierId : 0 ?>">
+                            </div>
+                        </div>
                     </div>
                 </div>
 

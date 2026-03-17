@@ -367,6 +367,26 @@ function initialize_database(PDO $pdo): void
         )
     ");
 
+    // עמודות שירות בציוד (ספק/מעבדה/אחריות)
+    try {
+        $equipCols = $pdo->query("PRAGMA table_info(equipment)")->fetchAll(PDO::FETCH_ASSOC);
+        $equipNames = array_column($equipCols, 'name');
+        if (!in_array('service_supplier_id', $equipNames, true)) {
+            $pdo->exec("ALTER TABLE equipment ADD COLUMN service_supplier_id INTEGER");
+        }
+        if (!in_array('service_lab_id', $equipNames, true)) {
+            $pdo->exec("ALTER TABLE equipment ADD COLUMN service_lab_id INTEGER");
+        }
+        if (!in_array('service_warranty_mode', $equipNames, true)) {
+            $pdo->exec("ALTER TABLE equipment ADD COLUMN service_warranty_mode TEXT");
+        }
+        if (!in_array('service_warranty_supplier_id', $equipNames, true)) {
+            $pdo->exec("ALTER TABLE equipment ADD COLUMN service_warranty_supplier_id INTEGER");
+        }
+    } catch (Throwable $e) {
+        // מתעלמים משגיאות מיגרציה של עמודות שירות
+    }
+
     // Ensure default admin user exists: admin / admin
     $stmt = $pdo->prepare('SELECT COUNT(*) AS cnt FROM users WHERE username = :username');
     $stmt->execute([':username' => 'admin']);
