@@ -1824,7 +1824,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                     </div>
                 </div>
 
-                <div style="margin-top:1rem;">
+                <div style="margin-top:1rem; margin-bottom:1rem;">
                     <?php if (!$isViewModeEq): ?>
                     <button type="button" class="btn secondary small" id="equipment_toggle_components_btn">הוספת פרטי ציוד</button>
                     <?php endif; ?>
