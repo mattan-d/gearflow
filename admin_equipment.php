@@ -1128,6 +1128,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
             text-decoration: none;
             display: inline-flex;
             align-items: center;
+            justify-content: center;
         }
         .btn.secondary {
             background: #e5e7eb;
@@ -1136,6 +1137,9 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         }
         .btn.danger {
             background: #ef4444;
+        }
+        .toolbar-equipment .toolbar-right .btn {
+            margin-bottom: 0.5rem;
         }
         .btn.small {
             padding: 0.3rem 0.7rem;
@@ -1505,7 +1509,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
     <h2 style="margin-top:0; margin-bottom:1rem; font-size:1.4rem;">ניהול ציוד</h2>
     <div class="toolbar-top toolbar-equipment">
         <div class="toolbar-right">
-            <button type="button" class="btn" id="toggle_add_equipment_btn" style="margin-bottom:0.5rem;">הוספת פריט ציוד</button>
+            <button type="button" class="btn" id="toggle_add_equipment_btn">הוספת פריט ציוד</button>
             <button type="button" class="btn" id="toggle_bulk_add_btn" title="הוספת מספר פריטים בבת אחת">הוספת מספר פריטים</button>
         </div>
         <div class="toolbar-left">
