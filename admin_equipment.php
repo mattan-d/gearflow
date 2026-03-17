@@ -24,6 +24,7 @@ $serviceSuppliers = [
     'lab'       => [],
     'warranty'  => [],
 ];
+$serviceSuppliersById = [];
 try {
     $stmtSup = $pdo->prepare("
         SELECT id, company_name, service_type
@@ -35,6 +36,10 @@ try {
     $rowsSup = $stmtSup->fetchAll(PDO::FETCH_ASSOC) ?: [];
     foreach ($rowsSup as $row) {
         $st = (string)($row['service_type'] ?? '');
+        $sid = (int)($row['id'] ?? 0);
+        if ($sid > 0) {
+            $serviceSuppliersById[$sid] = $row;
+        }
         if ($st === 'ציוד') {
             $serviceSuppliers['equipment'][] = $row;
         } elseif ($st === 'מעבדה') {
@@ -1741,41 +1746,77 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                         <div style="display: flex; justify-content: space-between;">
                             <div>
                                 <label for="service_supplier_id">ספק</label>
-                                <select id="service_supplier_id" name="service_supplier_id" <?= $isViewModeEq ? 'disabled' : '' ?>>
-                                    <option value="0">ללא</option>
-                                    <?php foreach ($serviceSuppliers['equipment'] as $sup): ?>
-                                        <?php $sid = (int)($sup['id'] ?? 0); ?>
-                                        <option value="<?= $sid ?>" <?= $currentServiceSupplierId === $sid ? 'selected' : '' ?>>
-                                            <?= htmlspecialchars((string)($sup['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <?php if ($isViewModeEq && $currentServiceSupplierId > 0 && isset($serviceSuppliersById[$currentServiceSupplierId])): ?>
+                                    <a href="admin_suppliers.php?view_id=<?= $currentServiceSupplierId ?>"
+                                       style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#2563eb;min-width:0;"
+                                       target="_blank" rel="noopener noreferrer">
+                                        <?= htmlspecialchars((string)($serviceSuppliersById[$currentServiceSupplierId]['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                    </a>
+                                <?php else: ?>
+                                    <select id="service_supplier_id" name="service_supplier_id" <?= $isViewModeEq ? 'disabled' : '' ?>>
+                                        <option value="0">ללא</option>
+                                        <?php foreach ($serviceSuppliers['equipment'] as $sup): ?>
+                                            <?php $sid = (int)($sup['id'] ?? 0); ?>
+                                            <option value="<?= $sid ?>" <?= $currentServiceSupplierId === $sid ? 'selected' : '' ?>>
+                                                <?= htmlspecialchars((string)($sup['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                <?php endif; ?>
                             </div>
                             <div>
                                 <label for="service_lab_id">מעבדה</label>
-                                <select id="service_lab_id" name="service_lab_id" <?= $isViewModeEq ? 'disabled' : '' ?>>
-                                    <option value="0">ללא</option>
-                                    <?php foreach ($serviceSuppliers['lab'] as $sup): ?>
-                                        <?php $sid = (int)($sup['id'] ?? 0); ?>
-                                        <option value="<?= $sid ?>" <?= $currentServiceLabId === $sid ? 'selected' : '' ?>>
-                                            <?= htmlspecialchars((string)($sup['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <?php if ($isViewModeEq && $currentServiceLabId > 0 && isset($serviceSuppliersById[$currentServiceLabId])): ?>
+                                    <a href="admin_suppliers.php?view_id=<?= $currentServiceLabId ?>"
+                                       style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#2563eb;min-width:0;"
+                                       target="_blank" rel="noopener noreferrer">
+                                        <?= htmlspecialchars((string)($serviceSuppliersById[$currentServiceLabId]['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                    </a>
+                                <?php else: ?>
+                                    <select id="service_lab_id" name="service_lab_id" <?= $isViewModeEq ? 'disabled' : '' ?>>
+                                        <option value="0">ללא</option>
+                                        <?php foreach ($serviceSuppliers['lab'] as $sup): ?>
+                                            <?php $sid = (int)($sup['id'] ?? 0); ?>
+                                            <option value="<?= $sid ?>" <?= $currentServiceLabId === $sid ? 'selected' : '' ?>>
+                                                <?= htmlspecialchars((string)($sup['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                <?php endif; ?>
                             </div>
                             <div>
                                 <label for="service_warranty_mode">אחריות</label>
-                                <select id="service_warranty_mode" name="service_warranty_mode" <?= $isViewModeEq ? 'disabled' : '' ?>>
-                                    <option value="">ללא</option>
-                                    <option value="by_supplier" <?= $currentServiceWarrantyMode === 'by_supplier' ? 'selected' : '' ?>>על פי ספק</option>
-                                    <option value="by_lab" <?= $currentServiceWarrantyMode === 'by_lab' ? 'selected' : '' ?>>על פי מעבדה</option>
-                                    <?php foreach ($serviceSuppliers['warranty'] as $sup): ?>
-                                        <?php $sid = (int)($sup['id'] ?? 0); ?>
-                                        <option value="sup_<?= $sid ?>" <?= $currentServiceWarrantyMode === 'sup_'.$sid ? 'selected' : '' ?>>
-                                            <?= htmlspecialchars((string)($sup['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
+                                <?php
+                                $warrantySupplierId = 0;
+                                if ($currentServiceWarrantyMode === 'by_supplier') {
+                                    $warrantySupplierId = $currentServiceSupplierId;
+                                } elseif ($currentServiceWarrantyMode === 'by_lab') {
+                                    $warrantySupplierId = $currentServiceLabId;
+                                } elseif (str_starts_with($currentServiceWarrantyMode, 'sup_')) {
+                                    $warrantySupplierId = (int)substr($currentServiceWarrantyMode, 4);
+                                } elseif ($currentServiceWarrantySupplierId > 0) {
+                                    $warrantySupplierId = $currentServiceWarrantySupplierId;
+                                }
+                                ?>
+                                <?php if ($isViewModeEq && $warrantySupplierId > 0 && isset($serviceSuppliersById[$warrantySupplierId])): ?>
+                                    <a href="admin_suppliers.php?view_id=<?= $warrantySupplierId ?>"
+                                       style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#2563eb;min-width:0;"
+                                       target="_blank" rel="noopener noreferrer">
+                                        <?= htmlspecialchars((string)($serviceSuppliersById[$warrantySupplierId]['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                    </a>
+                                <?php else: ?>
+                                    <select id="service_warranty_mode" name="service_warranty_mode" <?= $isViewModeEq ? 'disabled' : '' ?>>
+                                        <option value="">ללא</option>
+                                        <option value="by_supplier" <?= $currentServiceWarrantyMode === 'by_supplier' ? 'selected' : '' ?>>על פי ספק</option>
+                                        <option value="by_lab" <?= $currentServiceWarrantyMode === 'by_lab' ? 'selected' : '' ?>>על פי מעבדה</option>
+                                        <?php foreach ($serviceSuppliers['warranty'] as $sup): ?>
+                                            <?php $sid = (int)($sup['id'] ?? 0); ?>
+                                            <option value="sup_<?= $sid ?>" <?= $currentServiceWarrantyMode === 'sup_'.$sid ? 'selected' : '' ?>>
+                                                <?= htmlspecialchars((string)($sup['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                <?php endif; ?>
                                 <input type="hidden" id="service_warranty_supplier_id" name="service_warranty_supplier_id"
                                        value="<?= $currentServiceWarrantySupplierId > 0 ? (int)$currentServiceWarrantySupplierId : 0 ?>">
                             </div>
