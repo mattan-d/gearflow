@@ -2339,9 +2339,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     </div>
                                 <?php endif;
                             } else {
-                                // למנהל/מנהל מחסן: פעולות בטאבים today, pending, future, not_picked, not_returned
+                                // למנהל/מנהל מחסן: פעולות בטאבים today, pending, future, active, not_picked, not_returned
                                 // בטאב "לא נלקח" ו"לא הוחזר" אין צורך בשכפול.
-                                $adminTabsAllowed = in_array($tab, ['today', 'pending', 'future', 'not_picked', 'not_returned'], true);
+                                $adminTabsAllowed = in_array($tab, ['today', 'pending', 'future', 'active', 'not_picked', 'not_returned'], true);
                                 if ($adminTabsAllowed): ?>
                                     <div class="row-actions">
                                         <?php if ($tab !== 'not_picked' && $tab !== 'not_returned'): ?>
