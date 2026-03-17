@@ -903,7 +903,9 @@ $baseSql = 'SELECT o.id,
                    e.code AS equipment_code
             FROM orders o
             JOIN equipment e ON e.id = o.equipment_id
-            LEFT JOIN users u ON u.username = o.borrower_name';
+            LEFT JOIN users u
+                   ON u.username = o.borrower_name
+                   OR TRIM(COALESCE(u.first_name, \'\') || \' \' || COALESCE(u.last_name, \'\')) = o.borrower_name';
 
 $where  = '';
 $params = [];
