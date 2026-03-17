@@ -231,8 +231,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $del = $pdo->prepare('DELETE FROM order_component_checks WHERE order_id = :oid AND equipment_code = :code');
                 $del->execute([':oid' => $orderId, ':code' => $code]);
                 $ins = $pdo->prepare(
-                    'INSERT INTO order_component_checks (order_id, equipment_code, component_name, is_present, checked_at)
-                     VALUES (:order_id, :equipment_code, :component_name, :is_present, :checked_at)'
+                    'INSERT INTO order_component_checks (order_id, equipment_code, component_name, is_present, returned, checked_at)
+                     VALUES (:order_id, :equipment_code, :component_name, :is_present, :returned, :checked_at)'
                 );
                 $now = date('Y-m-d H:i:s');
                 foreach ($items as $row) {
@@ -243,12 +243,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($name === '') {
                         continue;
                     }
-                    $present = !empty($row['present']) ? 1 : 0;
+                    $present  = !empty($row['present']) ? 1 : 0;
+                    $returned = !empty($row['returned']) ? 1 : 0;
                     $ins->execute([
                         ':order_id'       => $orderId,
                         ':equipment_code' => $code,
                         ':component_name' => $name,
                         ':is_present'     => $present,
+                        ':returned'       => $returned,
                         ':checked_at'     => $now,
                     ]);
                 }
@@ -1089,7 +1091,7 @@ try {
     if (!empty($orderIdsForChecks)) {
         $placeholders = implode(',', array_fill(0, count($orderIdsForChecks), '?'));
         $stmtChecks = $pdo->prepare(
-            "SELECT order_id, equipment_code, component_name, is_present
+            "SELECT order_id, equipment_code, component_name, is_present, returned
              FROM order_component_checks
              WHERE order_id IN ($placeholders)"
         );
@@ -1108,7 +1110,10 @@ try {
             if (!isset($componentChecksByOrderAndCode[$oid][$code])) {
                 $componentChecksByOrderAndCode[$oid][$code] = [];
             }
-            $componentChecksByOrderAndCode[$oid][$code][$name] = (int)($r['is_present'] ?? 0) === 1;
+            $componentChecksByOrderAndCode[$oid][$code][$name] = [
+                'present'  => (int)($r['is_present'] ?? 0) === 1,
+                'returned' => (int)($r['returned'] ?? 0) === 1,
+            ];
         }
     }
 } catch (Throwable $e) {
@@ -2302,12 +2307,14 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             if (!empty($componentChecksByOrderAndCode[(int)$order['id']] ?? [])) {
                                 $compChecks = $componentChecksByOrderAndCode[(int)$order['id']][$code] ?? [];
                             }
+                            $componentsContext = ($tab === 'today' && $todayMode === 'return') || $tab === 'not_returned' ? 'return' : 'loan';
                             ?>
                             <?php if ($hasComponents): ?>
                                 <a href="#"
                                    class="equipment-components-link"
                                    data-equipment-code="<?= htmlspecialchars($code, ENT_QUOTES, 'UTF-8') ?>"
-                                   data-order-id="<?= (int)$order['id'] ?>">
+                                   data-order-id="<?= (int)$order['id'] ?>"
+                                   data-components-context="<?= htmlspecialchars($componentsContext, ENT_QUOTES, 'UTF-8') ?>">
                                     <?= htmlspecialchars($order['equipment_name'], ENT_QUOTES, 'UTF-8') ?>
                                 </a>
                             <?php else: ?>
@@ -3572,7 +3579,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             modal._saveBtn = saveBtn;
         }
 
-        function openModalForCode(code, orderId) {
+        function openModalForCode(code, orderId, context) {
             ensureModal();
             var container = modal._listContainer;
             container.innerHTML = '';
@@ -3606,20 +3613,59 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             li.style.alignItems = 'center';
                             li.style.marginBottom = '0.25rem';
 
-                            var cb = document.createElement('input');
-                            cb.type = 'checkbox';
-                            cb.style.marginLeft = '0.4rem';
-                            cb.setAttribute('data-component-name', c.name);
-                            if (savedChecks[c.name] === true) {
-                                cb.checked = true;
+                            var qty = c.quantity && c.quantity > 1 ? ' (' + c.quantity + ')' : '';
+                            var present = !!(savedChecks[c.name] && savedChecks[c.name].present);
+                            var returned = !!(savedChecks[c.name] && savedChecks[c.name].returned);
+
+                            if (context === 'return' && !present) {
+                                // בשלב החזרה מציגים רק רכיבים שסומנו כ"נלקח"
+                                return;
                             }
 
-                            var label = document.createElement('span');
-                            var qty = c.quantity && c.quantity > 1 ? ' (' + c.quantity + ')' : '';
-                            label.textContent = c.name + qty;
+                            if (context === 'loan') {
+                                var cbLoan = document.createElement('input');
+                                cbLoan.type = 'checkbox';
+                                cbLoan.style.marginLeft = '0.4rem';
+                                cbLoan.setAttribute('data-component-name', c.name);
+                                if (present) {
+                                    cbLoan.checked = true;
+                                }
+                                var labelLoan = document.createElement('span');
+                                labelLoan.textContent = c.name + qty;
+                                li.appendChild(cbLoan);
+                                li.appendChild(labelLoan);
+                            } else {
+                                // הקשר החזרה – עמודה "נלקח" (נעול) ועמודה "הוחזר"
+                                var cbTaken = document.createElement('input');
+                                cbTaken.type = 'checkbox';
+                                cbTaken.checked = present;
+                                cbTaken.disabled = true;
+                                cbTaken.style.marginLeft = '0.4rem';
 
-                            li.appendChild(cb);
-                            li.appendChild(label);
+                                var labelName = document.createElement('span');
+                                labelName.textContent = c.name + qty;
+                                labelName.style.marginLeft = '0.75rem';
+
+                                var cbReturned = document.createElement('input');
+                                cbReturned.type = 'checkbox';
+                                cbReturned.style.marginLeft = '0.4rem';
+                                cbReturned.setAttribute('data-component-name', c.name);
+                                cbReturned.setAttribute('data-role', 'returned');
+                                if (returned) {
+                                    cbReturned.checked = true;
+                                }
+
+                                var labelReturned = document.createElement('span');
+                                labelReturned.textContent = 'הוחזר';
+                                labelReturned.style.marginLeft = '0.25rem';
+                                labelReturned.style.fontSize = '0.85rem';
+
+                                li.appendChild(cbTaken);
+                                li.appendChild(labelName);
+                                li.appendChild(cbReturned);
+                                li.appendChild(labelReturned);
+                            }
+
                             ul.appendChild(li);
                         });
                         container.appendChild(ul);
@@ -3636,20 +3682,40 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             // חיבור כפתור שמירה
             if (modal._saveBtn) {
                 modal._saveBtn.onclick = function () {
-                    var checkboxes = modal._listContainer.querySelectorAll('input[type="checkbox"][data-component-name]');
                     var payload = [];
                     var mapForCache = {};
-                    checkboxes.forEach(function (cb) {
-                        var n = cb.getAttribute('data-component-name') || '';
-                        var present = cb.checked ? 1 : 0;
-                        payload.push({
-                            name: n,
-                            present: present
+                    if (context === 'loan') {
+                        var cbLoanList = modal._listContainer.querySelectorAll('input[type="checkbox"][data-component-name]');
+                        cbLoanList.forEach(function (cb) {
+                            var n = cb.getAttribute('data-component-name') || '';
+                            var present = cb.checked ? 1 : 0;
+                            payload.push({
+                                name: n,
+                                present: present,
+                                returned: present // בשלב ההשאלה אין מידע החזרה – נגדיר שווה לנלקח
+                            });
+                            if (n) {
+                                mapForCache[n] = {present: !!present, returned: !!present};
+                            }
                         });
-                        if (n) {
-                            mapForCache[n] = !!present;
-                        }
-                    });
+                    } else {
+                        // הקשר החזרה – מסתמכים על present מה-cache, ושומרים returned מהצ'קבוקסים החדשים
+                        var cbReturnList = modal._listContainer.querySelectorAll('input[type="checkbox"][data-role="returned"][data-component-name]');
+                        cbReturnList.forEach(function (cb) {
+                            var n = cb.getAttribute('data-component-name') || '';
+                            var returned = cb.checked ? 1 : 0;
+                            var base = (componentChecksCache[orderId] && componentChecksCache[orderId][code] && componentChecksCache[orderId][code][n]) || {present: true, returned: false};
+                            var presentVal = base.present ? 1 : 0;
+                            payload.push({
+                                name: n,
+                                present: presentVal,
+                                returned: returned
+                            });
+                            if (n) {
+                                mapForCache[n] = {present: !!presentVal, returned: !!returned};
+                            }
+                        });
+                    }
                     var formData = new FormData();
                     formData.append('action', 'save_components');
                     formData.append('order_id', String(orderId));
@@ -3681,8 +3747,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 e.preventDefault();
                 var code = link.getAttribute('data-equipment-code');
                 var oid  = link.getAttribute('data-order-id');
+                var ctx  = link.getAttribute('data-components-context') || 'loan';
                 if (!code || !oid) return;
-                openModalForCode(code, oid);
+                openModalForCode(code, oid, ctx);
             });
         });
     })();

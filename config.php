@@ -237,9 +237,20 @@ function initialize_database(PDO $pdo): void
             equipment_code TEXT NOT NULL,
             component_name TEXT NOT NULL,
             is_present INTEGER NOT NULL DEFAULT 1,
+            returned INTEGER NOT NULL DEFAULT 0,
             checked_at TEXT NOT NULL
         )
     ");
+    // מיגרציה: הוספת עמודת returned אם חסרה
+    try {
+        $occCols = $pdo->query("PRAGMA table_info(order_component_checks)")->fetchAll(PDO::FETCH_ASSOC);
+        $occNames = array_column($occCols, 'name');
+        if (!in_array('returned', $occNames, true)) {
+            $pdo->exec("ALTER TABLE order_component_checks ADD COLUMN returned INTEGER NOT NULL DEFAULT 0");
+        }
+    } catch (Throwable $e) {
+        // דילוג בשקט אם העמודה כבר קיימת / טבלה לא קיימת
+    }
 
     // טבלת שעות פתיחת מחסנים – שורות מייצגות שעות פתוחות בלבד
     $pdo->exec("
