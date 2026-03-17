@@ -1810,14 +1810,12 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         }
                         ?>
                         <?php if ($isViewModeOrder): ?>
-                            <input
-                                type="text"
+                            <a
+                                href="mailto:<?= htmlspecialchars($initialEmail, ENT_QUOTES, 'UTF-8') ?>"
                                 id="borrower_email"
-                                autocomplete="off"
-                                value="<?= htmlspecialchars($initialEmail, ENT_QUOTES, 'UTF-8') ?>"
-                                readonly
-                                onclick="if(this.value){window.location.href='mailto:'+this.value;}"
-                            >
+                                style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#111827;min-width:0;">
+                                <?= htmlspecialchars($initialEmail, ENT_QUOTES, 'UTF-8') ?>
+                            </a>
                         <?php else: ?>
                             <input
                                 type="text"
@@ -1830,14 +1828,12 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                         <label for="borrower_phone">טלפון</label>
                         <?php if ($isViewModeOrder): ?>
-                            <input
-                                type="text"
+                            <a
+                                href="tel:<?= htmlspecialchars($initialPhone, ENT_QUOTES, 'UTF-8') ?>"
                                 id="borrower_phone"
-                                autocomplete="off"
-                                value="<?= htmlspecialchars($initialPhone, ENT_QUOTES, 'UTF-8') ?>"
-                                readonly
-                                onclick="if(this.value){window.location.href='tel:'+this.value;}"
-                            >
+                                style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#111827;min-width:0;">
+                                <?= htmlspecialchars($initialPhone, ENT_QUOTES, 'UTF-8') ?>
+                            </a>
                         <?php else: ?>
                             <input
                                 type="text"

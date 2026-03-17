@@ -1072,10 +1072,11 @@ if ($loadId > 0) {
                         <label for="modal_email">אימייל</label>
                         <?php if ($isViewMode && $editingUser): ?>
                             <?php $emailVal = (string)($editingUser['email'] ?? ''); ?>
-                            <input type="text" id="modal_email" name="email"
-                                   value="<?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>"
-                                   readonly
-                                   onclick="if(this.value){window.location.href='mailto:'+this.value;}">
+                            <a href="mailto:<?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>"
+                               id="modal_email"
+                               style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#111827;min-width:0;">
+                                <?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>
+                            </a>
                         <?php else: ?>
                             <input type="text" id="modal_email" name="email"
                                    value="<?= $editingUser ? htmlspecialchars($editingUser['email'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
@@ -1084,10 +1085,11 @@ if ($loadId > 0) {
                         <label for="modal_phone">טלפון</label>
                         <?php if ($isViewMode && $editingUser): ?>
                             <?php $phoneVal = (string)($editingUser['phone'] ?? ''); ?>
-                            <input type="text" id="modal_phone" name="phone"
-                                   value="<?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>"
-                                   readonly
-                                   onclick="if(this.value){window.location.href='tel:'+this.value;}">
+                            <a href="tel:<?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>"
+                               id="modal_phone"
+                               style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#111827;min-width:0;">
+                                <?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>
+                            </a>
                         <?php else: ?>
                             <input type="text" id="modal_phone" name="phone"
                                    value="<?= $editingUser ? htmlspecialchars($editingUser['phone'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
