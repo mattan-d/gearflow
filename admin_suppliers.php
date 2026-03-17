@@ -61,6 +61,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':service_type' => $serviceType,
                     ':created_at'   => date('Y-m-d H:i:s'),
                 ]);
+                $newId = (int)$pdo->lastInsertId();
+
+                // שמירת אנשי קשר נוספים (אינדקס 1–2) בטבלת supplier_contacts
+                if ($newId > 0) {
+                    $insContact = $pdo->prepare("
+                        INSERT INTO supplier_contacts (supplier_id, name, phone, email)
+                        VALUES (:supplier_id, :name, :phone, :email)
+                    ");
+                    // מגבילים עד 3 אנשי קשר בסה\"כ – הראשון כבר שמור ב-suppliers
+                    $maxContacts = 3;
+                    $total = min(count($postedContactNames), $maxContacts);
+                    for ($i = 1; $i < $total; $i++) {
+                        $n = trim((string)($postedContactNames[$i]  ?? ''));
+                        $p = trim((string)($postedContactPhones[$i] ?? ''));
+                        $e = trim((string)($postedContactEmails[$i] ?? ''));
+                        if ($n === '' && $p === '' && $e === '') {
+                            continue;
+                        }
+                        $insContact->execute([
+                            ':supplier_id' => $newId,
+                            ':name'        => $n,
+                            ':phone'       => $p,
+                            ':email'       => $e,
+                        ]);
+                    }
+                }
                 $success = 'הספק נוסף בהצלחה.';
             } catch (PDOException $e) {
                 $error = 'שגיאה בשמירת הספק.';
@@ -106,6 +132,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':updated_at'   => date('Y-m-d H:i:s'),
                     ':id'           => $id,
                 ]);
+
+                // עדכון אנשי קשר נוספים בטבלת supplier_contacts
+                if ($id > 0) {
+                    // מוחקים אנשי קשר קיימים לאותו ספק ושומרים מחדש מהרשימה בטופס
+                    $pdo->prepare("DELETE FROM supplier_contacts WHERE supplier_id = :sid")
+                        ->execute([':sid' => $id]);
+
+                    $insContact = $pdo->prepare("
+                        INSERT INTO supplier_contacts (supplier_id, name, phone, email)
+                        VALUES (:supplier_id, :name, :phone, :email)
+                    ");
+                    $maxContacts = 3;
+                    $total = min(count($postedContactNames), $maxContacts);
+                    for ($i = 1; $i < $total; $i++) {
+                        $n = trim((string)($postedContactNames[$i]  ?? ''));
+                        $p = trim((string)($postedContactPhones[$i] ?? ''));
+                        $e = trim((string)($postedContactEmails[$i] ?? ''));
+                        if ($n === '' && $p === '' && $e === '') {
+                            continue;
+                        }
+                        $insContact->execute([
+                            ':supplier_id' => $id,
+                            ':name'        => $n,
+                            ':phone'       => $p,
+                            ':email'       => $e,
+                        ]);
+                    }
+                }
                 $success = 'הספק עודכן בהצלחה.';
                 // לאחר עדכון מוצלח לא נפתח שוב את חלון העריכה
                 $editId = 0;
@@ -138,6 +192,19 @@ if (($editId > 0 || $viewId > 0) && $error === '') {
         ");
         $stmt->execute([':id' => $loadId]);
         $editingSupplier = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+        // טעינת אנשי קשר נוספים מהטבלה הייעודית
+        if ($editingSupplier) {
+            $stmtC = $pdo->prepare("
+                SELECT name, phone, email
+                FROM supplier_contacts
+                WHERE supplier_id = :sid
+                ORDER BY id ASC
+            ");
+            $stmtC->execute([':sid' => (int)$editingSupplier['id']]);
+            $extraContacts = $stmtC->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $editingSupplier['_extra_contacts'] = $extraContacts;
+        }
     } catch (PDOException $e) {
         $editingSupplier = null;
     }
@@ -365,15 +432,47 @@ try {
                     </div>
                 </div>
 
+                <?php
+                // בניית מערך אנשי קשר לתצוגה (איש קשר ראשי + נוספים)
+                $contactsForForm = [];
+                $primaryContact = [
+                    'name'  => (string)($editingSupplier['contact_name'] ?? ''),
+                    'phone' => (string)($editingSupplier['phone'] ?? ''),
+                    'email' => (string)($editingSupplier['email'] ?? ''),
+                ];
+                if ($primaryContact['name'] !== '' || $primaryContact['phone'] !== '' || $primaryContact['email'] !== '') {
+                    $contactsForForm[] = $primaryContact;
+                }
+                $extraContacts = (array)($editingSupplier['_extra_contacts'] ?? []);
+                foreach ($extraContacts as $row) {
+                    $n = (string)($row['name'] ?? '');
+                    $p = (string)($row['phone'] ?? '');
+                    $e = (string)($row['email'] ?? '');
+                    if ($n === '' && $p === '' && $e === '') {
+                        continue;
+                    }
+                    $contactsForForm[] = ['name' => $n, 'phone' => $p, 'email' => $e];
+                }
+                if (empty($contactsForForm)) {
+                    $contactsForForm[] = ['name' => '', 'phone' => '', 'email' => ''];
+                }
+                $contactsForForm = array_slice($contactsForForm, 0, 3);
+                ?>
+
                 <div id="supplier_contacts_wrapper">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.35rem;">
                         <span style="font-weight:600;font-size:0.9rem;">איש קשר</span>
                     </div>
                     <div id="contact_sections">
-                        <div class="contact-section" data-index="0">
+                        <?php foreach ($contactsForForm as $idx => $c): ?>
+                        <div class="contact-section" data-index="<?= (int)$idx ?>">
                             <div class="contact-header">
                                 <span class="contact-header-title">איש קשר</span>
-                                <button type="button" class="icon-btn contact-remove-btn" title="מחיקת איש קשר" aria-label="מחיקת איש קשר" style="display:none;">
+                                <button type="button"
+                                        class="icon-btn contact-remove-btn"
+                                        title="מחיקת איש קשר"
+                                        aria-label="מחיקת איש קשר"
+                                        style="<?= (count($contactsForForm) > 1 && !$isViewMode) ? 'display:inline-flex;' : 'display:none;' ?>">
                                     <i data-lucide="x" aria-hidden="true"></i>
                                 </button>
                             </div>
@@ -381,40 +480,39 @@ try {
                                 <div>
                                     <label>שם</label>
                                     <input type="text" name="contact_name[]" <?= $isViewMode ? 'readonly' : '' ?>
-                                           value="<?= htmlspecialchars((string)($editingSupplier['contact_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                           value="<?= htmlspecialchars((string)$c['name'], ENT_QUOTES, 'UTF-8') ?>">
                                 </div>
                                 <div>
                                     <label>טלפון</label>
                                     <?php if ($isViewMode): ?>
-                                        <?php $phoneVal = (string)($editingSupplier['phone'] ?? ''); ?>
                                         <input type="text"
-                                               value="<?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>"
+                                               value="<?= htmlspecialchars((string)$c['phone'], ENT_QUOTES, 'UTF-8') ?>"
                                                readonly
                                                style="width:100%;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;box-sizing:border-box;cursor:pointer;"
                                                onclick="if(this.value){window.location.href='tel:'+this.value;}">
-                                        <input type="hidden" name="contact_phone[]" value="<?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>">
+                                        <input type="hidden" name="contact_phone[]" value="<?= htmlspecialchars((string)$c['phone'], ENT_QUOTES, 'UTF-8') ?>">
                                     <?php else: ?>
                                         <input type="text" name="contact_phone[]"
-                                               value="<?= htmlspecialchars((string)($editingSupplier['phone'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                               value="<?= htmlspecialchars((string)$c['phone'], ENT_QUOTES, 'UTF-8') ?>">
                                     <?php endif; ?>
                                 </div>
                                 <div>
                                     <label>מייל</label>
-                                    <?php $emailVal = (string)($editingSupplier['email'] ?? ''); ?>
                                     <?php if ($isViewMode): ?>
                                         <input type="text"
-                                               value="<?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>"
+                                               value="<?= htmlspecialchars((string)$c['email'], ENT_QUOTES, 'UTF-8') ?>"
                                                readonly
                                                style="width:100%;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;box-sizing:border-box;cursor:pointer;"
                                                onclick="if(this.value){window.location.href='mailto:'+this.value;}">
-                                        <input type="hidden" name="contact_email[]" value="<?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>">
+                                        <input type="hidden" name="contact_email[]" value="<?= htmlspecialchars((string)$c['email'], ENT_QUOTES, 'UTF-8') ?>">
                                     <?php else: ?>
                                         <input type="email" name="contact_email[]"
-                                               value="<?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>">
+                                               value="<?= htmlspecialchars((string)$c['email'], ENT_QUOTES, 'UTF-8') ?>">
                                     <?php endif; ?>
                                 </div>
                             </div>
                         </div>
+                        <?php endforeach; ?>
                     </div>
                     <?php if (!$isViewMode): ?>
                     <button type="button" class="btn secondary" id="add_contact_btn" style="margin-top:0.4rem;">הוספת איש קשר</button>
