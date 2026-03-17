@@ -2190,7 +2190,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             <?php $borrowerUserId = (int)($order['borrower_user_id'] ?? 0); ?>
                             <?php if ($borrowerUserId > 0): ?>
                                 <a href="admin_users.php?view_id=<?= $borrowerUserId ?>"
-                                   style="text-decoration:none;color:#2563eb;font-weight:600;"
+                                   style="text-decoration:none;color:#2563eb!important;font-weight:600;"
                                    target="_blank" rel="noopener noreferrer">
                                     <?= htmlspecialchars($order['borrower_name'], ENT_QUOTES, 'UTF-8') ?>
                                 </a>
