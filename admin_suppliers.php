@@ -9,6 +9,13 @@ require_admin();
 $pdo     = get_db();
 $error   = '';
 $success = '';
+if (isset($_GET['import_error']) && $_GET['import_error'] !== '') {
+    $error = (string)$_GET['import_error'];
+}
+if (isset($_SESSION['admin_suppliers_success'])) {
+    $success = (string)$_SESSION['admin_suppliers_success'];
+    unset($_SESSION['admin_suppliers_success']);
+}
 
 // ספק בעריכה / צפייה (אם נבחר מהטבלה)
 $editId          = isset($_GET['edit_id']) ? (int)($_GET['edit_id'] ?? 0) : 0;
@@ -1056,6 +1063,18 @@ if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESS
             modal.addEventListener('click', function (e) {
                 if (e.target === modal) {
                     closeModal();
+                }
+            });
+        }
+    })();
+
+    (function () {
+        var importFileInput = document.getElementById('suppliers_import_file');
+        var importForm = importFileInput ? importFileInput.closest('form') : null;
+        if (importFileInput && importForm) {
+            importFileInput.addEventListener('change', function () {
+                if (importFileInput.files && importFileInput.files.length > 0) {
+                    importForm.submit();
                 }
             });
         }
