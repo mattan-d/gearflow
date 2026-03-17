@@ -32,85 +32,240 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'import_csv') {
         if (!isset($_FILES['csv_file']) || ($_FILES['csv_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
-            $error = 'קובץ CSV לא הועלה בהצלחה.';
+            $error = 'יש לבחור קובץ CSV לייבוא.';
         } else {
-            $tmpPath = (string)($_FILES['csv_file']['tmp_name'] ?? '');
-            $handle = fopen($tmpPath, 'r');
-            if ($handle === false) {
-                $error = 'לא ניתן לקרוא את קובץ ה-CSV.';
-            } else {
-                $header = fgetcsv($handle);
-                if ($header === false) {
-                    $error = 'קובץ CSV ריק.';
-                    fclose($handle);
-                } else {
-                    // מיפוי שם עמודה -> אינדקס כך שהסדר לא משנה
-                    $map = [];
-                    foreach ($header as $idx => $col) {
-                        $key = strtolower(trim((string)$col));
-                        if ($key !== '') {
-                            $map[$key] = (int)$idx;
-                        }
-                    }
+            $tmpName = (string)($_FILES['csv_file']['tmp_name'] ?? '');
+            $rawContent = file_get_contents($tmpName);
+            $encoding = @mb_detect_encoding($rawContent, ['UTF-8', 'ISO-8859-1', 'ASCII'], true);
+            if ($encoding && $encoding !== 'UTF-8') {
+                $converted = @mb_convert_encoding($rawContent, 'UTF-8', $encoding);
+                if ($converted !== false) {
+                    $rawContent = $converted;
+                }
+            }
+            $lines = preg_split('/\r\n|\r|\n/', $rawContent);
+            $delimiter = ',';
+            if (count($lines) > 0 && trim($lines[0]) !== '') {
+                $firstLine = $lines[0];
+                if (strpos($firstLine, "\t") !== false && strpos($firstLine, ',') === false) {
+                    $delimiter = "\t";
+                } elseif (strpos($firstLine, ';') !== false && strpos($firstLine, ',') === false) {
+                    $delimiter = ';';
+                }
+            }
+            $header = count($lines) > 0 ? str_getcsv($lines[0], $delimiter) : null;
+            $rows = [];
+            for ($i = 1; $i < count($lines); $i++) {
+                if (trim($lines[$i]) === '') continue;
+                $rows[] = str_getcsv($lines[$i], $delimiter);
+            }
+            $notCsv = ($header === null || count($header) < 1);
+            if ($notCsv) {
+                $error = 'הקובץ חייב להיות בפורמט CSV (עם שורת כותרת ונתונים מופרדים בפסיקים).';
+                header('Location: admin_suppliers.php?import_error=' . urlencode($error));
+                exit;
+            }
 
-                    $required = ['company_name', 'company_code'];
-                    foreach ($required as $req) {
-                        if (!isset($map[$req])) {
-                            $error = 'חסרה עמודה חובה בקובץ: ' . $req;
-                            break;
-                        }
-                    }
-                    if ($error === '') {
-                        $insert = $pdo->prepare("
-                            INSERT INTO suppliers
-                                (company_name, company_code, contact_name, phone, email, address, website, service_type, created_at)
-                            VALUES
-                                (:company_name, :company_code, :contact_name, :phone, :email, :address, :website, :service_type, :created_at)
-                        ");
-                        $now = date('Y-m-d H:i:s');
-                        $imported = 0;
-                        while (($row = fgetcsv($handle)) !== false) {
-                            $get = function (string $key) use ($map, $row): string {
-                                if (!isset($map[$key])) {
-                                    return '';
-                                }
-                                $i = $map[$key];
-                                return isset($row[$i]) ? trim((string)$row[$i]) : '';
-                            };
+            $systemCols   = ['company_name', 'company_code', 'contact_name', 'phone', 'email', 'address', 'website', 'service_type'];
+            $requiredCols = ['company_name', 'company_code'];
 
-                            $companyName = $get('company_name');
-                            $companyCode = $get('company_code');
-                            if ($companyName === '' || $companyCode === '') {
-                                continue;
-                            }
+            $headerNorm = [];
+            foreach ($header as $idx => $col) {
+                $key = strtolower(trim((string)$col));
+                if ($key !== '') {
+                    $headerNorm[$key] = $idx;
+                }
+            }
 
-                            try {
-                                $insert->execute([
-                                    ':company_name' => $companyName,
-                                    ':company_code' => $companyCode,
-                                    ':contact_name' => $get('contact_name'),
-                                    ':phone'        => $get('phone'),
-                                    ':email'        => $get('email'),
-                                    ':address'      => $get('address'),
-                                    ':website'      => $get('website'),
-                                    ':service_type' => $get('service_type'),
-                                    ':created_at'   => $now,
-                                ]);
-                                $imported++;
-                            } catch (PDOException $e) {
-                                // מדלגים על ספק בעייתי וממשיכים
-                                continue;
-                            }
-                        }
-                        fclose($handle);
-                        if ($imported > 0 && $error === '') {
-                            $success = "ייבוא הושלם. נוספו {$imported} ספקים.";
-                        } elseif ($error === '') {
-                            $error = 'לא נוספו ספקים מהקובץ.';
-                        }
+            $missingColumns = array_diff($requiredCols, array_keys($headerNorm));
+            $unknownColumns = array_diff(array_keys($headerNorm), $systemCols);
+
+            // בדיקת כפילויות לפי company_code אם קיים, אחרת לפי company_name
+            $duplicateSuppliers = [];
+            if (isset($headerNorm['company_code'])) {
+                $codeIdx = $headerNorm['company_code'];
+                $existingCodes = $pdo->query("SELECT company_code FROM suppliers WHERE company_code IS NOT NULL AND company_code <> ''")->fetchAll(PDO::FETCH_COLUMN);
+                $existingSet = array_flip($existingCodes);
+                foreach ($rows as $ri => $row) {
+                    $code = isset($row[$codeIdx]) ? trim((string)$row[$codeIdx]) : '';
+                    if ($code !== '' && isset($existingSet[$code])) {
+                        $duplicateSuppliers[] = ['row' => $ri, 'company_code' => $code];
                     }
                 }
             }
+
+            $hasIssues = !empty($missingColumns) || !empty($unknownColumns) || !empty($duplicateSuppliers);
+            if ($hasIssues) {
+                $_SESSION['import_fix_type'] = 'suppliers';
+                $_SESSION['import_fix_headers'] = $header;
+                $_SESSION['import_fix_rows'] = $rows;
+                $_SESSION['import_fix_raw'] = base64_encode($rawContent);
+                $_SESSION['import_fix_issues'] = [
+                    'missing_columns'      => array_values($missingColumns),
+                    'unknown_columns'      => array_values($unknownColumns),
+                    'duplicate_suppliers'  => $duplicateSuppliers,
+                ];
+                $_SESSION['import_fix_delimiter'] = $delimiter;
+                header('Location: admin_suppliers.php?import_fix=1');
+                exit;
+            }
+
+            // אין בעיות – נייבא ישירות
+            $handle = fopen($tmpName, 'r');
+            if ($handle === false) {
+                $error = 'לא ניתן לקרוא את קובץ ה-CSV.';
+            } else {
+                $imported = 0;
+                $header   = fgetcsv($handle);
+                if (!is_array($header)) {
+                    $error = 'קובץ ה-CSV ריק או בפורמט שגוי.';
+                } else {
+                    $map = [];
+                    foreach ($header as $idx => $col) {
+                        $col = strtolower(trim((string)$col));
+                        $map[$col] = $idx;
+                    }
+                    $insert = $pdo->prepare("
+                        INSERT INTO suppliers
+                            (company_name, company_code, contact_name, phone, email, address, website, service_type, created_at)
+                        VALUES
+                            (:company_name, :company_code, :contact_name, :phone, :email, :address, :website, :service_type, :created_at)
+                    ");
+                    $now = date('Y-m-d H:i:s');
+                    while (($row = fgetcsv($handle)) !== false) {
+                        $get = function (string $key) use ($map, $row): string {
+                            if (!isset($map[$key])) {
+                                return '';
+                            }
+                            $i = $map[$key];
+                            return isset($row[$i]) ? trim((string)$row[$i]) : '';
+                        };
+                        $companyName = $get('company_name');
+                        $companyCode = $get('company_code');
+                        if ($companyName === '' || $companyCode === '') {
+                            continue;
+                        }
+                        try {
+                            $insert->execute([
+                                ':company_name' => $companyName,
+                                ':company_code' => $companyCode,
+                                ':contact_name' => $get('contact_name'),
+                                ':phone'        => $get('phone'),
+                                ':email'        => $get('email'),
+                                ':address'      => $get('address'),
+                                ':website'      => $get('website'),
+                                ':service_type' => $get('service_type'),
+                                ':created_at'   => $now,
+                            ]);
+                            $imported++;
+                        } catch (PDOException $e) {
+                            continue;
+                        }
+                    }
+                    fclose($handle);
+                    if ($imported > 0 && $error === '') {
+                        $success = 'ייבוא הושלם. נוספו ' . $imported . ' ספקים.';
+                    } elseif ($error === '') {
+                        $error = 'לא נוספו ספקים מהקובץ.';
+                    }
+                }
+            }
+        }
+    } elseif ($action === 'import_fixed') {
+        if (isset($_SESSION['import_fix_type']) && $_SESSION['import_fix_type'] === 'suppliers') {
+            $headers = $_SESSION['import_fix_headers'] ?? [];
+            $rows = $_SESSION['import_fix_rows'] ?? [];
+            $columnMapping   = json_decode((string)($_POST['column_mapping'] ?? '{}'), true) ?: [];
+            $missingDefaults = json_decode((string)($_POST['missing_defaults'] ?? '{}'), true) ?: [];
+            $duplicateActions = json_decode((string)($_POST['duplicate_actions'] ?? '{}'), true) ?: [];
+
+            $headerNorm = [];
+            foreach ($headers as $idx => $col) {
+                $key = strtolower(trim((string)$col));
+                if ($key !== '') {
+                    $headerNorm[$key] = $idx;
+                }
+            }
+            foreach ($columnMapping as $fileCol => $systemCol) {
+                if ($systemCol !== '' && $systemCol !== null && isset($headerNorm[$fileCol])) {
+                    $headerNorm[$systemCol] = $headerNorm[$fileCol];
+                }
+            }
+
+            $skipRows = [];
+            foreach ($duplicateActions as $ri => $act) {
+                if (isset($act['action']) && $act['action'] === 'skip') {
+                    $skipRows[(int)$ri] = true;
+                }
+            }
+
+            $imported = 0;
+            $updated  = 0;
+
+            foreach ($rows as $ri => $row) {
+                if (isset($skipRows[$ri])) {
+                    continue;
+                }
+                $get = function (string $col) use ($headerNorm, $row, $missingDefaults): string {
+                    $idx = $headerNorm[$col] ?? null;
+                    $val = ($idx !== null && isset($row[$idx])) ? trim((string)$row[$idx]) : '';
+                    if ($val === '' && isset($missingDefaults[$col])) {
+                        $val = (string)$missingDefaults[$col];
+                    }
+                    return $val;
+                };
+
+                $companyName = $get('company_name');
+                $companyCode = $get('company_code');
+                if ($companyName === '' || $companyCode === '') {
+                    continue;
+                }
+                $contactName = $get('contact_name');
+                $phone       = $get('phone');
+                $email       = $get('email');
+                $address     = $get('address');
+                $website     = $get('website');
+                $serviceType = $get('service_type');
+
+                $stmt = $pdo->prepare('SELECT id FROM suppliers WHERE company_code = :code LIMIT 1');
+                $stmt->execute([':code' => $companyCode]);
+                $existing = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                if ($existing) {
+                    $id = (int)$existing['id'];
+                    $upd = $pdo->prepare('UPDATE suppliers SET company_name=:company_name, contact_name=:contact_name, phone=:phone, email=:email, address=:address, website=:website, service_type=:service_type WHERE id=:id');
+                    $upd->execute([
+                        ':company_name' => $companyName,
+                        ':contact_name' => $contactName,
+                        ':phone'        => $phone,
+                        ':email'        => $email,
+                        ':address'      => $address,
+                        ':website'      => $website,
+                        ':service_type' => $serviceType,
+                        ':id'           => $id,
+                    ]);
+                    $updated++;
+                } else {
+                    $ins = $pdo->prepare('INSERT INTO suppliers (company_name, company_code, contact_name, phone, email, address, website, service_type, created_at) VALUES (:company_name, :company_code, :contact_name, :phone, :email, :address, :website, :service_type, :created_at)');
+                    $ins->execute([
+                        ':company_name' => $companyName,
+                        ':company_code' => $companyCode,
+                        ':contact_name' => $contactName,
+                        ':phone'        => $phone,
+                        ':email'        => $email,
+                        ':address'      => $address,
+                        ':website'      => $website,
+                        ':service_type' => $serviceType,
+                        ':created_at'   => date('Y-m-d H:i:s'),
+                    ]);
+                    $imported++;
+                }
+            }
+
+            unset($_SESSION['import_fix_type'], $_SESSION['import_fix_headers'], $_SESSION['import_fix_rows'], $_SESSION['import_fix_raw'], $_SESSION['import_fix_issues'], $_SESSION['import_fix_delimiter']);
+            $_SESSION['admin_suppliers_success'] = 'ייבוא הושלם. נוספו ' . $imported . ' ספקים, עודכנו ' . $updated . ' ספקים.';
+            header('Location: admin_suppliers.php');
+            exit;
         }
     } elseif ($action === 'create') {
         $companyName = trim((string)($_POST['company_name'] ?? ''));
@@ -305,6 +460,18 @@ try {
     $error = $error !== '' ? $error : 'שגיאה בטעינת ספקים.';
 }
 
+$show_import_fix_modal_sup = false;
+$import_fix_data_sup = null;
+if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESSION['import_fix_type'] === 'suppliers') {
+    $show_import_fix_modal_sup = true;
+    $import_fix_data_sup = [
+        'headers' => $_SESSION['import_fix_headers'] ?? [],
+        'rows'    => $_SESSION['import_fix_rows'] ?? [],
+        'issues'  => $_SESSION['import_fix_issues'] ?? [],
+    ];
+    $import_fix_system_columns_sup = ['company_name', 'company_code', 'contact_name', 'phone', 'email', 'address', 'website', 'service_type'];
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -439,6 +606,43 @@ try {
             font-size: 0.85rem;
             font-weight: 600;
             color: #374151;
+        }
+        .file-drop-zone {
+            border-radius: 999px;
+            border: 1px dashed #d1d5db;
+            padding: 0.45rem 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            font-size: 0.8rem;
+            color: #374151;
+            background: #f9fafb;
+            cursor: pointer;
+        }
+        .file-drop-zone:hover {
+            border-color: #9ca3af;
+            background: #f3f4f6;
+        }
+        .file-drop-input {
+            display: none;
+        }
+        .file-drop-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            border-radius: 999px;
+            background: #4f46e5;
+            color: #ffffff;
+        }
+        .file-drop-text {
+            font-weight: 500;
+        }
+        .file-drop-hint {
+            font-size: 0.75rem;
+            color: #6b7280;
         }
             border: none;
             background: transparent;
@@ -615,11 +819,13 @@ try {
             טבלת ספקים.
         </p>
 
-        <form method="post" action="admin_suppliers.php" enctype="multipart/form-data" style="margin:0 0 0.5rem 0; display:inline-block; float:left;">
+        <form method="post" action="admin_suppliers.php" enctype="multipart/form-data" id="suppliers_import_form" style="margin:0 0 0.75rem 0; display:inline-block; float:left;">
             <input type="hidden" name="action" value="import_csv">
-            <label class="file-drop-zone" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.35rem 0.75rem;border-radius:999px;border:1px dashed #d1d5db;cursor:pointer;font-size:0.8rem;">
-                <input type="file" name="csv_file" accept=".csv" required style="display:none;" onchange="this.form.submit();">
-                <span style="font-weight:600;">יבוא CSV</span>
+            <label class="file-drop-zone" for="suppliers_import_file" id="suppliers_import_zone" aria-label="העלאת קובץ CSV לייבוא ספקים">
+                <input type="file" name="csv_file" id="suppliers_import_file" accept=".csv" required class="file-drop-input">
+                <span class="file-drop-icon"><i data-lucide="upload" aria-hidden="true"></i></span>
+                <span class="file-drop-text">גרור קובץ CSV לכאן או לחץ לבחירה</span>
+                <span class="file-drop-hint">ייבוא ספקים מקובץ CSV</span>
             </label>
         </form>
 
@@ -681,6 +887,117 @@ try {
             </table>
         </div>
     </div>
+
+    <?php if ($show_import_fix_modal_sup && $import_fix_data_sup): $iss = $import_fix_data_sup['issues']; ?>
+    <div class="modal-backdrop" id="import_fix_modal_sup" style="display: flex;">
+        <div class="modal-card" style="max-width: 95%; width: 640px; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <h2>תיקון ייבוא ספקים</h2>
+                <button type="button" class="modal-close" id="import_fix_modal_close_sup" aria-label="סגירה"><i data-lucide="x" aria-hidden="true"></i></button>
+            </div>
+            <div id="import_fix_content_sup">
+                <?php if (!empty($iss['missing_columns'])): ?>
+                <div class="import-fix-section">
+                    <p class="muted-small">טורים חסרים בקובץ – הזן ערך ברירת מחדל:</p>
+                    <?php foreach ($iss['missing_columns'] as $col): ?>
+                    <label style="display:block; margin:0.35rem 0;"><?= htmlspecialchars($col, ENT_QUOTES, 'UTF-8') ?></label>
+                    <input type="text" name="missing_default_<?= htmlspecialchars($col, ENT_QUOTES, 'UTF-8') ?>" class="import-fix-missing-sup" data-col="<?= htmlspecialchars($col, ENT_QUOTES, 'UTF-8') ?>" placeholder="ערך ברירת מחדל" style="width:100%; max-width:280px; padding:0.35rem;">
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+                <?php if (!empty($iss['unknown_columns'])): ?>
+                <div class="import-fix-section">
+                    <p class="muted-small">הטורים הללו קיימים ברשימת הייבוא אך לא במערכת. להמרת טורים:</p>
+                    <?php foreach ($iss['unknown_columns'] as $uc): ?>
+                    <div class="import-fix-map-row" style="display:flex; align-items:center; gap:0.5rem; margin:0.4rem 0;">
+                        <span style="min-width:120px;"><?= htmlspecialchars($uc, ENT_QUOTES, 'UTF-8') ?></span>
+                        <select class="import-fix-map-select-sup" data-file-col="<?= htmlspecialchars($uc, ENT_QUOTES, 'UTF-8') ?>" style="padding:0.35rem; min-width:160px;">
+                            <option value="">— ביטול (התעלם מטור)</option>
+                            <?php foreach ($import_fix_system_columns_sup as $sc): ?>
+                            <option value="<?= htmlspecialchars($sc, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($sc, ENT_QUOTES, 'UTF-8') ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+                <?php if (!empty($iss['duplicate_suppliers'])): ?>
+                <div class="import-fix-section">
+                    <?php foreach ($iss['duplicate_suppliers'] as $du): ?>
+                    <div class="import-fix-dup-row-sup" style="margin:0.5rem 0; padding:0.5rem; background:#f9fafb; border-radius:8px;" data-row="<?= (int)$du['row'] ?>" data-code="<?= htmlspecialchars($du['company_code'], ENT_QUOTES, 'UTF-8') ?>">
+                        <p class="muted-small" style="margin:0 0 0.35rem 0;">הספק עם קוד חברה <strong><?= htmlspecialchars($du['company_code'], ENT_QUOTES, 'UTF-8') ?></strong> כבר קיים במערכת.</p>
+                        <label><input type="radio" name="dup_sup_<?= (int)$du['row'] ?>" value="update" class="dup-action-update-sup" checked> עדכן ספק קיים</label>
+                        <label style="margin-right:0.75rem;"><input type="radio" name="dup_sup_<?= (int)$du['row'] ?>" value="skip" class="dup-action-skip-sup"> דלג על השורה</label>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+                <div class="import-fix-section" style="margin-top:1rem;">
+                    <form method="post" action="admin_suppliers.php" id="import_fixed_form_sup">
+                        <input type="hidden" name="action" value="import_fixed">
+                        <input type="hidden" name="column_mapping" id="import_fix_column_mapping_sup" value="">
+                        <input type="hidden" name="missing_defaults" id="import_fix_missing_defaults_sup" value="">
+                        <input type="hidden" name="duplicate_actions" id="import_fix_duplicate_actions_sup" value="">
+                        <button type="submit" class="btn">ייבא קובץ מתוקן</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function() {
+        var issuesSup = <?= json_encode($iss ?? []) ?>;
+        var formSup = document.getElementById('import_fixed_form_sup');
+        if (formSup) {
+            formSup.addEventListener('submit', function() {
+                var mapping = {};
+                document.querySelectorAll('.import-fix-map-select-sup').forEach(function(sel) {
+                    var fileCol = sel.getAttribute('data-file-col');
+                    if (sel.value !== '') mapping[fileCol] = sel.value;
+                });
+                var missing = {};
+                document.querySelectorAll('.import-fix-missing-sup').forEach(function(inp) {
+                    var col = inp.getAttribute('data-col');
+                    if (col && inp.value.trim() !== '') missing[col] = inp.value.trim();
+                });
+                var dups = {};
+                document.querySelectorAll('.import-fix-dup-row-sup').forEach(function(row) {
+                    var ri = row.getAttribute('data-row');
+                    var skipRadio = row.querySelector('.dup-action-skip-sup');
+                    dups[ri] = (skipRadio && skipRadio.checked) ? { action: 'skip' } : { action: 'update' };
+                });
+                document.getElementById('import_fix_column_mapping_sup').value = JSON.stringify(mapping);
+                document.getElementById('import_fix_missing_defaults_sup').value = JSON.stringify(missing);
+                document.getElementById('import_fix_duplicate_actions_sup').value = JSON.stringify(dups);
+            });
+        }
+        function updateMapSelectOptionsSup() {
+            var used = {};
+            document.querySelectorAll('.import-fix-map-select-sup').forEach(function(s) {
+                if (s.value !== '') used[s.value] = true;
+            });
+            document.querySelectorAll('.import-fix-map-select-sup').forEach(function(s) {
+                var currentVal = s.value;
+                for (var i = 0; i < s.options.length; i++) {
+                    var opt = s.options[i];
+                    if (opt.value === '') continue;
+                    opt.disabled = used[opt.value] && opt.value !== currentVal;
+                }
+            });
+        }
+        document.querySelectorAll('.import-fix-map-select-sup').forEach(function(sel) {
+            sel.addEventListener('change', updateMapSelectOptionsSup);
+        });
+        updateMapSelectOptionsSup();
+        var closeBtnSup = document.getElementById('import_fix_modal_close_sup');
+        if (closeBtnSup) {
+            closeBtnSup.addEventListener('click', function() {
+                window.location.href = 'admin_suppliers.php';
+            });
+        }
+    })();
+    </script>
+    <?php endif; ?>
 </main>
 </body>
 <script>
