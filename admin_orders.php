@@ -2195,7 +2195,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     <?= htmlspecialchars($order['borrower_name'], ENT_QUOTES, 'UTF-8') ?>
                                 </a>
                             <?php else: ?>
-                                <?= htmlspecialchars($order['borrower_name'], ENT_QUOTES, 'ENT_QUOTES') ?>
+                                <?= htmlspecialchars($order['borrower_name'], ENT_QUOTES, 'UTF-8') ?>
                             <?php endif; ?>
                             <br>
                             <?php if ($order['borrower_contact'] !== null && $order['borrower_contact'] !== ''): ?>
