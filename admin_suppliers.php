@@ -17,12 +17,25 @@ $editingSupplier = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
+
+    // שליפת איש הקשר הראשון מהמערך (contact_name[] וכו') לצורך שמירה בשדות הקיימים
+    $postedContactNames  = $_POST['contact_name']  ?? [];
+    $postedContactPhones = $_POST['contact_phone'] ?? [];
+    $postedContactEmails = $_POST['contact_email'] ?? [];
+    if (!is_array($postedContactNames))  $postedContactNames  = [];
+    if (!is_array($postedContactPhones)) $postedContactPhones = [];
+    if (!is_array($postedContactEmails)) $postedContactEmails = [];
+
+    $primaryContactName  = trim((string)($postedContactNames[0]  ?? ''));
+    $primaryContactPhone = trim((string)($postedContactPhones[0] ?? ''));
+    $primaryContactEmail = trim((string)($postedContactEmails[0] ?? ''));
+
     if ($action === 'create') {
         $companyName = trim((string)($_POST['company_name'] ?? ''));
         $companyCode = trim((string)($_POST['company_code'] ?? ''));
-        $contactName = trim((string)($_POST['contact_name'] ?? ''));
-        $phone       = trim((string)($_POST['phone'] ?? ''));
-        $email       = trim((string)($_POST['email'] ?? ''));
+        $contactName = $primaryContactName;
+        $phone       = $primaryContactPhone;
+        $email       = $primaryContactEmail;
         $address     = trim((string)($_POST['address'] ?? ''));
         $website     = trim((string)($_POST['website'] ?? ''));
         $serviceType = trim((string)($_POST['service_type'] ?? ''));
@@ -57,9 +70,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id          = isset($_POST['id']) ? (int)$_POST['id'] : 0;
         $companyName = trim((string)($_POST['company_name'] ?? ''));
         $companyCode = trim((string)($_POST['company_code'] ?? ''));
-        $contactName = trim((string)($_POST['contact_name'] ?? ''));
-        $phone       = trim((string)($_POST['phone'] ?? ''));
-        $email       = trim((string)($_POST['email'] ?? ''));
+        $contactName = $primaryContactName;
+        $phone       = $primaryContactPhone;
+        $email       = $primaryContactEmail;
         $address     = trim((string)($_POST['address'] ?? ''));
         $website     = trim((string)($_POST['website'] ?? ''));
         $serviceType = trim((string)($_POST['service_type'] ?? ''));
@@ -536,6 +549,61 @@ try {
                 }
             });
         }
+    })();
+
+    (function () {
+        var contactsContainer = document.getElementById('contact_sections');
+        var addContactBtn = document.getElementById('add_contact_btn');
+        if (!contactsContainer || !addContactBtn) return;
+
+        function updateRemoveButtons() {
+            var sections = contactsContainer.querySelectorAll('.contact-section');
+            sections.forEach(function (sec, idx) {
+                var removeBtn = sec.querySelector('.contact-remove-btn');
+                if (!removeBtn) return;
+                // הסתרת כפתור מחיקה אם יש רק איש קשר אחד
+                removeBtn.style.display = (sections.length > 1) ? 'inline-flex' : 'none';
+            });
+        }
+
+        function addContactSection() {
+            var sections = contactsContainer.querySelectorAll('.contact-section');
+            if (sections.length >= 3) return;
+            var first = sections[0];
+            if (!first) return;
+            var clone = first.cloneNode(true);
+            // ניקוי ערכים באיש קשר חדש
+            var nameInput = clone.querySelector('input[name="contact_name[]"]');
+            var phoneInput = clone.querySelector('input[name="contact_phone[]"]');
+            var emailInput = clone.querySelector('input[name="contact_email[]"]');
+            if (nameInput) nameInput.value = '';
+
+            // אם במצב צפייה – אין צורך באיש קשר חדש
+            if (phoneInput && phoneInput.tagName === 'INPUT') phoneInput.value = '';
+            if (emailInput && emailInput.tagName === 'INPUT') emailInput.value = '';
+
+            contactsContainer.appendChild(clone);
+            updateRemoveButtons();
+        }
+
+        addContactBtn.addEventListener('click', function () {
+            addContactSection();
+        });
+
+        contactsContainer.addEventListener('click', function (e) {
+            var target = e.target;
+            if (target.closest('.contact-remove-btn')) {
+                var sections = contactsContainer.querySelectorAll('.contact-section');
+                if (sections.length <= 1) return;
+                var section = target.closest('.contact-section');
+                if (section) {
+                    contactsContainer.removeChild(section);
+                    updateRemoveButtons();
+                }
+            }
+        });
+
+        updateRemoveButtons();
     })();
 </script>
 </html>
