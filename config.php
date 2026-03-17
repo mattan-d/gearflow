@@ -339,6 +339,23 @@ function initialize_database(PDO $pdo): void
         $stmt->execute([':s' => $code, ':l' => $label]);
     }
 
+    // טבלת ספקים
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS suppliers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_name TEXT NOT NULL,
+            company_code TEXT,
+            contact_name TEXT,
+            phone TEXT,
+            email TEXT,
+            address TEXT,
+            website TEXT,
+            service_type TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT
+        )
+    ");
+
     // Ensure default admin user exists: admin / admin
     $stmt = $pdo->prepare('SELECT COUNT(*) AS cnt FROM users WHERE username = :username');
     $stmt->execute([':username' => 'admin']);
