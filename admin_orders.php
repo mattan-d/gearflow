@@ -1809,35 +1809,43 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             $initialPhone = (string)($me['phone'] ?? '');
                         }
                         ?>
-                        <input
-                            type="text"
-                            id="borrower_email"
-                            autocomplete="off"
-                            value="<?= htmlspecialchars($initialEmail, ENT_QUOTES, 'UTF-8') ?>"
-                            <?= ($isStudent || $isNotPickedContext || $isViewModeOrder) ? 'readonly' : '' ?>
-                        >
-                        <?php if ($isViewModeOrder && $initialEmail !== ''): ?>
-                            <div class="muted-small" style="margin-top:0.2rem;">
-                                <a href="mailto:<?= htmlspecialchars($initialEmail, ENT_QUOTES, 'UTF-8') ?>">
-                                    שליחת מייל ל־<?= htmlspecialchars($initialEmail, ENT_QUOTES, 'UTF-8') ?>
-                                </a>
-                            </div>
+                        <?php if ($isViewModeOrder): ?>
+                            <input
+                                type="text"
+                                id="borrower_email"
+                                autocomplete="off"
+                                value="<?= htmlspecialchars($initialEmail, ENT_QUOTES, 'UTF-8') ?>"
+                                readonly
+                                onclick="if(this.value){window.location.href='mailto:'+this.value;}"
+                            >
+                        <?php else: ?>
+                            <input
+                                type="text"
+                                id="borrower_email"
+                                autocomplete="off"
+                                value="<?= htmlspecialchars($initialEmail, ENT_QUOTES, 'UTF-8') ?>"
+                                <?= ($isStudent || $isNotPickedContext) ? 'readonly' : '' ?>
+                            >
                         <?php endif; ?>
 
                         <label for="borrower_phone">טלפון</label>
-                        <input
-                            type="text"
-                            id="borrower_phone"
-                            autocomplete="off"
-                            value="<?= htmlspecialchars($initialPhone, ENT_QUOTES, 'UTF-8') ?>"
-                            <?= ($isStudent || $isNotPickedContext || $isViewModeOrder) ? 'readonly' : '' ?>
-                        >
-                        <?php if ($isViewModeOrder && $initialPhone !== ''): ?>
-                            <div class="muted-small" style="margin-top:0.2rem;">
-                                <a href="tel:<?= htmlspecialchars($initialPhone, ENT_QUOTES, 'UTF-8') ?>">
-                                    חיוג ל־<?= htmlspecialchars($initialPhone, ENT_QUOTES, 'UTF-8') ?>
-                                </a>
-                            </div>
+                        <?php if ($isViewModeOrder): ?>
+                            <input
+                                type="text"
+                                id="borrower_phone"
+                                autocomplete="off"
+                                value="<?= htmlspecialchars($initialPhone, ENT_QUOTES, 'UTF-8') ?>"
+                                readonly
+                                onclick="if(this.value){window.location.href='tel:'+this.value;}"
+                            >
+                        <?php else: ?>
+                            <input
+                                type="text"
+                                id="borrower_phone"
+                                autocomplete="off"
+                                value="<?= htmlspecialchars($initialPhone, ENT_QUOTES, 'UTF-8') ?>"
+                                <?= ($isStudent || $isNotPickedContext) ? 'readonly' : '' ?>
+                            >
                         <?php endif; ?>
 
                         <input type="hidden" id="borrower_contact" name="borrower_contact"

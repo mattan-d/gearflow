@@ -1070,25 +1070,27 @@ if ($loadId > 0) {
                     </div>
                     <div>
                         <label for="modal_email">אימייל</label>
-                        <input type="text" id="modal_email" name="email" <?= $isViewMode ? 'readonly' : '' ?>
-                               value="<?= $editingUser ? htmlspecialchars($editingUser['email'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
-                        <?php if ($isViewMode && $editingUser && !empty($editingUser['email'] ?? '')): ?>
-                            <div class="muted-small" style="margin-top:0.2rem;">
-                                <a href="mailto:<?= htmlspecialchars((string)$editingUser['email'], ENT_QUOTES, 'UTF-8') ?>">
-                                    שליחת מייל ל־<?= htmlspecialchars((string)$editingUser['email'], ENT_QUOTES, 'UTF-8') ?>
-                                </a>
-                            </div>
+                        <?php if ($isViewMode && $editingUser): ?>
+                            <?php $emailVal = (string)($editingUser['email'] ?? ''); ?>
+                            <input type="text" id="modal_email" name="email"
+                                   value="<?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>"
+                                   readonly
+                                   onclick="if(this.value){window.location.href='mailto:'+this.value;}">
+                        <?php else: ?>
+                            <input type="text" id="modal_email" name="email"
+                                   value="<?= $editingUser ? htmlspecialchars($editingUser['email'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
                         <?php endif; ?>
 
                         <label for="modal_phone">טלפון</label>
-                        <input type="text" id="modal_phone" name="phone" <?= $isViewMode ? 'readonly' : '' ?>
-                               value="<?= $editingUser ? htmlspecialchars($editingUser['phone'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
-                        <?php if ($isViewMode && $editingUser && !empty($editingUser['phone'] ?? '')): ?>
-                            <div class="muted-small" style="margin-top:0.2rem;">
-                                <a href="tel:<?= htmlspecialchars((string)$editingUser['phone'], ENT_QUOTES, 'UTF-8') ?>">
-                                    חיוג ל־<?= htmlspecialchars((string)$editingUser['phone'], ENT_QUOTES, 'UTF-8') ?>
-                                </a>
-                            </div>
+                        <?php if ($isViewMode && $editingUser): ?>
+                            <?php $phoneVal = (string)($editingUser['phone'] ?? ''); ?>
+                            <input type="text" id="modal_phone" name="phone"
+                                   value="<?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>"
+                                   readonly
+                                   onclick="if(this.value){window.location.href='tel:'+this.value;}">
+                        <?php else: ?>
+                            <input type="text" id="modal_phone" name="phone"
+                                   value="<?= $editingUser ? htmlspecialchars($editingUser['phone'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
                         <?php endif; ?>
 
                         <label for="modal_role">תפקיד</label>
