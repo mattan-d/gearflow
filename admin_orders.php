@@ -2189,21 +2189,23 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <tr data-order-id="<?= (int)$order['id'] ?>" class="<?= htmlspecialchars($rowHighlightClass, ENT_QUOTES, 'UTF-8') ?>">
                             <td><?= (int)$order['id'] ?></td>
                         <td>
-                            <?php $borrowerUserId = (int)($order['borrower_user_id'] ?? 0); ?>
-                            <?php if ($borrowerUserId > 0): ?>
+                            <?php
+                            $borrowerUserId = (int)($order['borrower_user_id'] ?? 0);
+                            $canSeeUserLink = in_array($role, ['admin', 'warehouse_manager'], true);
+                            ?>
+                            <?php if ($borrowerUserId > 0 && $canSeeUserLink): ?>
                                 <a href="admin_users.php?view_id=<?= $borrowerUserId ?>"
                                    style="text-decoration:none;color:#2563eb!important;font-weight:600;"
                                    target="_blank" rel="noopener noreferrer">
                                     <?= htmlspecialchars($order['borrower_name'], ENT_QUOTES, 'UTF-8') ?>
                                 </a>
                             <?php else: ?>
-                                <?= htmlspecialchars($order['borrower_name'], ENT_QUOTES, 'UTF-8') ?>
-                            <?php endif; ?>
-                            <br>
-                            <?php if ($order['borrower_contact'] !== null && $order['borrower_contact'] !== ''): ?>
-                                <span class="muted-small">
-                                    <?= htmlspecialchars($order['borrower_contact'], ENT_QUOTES, 'UTF-8') ?>
-                                </span>
+                                <?= htmlspecialchars($order['borrower_name'], ENT_QUOTES, 'UTF-8') ?><br>
+                                <?php if ($order['borrower_contact'] !== null && $order['borrower_contact'] !== ''): ?>
+                                    <span class="muted-small">
+                                        <?= htmlspecialchars($order['borrower_contact'], ENT_QUOTES, 'UTF-8') ?>
+                                    </span>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </td>
                         <td>
