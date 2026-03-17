@@ -229,6 +229,18 @@ function initialize_database(PDO $pdo): void
         )
     ");
 
+    // טבלת סטטוס רכיבי ציוד בהזמנה (האם קיים בזמן השאלה/החזרה)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS order_component_checks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            equipment_code TEXT NOT NULL,
+            component_name TEXT NOT NULL,
+            is_present INTEGER NOT NULL DEFAULT 1,
+            checked_at TEXT NOT NULL
+        )
+    ");
+
     // טבלת שעות פתיחת מחסנים – שורות מייצגות שעות פתוחות בלבד
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS warehouse_hours (

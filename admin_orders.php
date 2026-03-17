@@ -213,10 +213,61 @@ if (isset($_GET['duplicate_id']) && !$editingOrder) {
     }
 }
 
-// טיפול ביצירה / עדכון / סטטוס / מחיקה / שכפול
+// טיפול ביצירה / עדכון / סטטוס / מחיקה / שכפול וגם שמירת רכיבי פריט
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action     = $_POST['action'] ?? '';
     $currentTab = $_POST['current_tab'] ?? null;
+
+    if ($action === 'save_components') {
+        // שמירת סטטוס רכיבי פריט להזמנה (AJAX)
+        $orderId = isset($_POST['order_id']) ? (int)$_POST['order_id'] : 0;
+        $code    = trim((string)($_POST['equipment_code'] ?? ''));
+        $rawJson = (string)($_POST['components'] ?? '[]');
+        $items   = json_decode($rawJson, true);
+
+        if ($orderId > 0 && $code !== '' && is_array($items)) {
+            try {
+                $pdo->beginTransaction();
+                $del = $pdo->prepare('DELETE FROM order_component_checks WHERE order_id = :oid AND equipment_code = :code');
+                $del->execute([':oid' => $orderId, ':code' => $code]);
+                $ins = $pdo->prepare(
+                    'INSERT INTO order_component_checks (order_id, equipment_code, component_name, is_present, checked_at)
+                     VALUES (:order_id, :equipment_code, :component_name, :is_present, :checked_at)'
+                );
+                $now = date('Y-m-d H:i:s');
+                foreach ($items as $row) {
+                    if (!isset($row['name'])) {
+                        continue;
+                    }
+                    $name = trim((string)$row['name']);
+                    if ($name === '') {
+                        continue;
+                    }
+                    $present = !empty($row['present']) ? 1 : 0;
+                    $ins->execute([
+                        ':order_id'       => $orderId,
+                        ':equipment_code' => $code,
+                        ':component_name' => $name,
+                        ':is_present'     => $present,
+                        ':checked_at'     => $now,
+                    ]);
+                }
+                $pdo->commit();
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE);
+            } catch (Throwable $e) {
+                if ($pdo->inTransaction()) {
+                    $pdo->rollBack();
+                }
+                header('Content-Type: application/json; charset=utf-8', true, 500);
+                echo json_encode(['ok' => false], JSON_UNESCAPED_UNICODE);
+            }
+        } else {
+            header('Content-Type: application/json; charset=utf-8', true, 400);
+            echo json_encode(['ok' => false], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
 
     if ($action === 'create' || $action === 'update') {
         $id              = (int)($_POST['id'] ?? 0);
@@ -1028,6 +1079,40 @@ if (!empty($orderEquipmentIds)) {
             'quantity' => (int)($cRow['quantity'] ?? 1),
         ];
     }
+}
+
+// טעינת סטטוס רכיבי פריט שנשמרו להזמנות
+$componentChecksByOrderAndCode = [];
+try {
+    $orderIdsForChecks = array_column($orders, 'id');
+    $orderIdsForChecks = array_values(array_unique(array_map('intval', $orderIdsForChecks)));
+    if (!empty($orderIdsForChecks)) {
+        $placeholders = implode(',', array_fill(0, count($orderIdsForChecks), '?'));
+        $stmtChecks = $pdo->prepare(
+            "SELECT order_id, equipment_code, component_name, is_present
+             FROM order_component_checks
+             WHERE order_id IN ($placeholders)"
+        );
+        $stmtChecks->execute($orderIdsForChecks);
+        $rowsChecks = $stmtChecks->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($rowsChecks as $r) {
+            $oid  = (int)($r['order_id'] ?? 0);
+            $code = (string)($r['equipment_code'] ?? '');
+            $name = (string)($r['component_name'] ?? '');
+            if ($oid <= 0 || $code === '' || $name === '') {
+                continue;
+            }
+            if (!isset($componentChecksByOrderAndCode[$oid])) {
+                $componentChecksByOrderAndCode[$oid] = [];
+            }
+            if (!isset($componentChecksByOrderAndCode[$oid][$code])) {
+                $componentChecksByOrderAndCode[$oid][$code] = [];
+            }
+            $componentChecksByOrderAndCode[$oid][$code][$name] = (int)($r['is_present'] ?? 0) === 1;
+        }
+    }
+} catch (Throwable $e) {
+    $componentChecksByOrderAndCode = [];
 }
 
 // רשימת סטודנטים (משתתפים) לשדה החיפוש של "שם שואל"
@@ -2213,11 +2298,16 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             $code = (string)($order['equipment_code'] ?? '');
                             $components = $equipmentComponentsByCode[$code] ?? [];
                             $hasComponents = !empty($components);
+                            $compChecks = [];
+                            if (!empty($componentChecksByOrderAndCode[(int)$order['id']] ?? [])) {
+                                $compChecks = $componentChecksByOrderAndCode[(int)$order['id']][$code] ?? [];
+                            }
                             ?>
                             <?php if ($hasComponents): ?>
                                 <a href="#"
                                    class="equipment-components-link"
-                                   data-equipment-code="<?= htmlspecialchars($code, ENT_QUOTES, 'UTF-8') ?>">
+                                   data-equipment-code="<?= htmlspecialchars($code, ENT_QUOTES, 'UTF-8') ?>"
+                                   data-order-id="<?= (int)$order['id'] ?>">
                                     <?= htmlspecialchars($order['equipment_name'], ENT_QUOTES, 'UTF-8') ?>
                                 </a>
                             <?php else: ?>
@@ -2231,6 +2321,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 <script type="application/json" data-components-for="<?= htmlspecialchars($code, ENT_QUOTES, 'UTF-8') ?>">
                                     <?= json_encode($components, JSON_UNESCAPED_UNICODE) ?>
                                 </script>
+                                <?php if (!empty($compChecks)): ?>
+                                    <script type="application/json"
+                                            data-component-checks-for-order="<?= (int)$order['id'] ?>"
+                                            data-component-checks-code="<?= htmlspecialchars($code, ENT_QUOTES, 'UTF-8') ?>">
+                                        <?= json_encode($compChecks, JSON_UNESCAPED_UNICODE) ?>
+                                    </script>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </td>
                         <td>
@@ -3374,7 +3471,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         if (!links.length) return;
 
         var modal = document.getElementById('order_components_modal');
-        var backdrop, card, listContainer, closeBtn;
+        var backdrop, card, listContainer, closeBtn, saveBtn;
 
         function ensureModal() {
             if (modal) return;
@@ -3425,6 +3522,17 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             listContainer = document.createElement('div');
             card.appendChild(listContainer);
 
+            var footer = document.createElement('div');
+            footer.style.display = 'flex';
+            footer.style.justifyContent = 'flex-start';
+            footer.style.marginTop = '0.75rem';
+            saveBtn = document.createElement('button');
+            saveBtn.type = 'button';
+            saveBtn.textContent = 'שמירת רכיבים';
+            saveBtn.className = 'btn secondary';
+            footer.appendChild(saveBtn);
+            card.appendChild(footer);
+
             backdrop.appendChild(card);
             document.body.appendChild(backdrop);
             if (window.lucide) lucide.createIcons();
@@ -3440,9 +3548,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
             modal = backdrop;
             modal._listContainer = listContainer;
+            modal._saveBtn = saveBtn;
         }
 
-        function openModalForCode(code) {
+        function openModalForCode(code, orderId) {
             ensureModal();
             var container = modal._listContainer;
             container.innerHTML = '';
@@ -3464,6 +3573,19 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         ul.style.listStyle = 'none';
                         ul.style.padding = '0';
                         ul.style.margin = '0';
+                        // בדיקה אם קיימת שמירה קודמת עבור הזמנה זו
+                        var savedChecksEl = document.querySelector(
+                            'script[data-component-checks-for-order="' + orderId + '"][data-component-checks-code="' + code + '"]'
+                        );
+                        var savedChecks = {};
+                        if (savedChecksEl) {
+                            try {
+                                savedChecks = JSON.parse(savedChecksEl.textContent || '{}') || {};
+                            } catch (e) {
+                                savedChecks = {};
+                            }
+                        }
+
                         components.forEach(function (c) {
                             var li = document.createElement('li');
                             li.style.display = 'flex';
@@ -3473,6 +3595,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             var cb = document.createElement('input');
                             cb.type = 'checkbox';
                             cb.style.marginLeft = '0.4rem';
+                            cb.setAttribute('data-component-name', c.name);
+                            if (savedChecks[c.name] === true) {
+                                cb.checked = true;
+                            }
 
                             var label = document.createElement('span');
                             var qty = c.quantity && c.quantity > 1 ? ' (' + c.quantity + ')' : '';
@@ -3492,14 +3618,46 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             }
 
             modal.style.display = 'flex';
+
+            // חיבור כפתור שמירה
+            if (modal._saveBtn) {
+                modal._saveBtn.onclick = function () {
+                    var checkboxes = modal._listContainer.querySelectorAll('input[type="checkbox"][data-component-name]');
+                    var payload = [];
+                    checkboxes.forEach(function (cb) {
+                        payload.push({
+                            name: cb.getAttribute('data-component-name') || '',
+                            present: cb.checked ? 1 : 0
+                        });
+                    });
+                    var formData = new FormData();
+                    formData.append('action', 'save_components');
+                    formData.append('order_id', String(orderId));
+                    formData.append('equipment_code', code);
+                    formData.append('components', JSON.stringify(payload));
+                    fetch('admin_orders.php', {
+                        method: 'POST',
+                        body: formData,
+                        credentials: 'same-origin'
+                    }).then(function (res) {
+                        if (!res.ok) throw new Error('save failed');
+                        return res.json();
+                    }).then(function () {
+                        alert('הרכיבים נשמרו.');
+                    }).catch(function () {
+                        alert('שמירת הרכיבים נכשלה.');
+                    });
+                };
+            }
         }
 
         links.forEach(function (link) {
             link.addEventListener('click', function (e) {
                 e.preventDefault();
                 var code = link.getAttribute('data-equipment-code');
-                if (!code) return;
-                openModalForCode(code);
+                var oid  = link.getAttribute('data-order-id');
+                if (!code || !oid) return;
+                openModalForCode(code, oid);
             });
         });
     })();
