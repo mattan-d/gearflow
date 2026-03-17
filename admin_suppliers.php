@@ -99,7 +99,7 @@ try {
         .toolbar {
             margin-bottom: 0.75rem;
             display: flex;
-            justify-content: flex-end;
+            justify-content: flex-start;
         }
         .btn {
             border: none;
@@ -263,12 +263,13 @@ try {
                     <th style="text-align:right; padding:0.4rem 0.5rem; border-bottom:1px solid #e5e7eb;">כתובת</th>
                     <th style="text-align:right; padding:0.4rem 0.5rem; border-bottom:1px solid #e5e7eb;">לינק לאתר</th>
                     <th style="text-align:right; padding:0.4rem 0.5rem; border-bottom:1px solid #e5e7eb;">סוג שירות</th>
+                    <th style="text-align:right; padding:0.4rem 0.5rem; border-bottom:1px solid #e5e7eb;">פעולות</th>
                 </tr>
                 </thead>
                 <tbody>
                 <?php if (empty($suppliers)): ?>
                     <tr>
-                        <td colspan="8" class="muted-small" style="padding:0.6rem 0.5rem; text-align:center; color:#9ca3af;">
+                        <td colspan="9" class="muted-small" style="padding:0.6rem 0.5rem; text-align:center; color:#9ca3af;">
                             אין עדיין נתונים להצגה.
                         </td>
                     </tr>
@@ -288,6 +289,16 @@ try {
                                 <?php endif; ?>
                             </td>
                             <td><?= htmlspecialchars((string)($s['service_type'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                            <td>
+                                <div class="row-actions">
+                                    <a href="admin_suppliers.php?edit_id=<?= (int)($s['id'] ?? 0) ?>" class="icon-btn" title="עריכת ספק" aria-label="עריכת ספק"><i data-lucide="pencil" aria-hidden="true"></i></a>
+                                    <form method="post" action="admin_suppliers.php" onsubmit="return confirm('למחוק את הספק הזה?');">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="id" value="<?= (int)($s['id'] ?? 0) ?>">
+                                        <button type="submit" class="icon-btn" title="מחיקת ספק" aria-label="מחיקת ספק"><i data-lucide="trash-2" aria-hidden="true"></i></button>
+                                    </form>
+                                </div>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>
