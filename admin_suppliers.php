@@ -260,6 +260,24 @@ try {
             margin-bottom: 1rem;
         }
         .modal-close {
+        .contact-section {
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 0.75rem 0.9rem;
+            margin-bottom: 0.6rem;
+            background: #f9fafb;
+        }
+        .contact-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.4rem;
+        }
+        .contact-header-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #374151;
+        }
             border: none;
             background: transparent;
             cursor: pointer;
@@ -313,39 +331,6 @@ try {
                                value="<?= htmlspecialchars((string)($editingSupplier['company_code'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div>
-                        <label for="contact_name">איש קשר</label>
-                        <input type="text" id="contact_name" name="contact_name" <?= $isViewMode ? 'readonly' : '' ?>
-                               value="<?= htmlspecialchars((string)($editingSupplier['contact_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
-                    </div>
-                    <div>
-                        <label for="phone">טלפון</label>
-                        <?php if ($isViewMode): ?>
-                            <?php $phoneVal = (string)($editingSupplier['phone'] ?? ''); ?>
-                            <a href="tel:<?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>"
-                               id="phone"
-                               style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#111827;min-width:0;">
-                                <?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>
-                            </a>
-                        <?php else: ?>
-                            <input type="text" id="phone" name="phone"
-                                   value="<?= htmlspecialchars((string)($editingSupplier['phone'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
-                        <?php endif; ?>
-                    </div>
-                    <div>
-                        <label for="email">מייל</label>
-                        <?php if ($isViewMode): ?>
-                            <?php $emailVal = (string)($editingSupplier['email'] ?? ''); ?>
-                            <a href="mailto:<?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>"
-                               id="email"
-                               style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#111827;min-width:0;">
-                                <?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>
-                            </a>
-                        <?php else: ?>
-                            <input type="email" id="email" name="email"
-                                   value="<?= htmlspecialchars((string)($editingSupplier['email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
-                        <?php endif; ?>
-                    </div>
-                    <div>
                         <label for="address">כתובת</label>
                         <input type="text" id="address" name="address" <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= htmlspecialchars((string)($editingSupplier['address'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
@@ -365,6 +350,60 @@ try {
                             <option value="מעבדה"   <?= $currentService === 'מעבדה' ? 'selected' : '' ?>>מעבדה</option>
                         </select>
                     </div>
+                </div>
+
+                <div id="supplier_contacts_wrapper">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.35rem;">
+                        <span style="font-weight:600;font-size:0.9rem;">איש קשר</span>
+                    </div>
+                    <div id="contact_sections">
+                        <div class="contact-section" data-index="0">
+                            <div class="contact-header">
+                                <span class="contact-header-title">איש קשר</span>
+                                <button type="button" class="icon-btn contact-remove-btn" title="מחיקת איש קשר" aria-label="מחיקת איש קשר" style="display:none;">
+                                    <i data-lucide="x" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <div class="form-grid" style="margin-bottom:0;">
+                                <div>
+                                    <label>שם</label>
+                                    <input type="text" name="contact_name[]" <?= $isViewMode ? 'readonly' : '' ?>
+                                           value="<?= htmlspecialchars((string)($editingSupplier['contact_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                </div>
+                                <div>
+                                    <label>טלפון</label>
+                                    <?php if ($isViewMode): ?>
+                                        <?php $phoneVal = (string)($editingSupplier['phone'] ?? ''); ?>
+                                        <a href="tel:<?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>"
+                                           style="display:inline-block;width:100%;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#111827;box-sizing:border-box;">
+                                            <?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>
+                                        </a>
+                                        <input type="hidden" name="contact_phone[]" value="<?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>">
+                                    <?php else: ?>
+                                        <input type="text" name="contact_phone[]"
+                                               value="<?= htmlspecialchars((string)($editingSupplier['phone'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                    <?php endif; ?>
+                                </div>
+                                <div>
+                                    <label>מייל</label>
+                                    <?php $emailVal = (string)($editingSupplier['email'] ?? ''); ?>
+                                    <?php if ($isViewMode): ?>
+                                        <a href="mailto:<?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>"
+                                           style="display:inline-block;width:100%;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#111827;box-sizing:border-box;">
+                                            <?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>
+                                        </a>
+                                        <input type="hidden" name="contact_email[]" value="<?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>">
+                                    <?php else: ?>
+                                        <input type="email" name="contact_email[]"
+                                               value="<?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>">
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <?php if (!$isViewMode): ?>
+                    <button type="button" class="btn secondary" id="add_contact_btn" style="margin-top:0.4rem;">הוספת איש קשר</button>
+                    <?php endif; ?>
                 </div>
                 <div class="toolbar" style="margin-top:0.5rem;">
                     <button type="button" class="btn secondary" id="supplier_modal_cancel"><?= $isViewMode ? 'סגירה' : 'ביטול' ?></button>
