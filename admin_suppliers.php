@@ -488,7 +488,7 @@ try {
                                         <input type="text"
                                                value="<?= htmlspecialchars((string)$c['phone'], ENT_QUOTES, 'UTF-8') ?>"
                                                readonly
-                                               style="width:100%;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;box-sizing:border-box;cursor:pointer;"
+                                               style="width:100%;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;box-sizing:border-box;cursor:pointer;color:#2563eb;"
                                                onclick="if(this.value){window.location.href='tel:'+this.value;}">
                                         <input type="hidden" name="contact_phone[]" value="<?= htmlspecialchars((string)$c['phone'], ENT_QUOTES, 'UTF-8') ?>">
                                     <?php else: ?>
@@ -502,7 +502,7 @@ try {
                                         <input type="text"
                                                value="<?= htmlspecialchars((string)$c['email'], ENT_QUOTES, 'UTF-8') ?>"
                                                readonly
-                                               style="width:100%;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;box-sizing:border-box;cursor:pointer;"
+                                               style="width:100%;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;box-sizing:border-box;cursor:pointer;color:#2563eb;"
                                                onclick="if(this.value){window.location.href='mailto:'+this.value;}">
                                         <input type="hidden" name="contact_email[]" value="<?= htmlspecialchars((string)$c['email'], ENT_QUOTES, 'UTF-8') ?>">
                                     <?php else: ?>
