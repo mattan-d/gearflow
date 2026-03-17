@@ -465,13 +465,6 @@ try {
 
     <div class="toolbar">
         <button type="button" class="btn" id="open_supplier_modal_btn">הוספת ספק</button>
-        <form method="post" action="admin_suppliers.php" enctype="multipart/form-data" style="margin:0 0 0 0.5rem; display:inline-block;">
-            <input type="hidden" name="action" value="import_csv">
-            <label class="file-drop-zone" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.35rem 0.75rem;border-radius:999px;border:1px dashed #d1d5db;cursor:pointer;font-size:0.8rem;">
-                <input type="file" name="csv_file" accept=".csv" required style="display:none;" onchange="this.form.submit();">
-                <span style="font-weight:600;">יבוא CSV</span>
-            </label>
-        </form>
     </div>
 
     <?php
@@ -618,9 +611,17 @@ try {
     </div>
 
     <div class="card">
-        <p class="muted-small" style="margin-bottom:0.75rem;">
+        <p class="muted-small" style="margin-bottom:0.5rem;">
             טבלת ספקים.
         </p>
+
+        <form method="post" action="admin_suppliers.php" enctype="multipart/form-data" style="margin:0 0 0.5rem 0; display:inline-block; float:left;">
+            <input type="hidden" name="action" value="import_csv">
+            <label class="file-drop-zone" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.35rem 0.75rem;border-radius:999px;border:1px dashed #d1d5db;cursor:pointer;font-size:0.8rem;">
+                <input type="file" name="csv_file" accept=".csv" required style="display:none;" onchange="this.form.submit();">
+                <span style="font-weight:600;">יבוא CSV</span>
+            </label>
+        </form>
 
         <div style="overflow-x:auto;">
             <table style="width:100%; border-collapse:collapse; font-size:0.86rem;">
