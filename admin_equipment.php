@@ -831,8 +831,13 @@ if (!empty($_SESSION['user_id'] ?? null)) {
     }
 }
 if ($filterWarehouse !== '' && $roleForFilter === 'admin') {
-    $conditions[]        = 'location = :loc';
-    $params[':loc']      = $filterWarehouse;
+    if ($filterWarehouse === '__none__') {
+        // ציוד ללא מחסן (NULL או ריק)
+        $conditions[] = "(location IS NULL OR TRIM(location) = '')";
+    } else {
+        $conditions[]   = 'location = :loc';
+        $params[':loc'] = $filterWarehouse;
+    }
 }
 
 if ($conditions) {
@@ -1564,6 +1569,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                             <option value="">כל המחסנים</option>
                             <option value="מחסן א" <?= ($filterWarehouse ?? '') === 'מחסן א' ? 'selected' : '' ?>>מחסן א</option>
                             <option value="מחסן ב" <?= ($filterWarehouse ?? '') === 'מחסן ב' ? 'selected' : '' ?>>מחסן ב</option>
+                            <option value="__none__" <?= ($filterWarehouse ?? '') === '__none__' ? 'selected' : '' ?>>ללא מחסן</option>
                         </select>
                     </div>
                 <?php endif; ?>
