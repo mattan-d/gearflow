@@ -1654,8 +1654,9 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                             <?php
                             $statusValue = $editingEquipment['status'] ?? 'active';
                             ?>
-                            <option value="active" <?= $statusValue === 'active' ? 'selected' : '' ?>>פעיל</option>
-                            <option value="out_of_service" <?= $statusValue === 'out_of_service' ? 'selected' : '' ?>>לא כשיר</option>
+                            <option value="active" <?= $statusValue === 'active' ? 'selected' : '' ?>>תקין</option>
+                            <option value="out_of_service" <?= $statusValue === 'out_of_service' ? 'selected' : '' ?>>תקול</option>
+                            <option value="missing" <?= $statusValue === 'missing' ? 'selected' : '' ?>>חסר</option>
                             <option value="disabled" <?= $statusValue === 'disabled' ? 'selected' : '' ?>>מושבת</option>
                         </select>
                     </div>
@@ -2069,7 +2070,10 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                                 $statusLabel = 'תקין';
                                 if ($item['status'] === 'out_of_service') {
                                     $statusClass = 'status-out';
-                                    $statusLabel = 'לא כשיר';
+                                    $statusLabel = 'תקול';
+                                } elseif ($item['status'] === 'missing') {
+                                    $statusClass = 'status-out';
+                                    $statusLabel = 'חסר';
                                 } elseif ($item['status'] === 'disabled') {
                                     $statusClass = 'status-disabled';
                                     $statusLabel = 'מושבת';

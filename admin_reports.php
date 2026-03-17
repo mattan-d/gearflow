@@ -772,7 +772,7 @@ if ($eqShow) {
                                 style="min-width:110px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.85rem;">
                             <option value="הכל" <?= ($eqStatus === '' || $eqStatus === 'הכל') ? 'selected' : '' ?>>הכל</option>
                             <option value="תקין" <?= $eqStatus === 'תקין' ? 'selected' : '' ?>>תקין</option>
-                            <option value="לא תקין" <?= $eqStatus === 'לא תקין' ? 'selected' : '' ?>>לא תקין</option>
+                            <option value="תקול" <?= $eqStatus === 'לא תקין' ? 'selected' : '' ?>>לא תקין</option>
                         </select>
                     </div>
                     <div class="report-param-block calendar-bar eq-calendar-bar" id="eq_type_availability_wrap" style="<?= $eqReportType === 'availability' ? '' : 'display:none;' ?>">
@@ -827,7 +827,7 @@ if ($eqShow) {
                             <div class="orders-report-bar-value"><?= (int)$equipmentReport['status_ok'] ?></div>
                         </div>
                         <div class="orders-report-bar">
-                            <div class="orders-report-bar-label">לא תקין</div>
+                            <div class="orders-report-bar-label"תקול</div>
                             <div class="orders-report-bar-track">
                                 <div class="orders-report-bar-fill" style="width: <?= $pctNot ?>%;"></div>
                             </div>
