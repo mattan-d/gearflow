@@ -172,22 +172,20 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'available_equipment') {
 }
 
 // עריכת / צפייה בהזמנה קיימת - טעינת נתונים לטופס / שכפול
-$editingOrder = null;
 $editId = isset($_GET['edit_id']) ? (int)$_GET['edit_id'] : 0;
 $viewId = isset($_GET['view_id']) ? (int)$_GET['view_id'] : 0;
 $loadId = $editId > 0 ? $editId : $viewId;
 if ($loadId > 0) {
-        $stmt = $pdo->prepare(
-            'SELECT o.*,
-                    e.name AS equipment_name,
-                    e.code AS equipment_code
-             FROM orders o
-             JOIN equipment e ON e.id = o.equipment_id
-             WHERE o.id = :id'
-        );
-        $stmt->execute([':id' => $loadId]);
-        $editingOrder = $stmt->fetch() ?: null;
-    }
+    $stmt = $pdo->prepare(
+        'SELECT o.*,
+                e.name AS equipment_name,
+                e.code AS equipment_code
+         FROM orders o
+         JOIN equipment e ON e.id = o.equipment_id
+         WHERE o.id = :id'
+    );
+    $stmt->execute([':id' => $loadId]);
+    $editingOrder = $stmt->fetch() ?: null;
 }
 $isDuplicateMode = false;
 if (isset($_GET['duplicate_id']) && !$editingOrder) {
@@ -1816,8 +1814,15 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             id="borrower_email"
                             autocomplete="off"
                             value="<?= htmlspecialchars($initialEmail, ENT_QUOTES, 'UTF-8') ?>"
-                            <?= ($isStudent || $isNotPickedContext) ? 'readonly' : '' ?>
+                            <?= ($isStudent || $isNotPickedContext || $isViewModeOrder) ? 'readonly' : '' ?>
                         >
+                        <?php if ($isViewModeOrder && $initialEmail !== ''): ?>
+                            <div class="muted-small" style="margin-top:0.2rem;">
+                                <a href="mailto:<?= htmlspecialchars($initialEmail, ENT_QUOTES, 'UTF-8') ?>">
+                                    שליחת מייל ל־<?= htmlspecialchars($initialEmail, ENT_QUOTES, 'UTF-8') ?>
+                                </a>
+                            </div>
+                        <?php endif; ?>
 
                         <label for="borrower_phone">טלפון</label>
                         <input
@@ -1825,8 +1830,15 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             id="borrower_phone"
                             autocomplete="off"
                             value="<?= htmlspecialchars($initialPhone, ENT_QUOTES, 'UTF-8') ?>"
-                            <?= ($isStudent || $isNotPickedContext) ? 'readonly' : '' ?>
+                            <?= ($isStudent || $isNotPickedContext || $isViewModeOrder) ? 'readonly' : '' ?>
                         >
+                        <?php if ($isViewModeOrder && $initialPhone !== ''): ?>
+                            <div class="muted-small" style="margin-top:0.2rem;">
+                                <a href="tel:<?= htmlspecialchars($initialPhone, ENT_QUOTES, 'UTF-8') ?>">
+                                    חיוג ל־<?= htmlspecialchars($initialPhone, ENT_QUOTES, 'UTF-8') ?>
+                                </a>
+                            </div>
+                        <?php endif; ?>
 
                         <input type="hidden" id="borrower_contact" name="borrower_contact"
                                value="<?= htmlspecialchars($editingOrder ? (string)($editingOrder['borrower_contact'] ?? '') : '', ENT_QUOTES, 'UTF-8') ?>">

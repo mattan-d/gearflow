@@ -1072,10 +1072,24 @@ if ($loadId > 0) {
                         <label for="modal_email">אימייל</label>
                         <input type="text" id="modal_email" name="email" <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= $editingUser ? htmlspecialchars($editingUser['email'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
+                        <?php if ($isViewMode && $editingUser && !empty($editingUser['email'] ?? '')): ?>
+                            <div class="muted-small" style="margin-top:0.2rem;">
+                                <a href="mailto:<?= htmlspecialchars((string)$editingUser['email'], ENT_QUOTES, 'UTF-8') ?>">
+                                    שליחת מייל ל־<?= htmlspecialchars((string)$editingUser['email'], ENT_QUOTES, 'UTF-8') ?>
+                                </a>
+                            </div>
+                        <?php endif; ?>
 
                         <label for="modal_phone">טלפון</label>
                         <input type="text" id="modal_phone" name="phone" <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= $editingUser ? htmlspecialchars($editingUser['phone'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?>">
+                        <?php if ($isViewMode && $editingUser && !empty($editingUser['phone'] ?? '')): ?>
+                            <div class="muted-small" style="margin-top:0.2rem;">
+                                <a href="tel:<?= htmlspecialchars((string)$editingUser['phone'], ENT_QUOTES, 'UTF-8') ?>">
+                                    חיוג ל־<?= htmlspecialchars((string)$editingUser['phone'], ENT_QUOTES, 'UTF-8') ?>
+                                </a>
+                            </div>
+                        <?php endif; ?>
 
                         <label for="modal_role">תפקיד</label>
                         <?php $currentRole = $editingUser['role'] ?? 'student'; ?>

@@ -321,11 +321,25 @@ try {
                         <label for="phone">טלפון</label>
                         <input type="text" id="phone" name="phone" <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= htmlspecialchars((string)($editingSupplier['phone'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                        <?php if ($isViewMode && !empty($editingSupplier['phone'] ?? '')): ?>
+                            <div class="muted-small" style="margin-top:0.2rem;">
+                                <a href="tel:<?= htmlspecialchars((string)$editingSupplier['phone'], ENT_QUOTES, 'UTF-8') ?>">
+                                    חיוג ל־<?= htmlspecialchars((string)$editingSupplier['phone'], ENT_QUOTES, 'UTF-8') ?>
+                                </a>
+                            </div>
+                        <?php endif; ?>
                     </div>
                     <div>
                         <label for="email">מייל</label>
                         <input type="email" id="email" name="email" <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= htmlspecialchars((string)($editingSupplier['email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                        <?php if ($isViewMode && !empty($editingSupplier['email'] ?? '')): ?>
+                            <div class="muted-small" style="margin-top:0.2rem;">
+                                <a href="mailto:<?= htmlspecialchars((string)$editingSupplier['email'], ENT_QUOTES, 'UTF-8') ?>">
+                                    שליחת מייל ל־<?= htmlspecialchars((string)$editingSupplier['email'], ENT_QUOTES, 'UTF-8') ?>
+                                </a>
+                            </div>
+                        <?php endif; ?>
                     </div>
                     <div>
                         <label for="address">כתובת</label>
