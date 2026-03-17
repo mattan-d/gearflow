@@ -1504,7 +1504,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
     <h2 style="margin-top:0; margin-bottom:1rem; font-size:1.4rem;">ניהול ציוד</h2>
     <div class="toolbar-top toolbar-equipment">
         <div class="toolbar-right">
-            <button type="button" class="btn" id="toggle_add_equipment_btn">הוספת פריט ציוד</button>
+            <button type="button" class="btn" id="toggle_add_equipment_btn" style="margin-bottom:0.5rem;">הוספת פריט ציוד</button>
             <button type="button" class="btn" id="toggle_bulk_add_btn" title="הוספת מספר פריטים בבת אחת">הוספת מספר פריטים</button>
         </div>
         <div class="toolbar-left">
@@ -1621,6 +1621,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
 
     <?php
     $isViewModeEq = ($viewId > 0 && $editingEquipment !== null);
+    // טופס "הוספת פריט" נפתח אוטומטית רק אם יש שגיאה או עריכה קיימת; אחרי שמירה המודאל ייסגר בצד ה-JS.
     $showFormCard = ($editingEquipment !== null || $error !== '') && empty($_GET['import_fix']);
     ?>
 
@@ -1724,7 +1725,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                     ?>
                     <div style="margin-top:0.75rem;">
                         <div class="muted-small" style="margin-bottom:0.25rem;font-weight:600;font-size:0.95rem;">שירות</div>
-                        <div style="display:flex;gap:0.75rem;justify-content:space-between;flex-wrap:nowrap;">
+                        <div style="display: flex; justify-content: space-between;">
                             <div>
                                 <label for="service_supplier_id">ספק</label>
                                 <select id="service_supplier_id" name="service_supplier_id" <?= $isViewModeEq ? 'disabled' : '' ?>>
@@ -2463,18 +2464,27 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (addBtn && formModal) {
         addBtn.addEventListener('click', function () {
-            openEquipmentModal();
+            // אם המודאל כבר פתוח – נסגור אותו, אחרת נפתח (toggle)
+            if (formModal.style.display === 'flex') {
+                closeEquipmentModal();
+                addBtn.textContent = 'הוספת פריט ציוד';
+            } else {
+                openEquipmentModal();
+                addBtn.textContent = 'הסתרת פריט ציוד חדש';
+            }
         });
     }
 
     if (formClose) {
         formClose.addEventListener('click', function () {
             closeEquipmentModal();
+            if (addBtn) addBtn.textContent = 'הוספת פריט ציוד';
         });
     }
     if (formCancel) {
         formCancel.addEventListener('click', function () {
             closeEquipmentModal();
+            if (addBtn) addBtn.textContent = 'הוספת פריט ציוד';
         });
     }
 
