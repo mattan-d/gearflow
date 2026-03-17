@@ -30,7 +30,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $primaryContactPhone = trim((string)($postedContactPhones[0] ?? ''));
     $primaryContactEmail = trim((string)($postedContactEmails[0] ?? ''));
 
-    if ($action === 'create') {
+    if ($action === 'import_csv') {
+        if (!isset($_FILES['csv_file']) || ($_FILES['csv_file']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            $error = 'קובץ CSV לא הועלה בהצלחה.';
+        } else {
+            $tmpPath = (string)($_FILES['csv_file']['tmp_name'] ?? '');
+            $handle = fopen($tmpPath, 'r');
+            if ($handle === false) {
+                $error = 'לא ניתן לקרוא את קובץ ה-CSV.';
+            } else {
+                $header = fgetcsv($handle);
+                if ($header === false) {
+                    $error = 'קובץ CSV ריק.';
+                    fclose($handle);
+                } else {
+                    // מיפוי שם עמודה -> אינדקס כך שהסדר לא משנה
+                    $map = [];
+                    foreach ($header as $idx => $col) {
+                        $key = strtolower(trim((string)$col));
+                        if ($key !== '') {
+                            $map[$key] = (int)$idx;
+                        }
+                    }
+
+                    $required = ['company_name', 'company_code'];
+                    foreach ($required as $req) {
+                        if (!isset($map[$req])) {
+                            $error = 'חסרה עמודה חובה בקובץ: ' . $req;
+                            break;
+                        }
+                    }
+                    if ($error === '') {
+                        $insert = $pdo->prepare("
+                            INSERT INTO suppliers
+                                (company_name, company_code, contact_name, phone, email, address, website, service_type, created_at)
+                            VALUES
+                                (:company_name, :company_code, :contact_name, :phone, :email, :address, :website, :service_type, :created_at)
+                        ");
+                        $now = date('Y-m-d H:i:s');
+                        $imported = 0;
+                        while (($row = fgetcsv($handle)) !== false) {
+                            $get = function (string $key) use ($map, $row): string {
+                                if (!isset($map[$key])) {
+                                    return '';
+                                }
+                                $i = $map[$key];
+                                return isset($row[$i]) ? trim((string)$row[$i]) : '';
+                            };
+
+                            $companyName = $get('company_name');
+                            $companyCode = $get('company_code');
+                            if ($companyName === '' || $companyCode === '') {
+                                continue;
+                            }
+
+                            try {
+                                $insert->execute([
+                                    ':company_name' => $companyName,
+                                    ':company_code' => $companyCode,
+                                    ':contact_name' => $get('contact_name'),
+                                    ':phone'        => $get('phone'),
+                                    ':email'        => $get('email'),
+                                    ':address'      => $get('address'),
+                                    ':website'      => $get('website'),
+                                    ':service_type' => $get('service_type'),
+                                    ':created_at'   => $now,
+                                ]);
+                                $imported++;
+                            } catch (PDOException $e) {
+                                // מדלגים על ספק בעייתי וממשיכים
+                                continue;
+                            }
+                        }
+                        fclose($handle);
+                        if ($imported > 0 && $error === '') {
+                            $success = "ייבוא הושלם. נוספו {$imported} ספקים.";
+                        } elseif ($error === '') {
+                            $error = 'לא נוספו ספקים מהקובץ.';
+                        }
+                    }
+                }
+            }
+        }
+    } elseif ($action === 'create') {
         $companyName = trim((string)($_POST['company_name'] ?? ''));
         $companyCode = trim((string)($_POST['company_code'] ?? ''));
         $contactName = $primaryContactName;
@@ -383,6 +465,13 @@ try {
 
     <div class="toolbar">
         <button type="button" class="btn" id="open_supplier_modal_btn">הוספת ספק</button>
+        <form method="post" action="admin_suppliers.php" enctype="multipart/form-data" style="margin:0 0 0 0.5rem; display:inline-block;">
+            <input type="hidden" name="action" value="import_csv">
+            <label class="file-drop-zone" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.35rem 0.75rem;border-radius:999px;border:1px dashed #d1d5db;cursor:pointer;font-size:0.8rem;">
+                <input type="file" name="csv_file" accept=".csv" required style="display:none;" onchange="this.form.submit();">
+                <span style="font-weight:600;">יבוא CSV</span>
+            </label>
+        </form>
     </div>
 
     <?php
