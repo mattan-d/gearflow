@@ -10,8 +10,9 @@ $pdo     = get_db();
 $error   = '';
 $success = '';
 
-// ספק בעריכה (אם נבחר מהטבלה)
+// ספק בעריכה / צפייה (אם נבחר מהטבלה)
 $editId          = isset($_GET['edit_id']) ? (int)($_GET['edit_id'] ?? 0) : 0;
+$viewId          = isset($_GET['view_id']) ? (int)($_GET['view_id'] ?? 0) : 0;
 $editingSupplier = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -113,15 +114,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// אם יש ספק בעריכה (בקשת GET עם edit_id תקין) – נטען אותו למודאל
-if ($editId > 0 && $error === '') {
+// אם יש ספק בעריכה/צפייה (בקשת GET עם edit_id/view_id תקין) – נטען אותו למודאל
+if (($editId > 0 || $viewId > 0) && $error === '') {
+    $loadId = $editId > 0 ? $editId : $viewId;
     try {
         $stmt = $pdo->prepare("
             SELECT id, company_name, company_code, contact_name, phone, email, address, website, service_type
             FROM suppliers
             WHERE id = :id
         ");
-        $stmt->execute([':id' => $editId]);
+        $stmt->execute([':id' => $loadId]);
         $editingSupplier = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
     } catch (PDOException $e) {
         $editingSupplier = null;
@@ -286,13 +288,14 @@ try {
     </div>
 
     <?php
-    $showModal = ($error !== '' && $_SERVER['REQUEST_METHOD'] === 'POST') || ($editingSupplier !== null && $_SERVER['REQUEST_METHOD'] === 'GET');
-    $modalAction = $editingSupplier ? 'update' : 'create';
+    $isViewMode = ($viewId > 0 && $editingSupplier !== null);
+    $showModal  = ($error !== '' && $_SERVER['REQUEST_METHOD'] === 'POST') || ($editingSupplier !== null && $_SERVER['REQUEST_METHOD'] === 'GET');
+    $modalAction = $editingSupplier && !$isViewMode ? 'update' : 'create';
     ?>
     <div class="modal-backdrop" id="supplier_modal" style="display: <?= $showModal ? 'flex' : 'none' ?>;">
         <div class="modal-card">
             <div class="modal-header">
-                <h2 style="margin:0; font-size:1.2rem;"><?= $editingSupplier ? 'עריכת ספק' : 'הוספת ספק' ?></h2>
+                <h2 style="margin:0; font-size:1.2rem;"><?= $isViewMode ? 'צפייה בספק' : ($editingSupplier ? 'עריכת ספק' : 'הוספת ספק') ?></h2>
                 <button type="button" class="modal-close" id="supplier_modal_close" aria-label="סגירת חלון">×</button>
             </div>
             <form method="post" action="admin_suppliers.php" id="supplier_form">
@@ -301,42 +304,42 @@ try {
                 <div class="form-grid">
                     <div>
                         <label for="company_name">חברה</label>
-                        <input type="text" id="company_name" name="company_name" required
+                        <input type="text" id="company_name" name="company_name" required <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= htmlspecialchars((string)($editingSupplier['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div>
                         <label for="company_code">קוד חברה</label>
-                        <input type="text" id="company_code" name="company_code"
+                        <input type="text" id="company_code" name="company_code" <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= htmlspecialchars((string)($editingSupplier['company_code'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div>
                         <label for="contact_name">איש קשר</label>
-                        <input type="text" id="contact_name" name="contact_name"
+                        <input type="text" id="contact_name" name="contact_name" <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= htmlspecialchars((string)($editingSupplier['contact_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div>
                         <label for="phone">טלפון</label>
-                        <input type="text" id="phone" name="phone"
+                        <input type="text" id="phone" name="phone" <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= htmlspecialchars((string)($editingSupplier['phone'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div>
                         <label for="email">מייל</label>
-                        <input type="email" id="email" name="email"
+                        <input type="email" id="email" name="email" <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= htmlspecialchars((string)($editingSupplier['email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div>
                         <label for="address">כתובת</label>
-                        <input type="text" id="address" name="address"
+                        <input type="text" id="address" name="address" <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= htmlspecialchars((string)($editingSupplier['address'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div>
                         <label for="website">לינק לאתר</label>
-                        <input type="text" id="website" name="website" placeholder="https://"
+                        <input type="text" id="website" name="website" placeholder="https://" <?= $isViewMode ? 'readonly' : '' ?>
                                value="<?= htmlspecialchars((string)($editingSupplier['website'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                     </div>
                     <div>
                         <label for="service_type">סוג שירות</label>
-                        <select id="service_type" name="service_type">
+                        <select id="service_type" name="service_type" <?= $isViewMode ? 'disabled' : '' ?>>
                             <?php $currentService = (string)($editingSupplier['service_type'] ?? ''); ?>
                             <option value="">בחר...</option>
                             <option value="ציוד"     <?= $currentService === 'ציוד' ? 'selected' : '' ?>>ציוד</option>
@@ -346,8 +349,10 @@ try {
                     </div>
                 </div>
                 <div class="toolbar" style="margin-top:0.5rem;">
-                    <button type="button" class="btn secondary" id="supplier_modal_cancel">ביטול</button>
-                    <button type="submit" class="btn">שמירה</button>
+                    <button type="button" class="btn secondary" id="supplier_modal_cancel"><?= $isViewMode ? 'סגירה' : 'ביטול' ?></button>
+                    <?php if (!$isViewMode): ?>
+                        <button type="submit" class="btn">שמירה</button>
+                    <?php endif; ?>
                 </div>
             </form>
         </div>
@@ -398,9 +403,9 @@ try {
                             <td><?= htmlspecialchars((string)($s['service_type'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                             <td>
                                 <div class="row-actions">
-                                    <button type="button" class="icon-btn" title="צפייה בספק" aria-label="צפייה בספק">
+                                    <a href="admin_suppliers.php?view_id=<?= (int)($s['id'] ?? 0) ?>" class="icon-btn" title="צפייה בספק" aria-label="צפייה בספק">
                                         <i data-lucide="eye" aria-hidden="true"></i>
-                                    </button>
+                                    </a>
                                     <a href="admin_suppliers.php?edit_id=<?= (int)($s['id'] ?? 0) ?>" class="icon-btn" title="עריכת ספק" aria-label="עריכת ספק"><i data-lucide="pencil" aria-hidden="true"></i></a>
                                     <form method="post" action="admin_suppliers.php" onsubmit="return confirm('למחוק את הספק הזה?');">
                                         <input type="hidden" name="action" value="delete">
