@@ -405,7 +405,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 <h1 style="margin:0;font-size:1.3rem;">
                     <?= ($role === 'admin' || $role === 'warehouse_manager') ? 'מערכת הזמנות ומלאי' : 'מערכת הזמנות' ?>
                 </h1>
-                <div class="muted">פלטפורמה לניהול השאלת ציוד</div>
+                <?php
+                $userWarehouse = trim((string)($me['warehouse'] ?? ''));
+                ?>
+                <div class="muted">
+                    פלטפורמה לניהול השאלת ציוד
+                    <?php if ($userWarehouse !== ''): ?>
+                        · מחסן: <?= htmlspecialchars($userWarehouse, ENT_QUOTES, 'UTF-8') ?>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
         <nav class="main-nav">
