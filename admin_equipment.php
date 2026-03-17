@@ -1880,7 +1880,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                 ?>
                 <div style="margin-top:0.75rem; margin-bottom:0.5rem;">
                     <div class="muted-small" style="margin-bottom:0.25rem;font-weight:600;font-size:0.95rem;">אחריות</div>
-                    <div style="display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap;">
+                    <div style="display:flex; gap:0.75rem; align-items:flex-start; flex-wrap:wrap;">
                         <div style="min-width:160px;">
                             <label for="warranty_start">התחלת אחריות</label>
                             <input type="date" id="warranty_start" name="warranty_start"
@@ -1893,7 +1893,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                                    value="<?= htmlspecialchars($warrantyEndVal, ENT_QUOTES, 'UTF-8') ?>"
                                    <?= $isViewModeEq ? 'readonly' : '' ?>>
                         </div>
-                        <div style="min-width:220px;">
+                        <div style="min-width:290px;">
                             <?php if ($warrantyImageVal !== ''): ?>
                                 <label>תמונת אחריות נוכחית</label>
                                 <div style="margin-bottom:0.25rem;">
@@ -1906,7 +1906,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                                 </div>
                             <?php endif; ?>
                             <?php if (!$isViewModeEq): ?>
-                            <div class="file-drop-zone-wrap" style="max-width:280px;">
+                            <div class="file-drop-zone-wrap" style="max-width:290px;">
                                 <label class="file-drop-zone" for="warranty_file" aria-label="העלאת תמונת אחריות">
                                     <input type="file" id="warranty_file" name="warranty_file" accept="image/*" class="file-drop-input">
                                     <span class="file-drop-icon"><i data-lucide="upload" aria-hidden="true"></i></span>
