@@ -48,6 +48,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'שגיאה בשמירת הספק.';
             }
         }
+    } elseif ($action === 'delete') {
+        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        if ($id > 0) {
+            try {
+                $stmt = $pdo->prepare('DELETE FROM suppliers WHERE id = :id');
+                $stmt->execute([':id' => $id]);
+                $success = 'הספק נמחק בהצלחה.';
+            } catch (PDOException $e) {
+                $error = 'שגיאה במחיקת הספק.';
+        }
     }
 }
 
