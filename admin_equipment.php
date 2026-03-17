@@ -1893,7 +1893,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                                    value="<?= htmlspecialchars($warrantyEndVal, ENT_QUOTES, 'UTF-8') ?>"
                                    <?= $isViewModeEq ? 'readonly' : '' ?>>
                         </div>
-                        <div style="flex:1; min-width:220px;">
+                        <div style="min-width:220px;">
                             <?php if ($warrantyImageVal !== ''): ?>
                                 <label>תמונת אחריות נוכחית</label>
                                 <div style="margin-bottom:0.25rem;">
@@ -1906,12 +1906,14 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                                 </div>
                             <?php endif; ?>
                             <?php if (!$isViewModeEq): ?>
-                                <label class="file-drop-zone" for="warranty_file" aria-label="העלאת תמונת אחריות" style="width:100%; display:inline-flex; justify-content:center;">
+                            <div class="file-drop-zone-wrap" style="max-width:280px;">
+                                <label class="file-drop-zone" for="warranty_file" aria-label="העלאת תמונת אחריות">
                                     <input type="file" id="warranty_file" name="warranty_file" accept="image/*" class="file-drop-input">
                                     <span class="file-drop-icon"><i data-lucide="upload" aria-hidden="true"></i></span>
                                     <span class="file-drop-text">גרור תמונת אחריות לכאן או לחץ לבחירה</span>
                                     <span class="file-drop-hint">תמונת אחריות (תמונה)</span>
                                 </label>
+                            </div>
                             <?php endif; ?>
                         </div>
                     </div>
