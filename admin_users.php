@@ -1074,7 +1074,7 @@ if ($loadId > 0) {
                             <?php $emailVal = (string)($editingUser['email'] ?? ''); ?>
                             <a href="mailto:<?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>"
                                id="modal_email"
-                               style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#111827;min-width:0;">
+                               style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#2563eb;min-width:0;cursor:pointer;">
                                 <?= htmlspecialchars($emailVal, ENT_QUOTES, 'UTF-8') ?>
                             </a>
                         <?php else: ?>
@@ -1087,7 +1087,7 @@ if ($loadId > 0) {
                             <?php $phoneVal = (string)($editingUser['phone'] ?? ''); ?>
                             <a href="tel:<?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>"
                                id="modal_phone"
-                               style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#111827;min-width:0;">
+                               style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#2563eb;min-width:0;cursor:pointer;">
                                 <?= htmlspecialchars($phoneVal, ENT_QUOTES, 'UTF-8') ?>
                             </a>
                         <?php else: ?>
