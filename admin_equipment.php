@@ -1724,7 +1724,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                     ?>
                     <div style="margin-top:0.75rem;">
                         <div class="muted-small" style="margin-bottom:0.25rem;font-weight:600;font-size:0.95rem;">שירות</div>
-                        <div class="grid" style="row-gap:0.5rem;">
+                        <div style="display:flex;gap:0.75rem;justify-content:space-between;flex-wrap:nowrap;">
                             <div>
                                 <label for="service_supplier_id">ספק</label>
                                 <select id="service_supplier_id" name="service_supplier_id" <?= $isViewModeEq ? 'disabled' : '' ?>>
