@@ -1132,6 +1132,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
         .btn.secondary {
             background: #e5e7eb;
             color: #111827;
+            padding: 0.5rem 1.1rem;
         }
         .btn.danger {
             background: #ef4444;
@@ -1621,8 +1622,9 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
 
     <?php
     $isViewModeEq = ($viewId > 0 && $editingEquipment !== null);
-    // טופס "הוספת פריט" נפתח אוטומטית רק אם יש שגיאה או עריכה קיימת; אחרי שמירה המודאל ייסגר בצד ה-JS.
-    $showFormCard = ($editingEquipment !== null || $error !== '') && empty($_GET['import_fix']);
+    $isNewEquipment = isset($_GET['new']) && $_GET['new'] === '1';
+    // טופס "הוספת פריט" נפתח אוטומטית אם יש שגיאה, עריכה קיימת, או בקשה מפורשת להוספה חדשה (?new=1)
+    $showFormCard = ($editingEquipment !== null || $error !== '' || $isNewEquipment) && empty($_GET['import_fix']);
     ?>
 
     <div class="modal-backdrop" id="equipment_modal" style="display: <?= $showFormCard ? 'flex' : 'none' ?>;">
@@ -2450,28 +2452,16 @@ document.addEventListener('DOMContentLoaded', function () {
         updateRangeLabel();
     }
 
-    function openEquipmentModal() {
-        if (formModal) {
-            formModal.style.display = 'flex';
-        }
-    }
-
     function closeEquipmentModal() {
         if (formModal) {
             formModal.style.display = 'none';
         }
     }
 
-    if (addBtn && formModal) {
+    // כפתור "הוספת פריט ציוד" תמיד פותח מסך הוספה חדש ונקי
+    if (addBtn) {
         addBtn.addEventListener('click', function () {
-            // אם המודאל כבר פתוח – נסגור אותו, אחרת נפתח (toggle)
-            if (formModal.style.display === 'flex') {
-                closeEquipmentModal();
-                addBtn.textContent = 'הוספת פריט ציוד';
-            } else {
-                openEquipmentModal();
-                addBtn.textContent = 'הסתרת פריט ציוד חדש';
-            }
+            window.location.href = 'admin_equipment.php?new=1';
         });
     }
 
