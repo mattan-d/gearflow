@@ -575,6 +575,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $returnEquipStatusDb = 'לא הוחזר בזמן';
                     }
 
+                    // אם ההזמנה במצב "עבר" ולא נקבע סטטוס החזרה (או שהערך לא תקין) – ברירת מחדל היא "תקין"
+                    if ($newStatus === 'returned') {
+                        $allowedReturnStatuses = ['תקין', 'לא נאסף', 'לא הוחזר בזמן'];
+                        if (!in_array($returnEquipStatusDb, $allowedReturnStatuses, true)) {
+                            $returnEquipStatusDb = 'תקין';
+                        }
+                    }
+
                     $equipmentReturnConditionDb = (string)($orderRow['equipment_return_condition'] ?? '');
                     if ($role === 'admin' || $role === 'warehouse_manager') {
                         $allowedReturnConditions = ['תקין', 'תקול', 'חסר'];
