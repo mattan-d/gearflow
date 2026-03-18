@@ -307,6 +307,52 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
         .order-details .actions { display:flex; gap:0.4rem; align-items:center; }
         .order-details .close-x { border:none; background:transparent; cursor:pointer; padding:0.25rem; border-radius:8px; }
         .order-details .close-x:hover { background:#eef2f7; }
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15,23,42,0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 80;
+        }
+        .modal-card {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 25px 60px rgba(15,23,42,0.45);
+            width: 95%;
+            max-width: 1100px;
+            max-height: 90vh;
+            overflow: hidden;
+            padding: 1rem 1rem 0.75rem;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+        .modal-title {
+            margin: 0;
+            font-size: 1.05rem;
+            color: #111827;
+        }
+        .modal-close {
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            padding: 0.25rem;
+            border-radius: 10px;
+        }
+        .modal-close:hover { background:#f3f4f6; }
+        .modal-iframe {
+            width: 100%;
+            height: 78vh;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            background: #fff;
+        }
     </style>
 </head>
 <body>
@@ -492,6 +538,18 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                     </div>
                     <div class="kv" id="daily_order_kv"></div>
                 </div>
+
+                <div class="modal-backdrop" id="daily_order_modal" aria-hidden="true">
+                    <div class="modal-card" role="dialog" aria-modal="true" aria-label="עריכת הזמנה">
+                        <div class="modal-header">
+                            <h3 class="modal-title" id="daily_order_modal_title">עריכת הזמנה</h3>
+                            <button type="button" class="modal-close" id="daily_order_modal_close" title="סגירה" aria-label="סגירה">
+                                <i data-lucide="x" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                        <iframe class="modal-iframe" id="daily_order_modal_iframe" src="about:blank"></iframe>
+                    </div>
+                </div>
     </div>
 </main>
 <?php include __DIR__ . '/admin_footer.php'; ?>
@@ -516,48 +574,42 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
         var title = document.getElementById('daily_order_title');
         var closeBtn = document.getElementById('daily_order_close');
         var openFull = document.getElementById('daily_order_open_full');
-        if (!panel || !kv || !title || !closeBtn || !openFull) return;
+        var modal = document.getElementById('daily_order_modal');
+        var modalClose = document.getElementById('daily_order_modal_close');
+        var modalFrame = document.getElementById('daily_order_modal_iframe');
+        var modalTitle = document.getElementById('daily_order_modal_title');
+        if (!panel || !kv || !title || !closeBtn || !openFull || !modal || !modalClose || !modalFrame || !modalTitle) return;
 
         function hide() {
             panel.style.display = 'none';
         }
         closeBtn.addEventListener('click', hide);
 
+        function openModal(orderId) {
+            modalTitle.textContent = 'עריכת הזמנה #' + orderId;
+            modalFrame.src = 'admin_orders.php?edit_id=' + encodeURIComponent(orderId);
+            modal.style.display = 'flex';
+            modal.setAttribute('aria-hidden', 'false');
+            if (window.lucide) lucide.createIcons();
+        }
+        function closeModal() {
+            modal.style.display = 'none';
+            modal.setAttribute('aria-hidden', 'true');
+            // מנקה את ה-iframe כדי לעצור תהליכים פנימיים
+            modalFrame.src = 'about:blank';
+        }
+        modalClose.addEventListener('click', closeModal);
+        modal.addEventListener('click', function (e) {
+            if (e.target === modal) closeModal();
+        });
+
         document.querySelectorAll('.js-order-open').forEach(function (a) {
             a.addEventListener('click', function (e) {
                 e.preventDefault();
                 var id = this.getAttribute('data-order-id') || '';
                 if (!id) return;
-                title.textContent = 'הזמנה #' + id;
-                kv.textContent = 'טוען...';
-                panel.style.display = 'block';
-                if (window.lucide) lucide.createIcons();
-
-                openFull.href = 'admin_orders.php?view_id=' + encodeURIComponent(id);
-
-                fetch('admin_daily.php?action=order_json&order_id=' + encodeURIComponent(id), {
-                    credentials: 'same-origin'
-                }).then(function (r) { return r.json(); })
-                  .then(function (data) {
-                      if (!data || !data.ok || !data.order) {
-                          kv.textContent = 'לא ניתן לטעון פרטי הזמנה.';
-                          return;
-                      }
-                      var o = data.order;
-                      var parts = [];
-                      parts.push('<b>ציוד:</b> ' + escapeHtml((o.equipment_name || '') + ' (' + (o.equipment_code || '') + ')'));
-                      parts.push('<b>סטטוס:</b> ' + escapeHtml(o.status || ''));
-                      parts.push('<b>שואל:</b> ' + escapeHtml(o.borrower_name || ''));
-                      if (o.borrower_contact) parts.push('<b>טלפון/מייל:</b> ' + escapeHtml(o.borrower_contact));
-                      parts.push('<b>תאריך/שעה:</b> ' + escapeHtml((o.start_date || '') + ' ' + (o.start_time || '') + ' → ' + (o.end_date || '') + ' ' + (o.end_time || '')));
-                      if (o.notes) parts.push('<b>הערות:</b> ' + escapeHtml(o.notes));
-                      kv.innerHTML = parts.map(function (p) { return '<span>' + p + '</span>'; }).join(' · ');
-                  })
-                  .catch(function () {
-                      kv.textContent = 'לא ניתן לטעון פרטי הזמנה.';
-                  });
-
-                panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                // הצגה בחלון קופץ במצב עריכה
+                openModal(id);
             });
         });
 
