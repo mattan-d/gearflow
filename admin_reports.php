@@ -161,6 +161,106 @@ if ($ordersReport['has_range']) {
     }
 }
 
+// שליפת רשימת הזמנות מפורטת עבור סטטוס/פילוח שנבחר בגרף
+$ordersDetailKey   = isset($_GET['orders_detail']) ? trim((string)$_GET['orders_detail']) : '';
+$ordersDetailRows  = [];
+if ($ordersReport['has_range'] && $ordersDetailKey !== '') {
+    $sqlDetail = "SELECT
+            o.id,
+            e.name       AS equipment_name,
+            o.start_date AS start_date,
+            o.end_date   AS end_date,
+            COALESCE(
+                NULLIF(TRIM(COALESCE(o.borrower_name, '')), ''),
+                TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')),
+                o.creator_username
+            ) AS borrower_name
+        FROM orders o
+        JOIN equipment e ON e.id = o.equipment_id
+        LEFT JOIN users u ON u.username = o.creator_username
+        WHERE 1=1";
+
+    $paramsDetail = [];
+
+    // אותם פילטרים בסיסיים כמו בדוח הראשי
+    if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
+        $sqlDetail .= " AND DATE(o.start_date) BETWEEN :d_start AND :d_end";
+        $paramsDetail[':d_start'] = $reportStart;
+        $paramsDetail[':d_end']   = $reportEnd;
+    }
+
+    if (!empty($selectedStudents)) {
+        $placeholders = [];
+        foreach ($selectedStudents as $idx => $u) {
+            $ph = ':du' . $idx;
+            $placeholders[] = $ph;
+            $paramsDetail[$ph] = $u;
+        }
+        $sqlDetail .= ' AND o.creator_username IN (' . implode(',', $placeholders) . ')';
+    }
+
+    if ($reportCategory !== '') {
+        $sqlDetail .= " AND TRIM(COALESCE(e.category, '')) = :d_cat";
+        $paramsDetail[':d_cat'] = $reportCategory;
+    }
+
+    if ($reportReturnStatus !== '') {
+        $sqlDetail .= " AND COALESCE(o.return_equipment_status, '') = :d_ret_status";
+        $paramsDetail[':d_ret_status'] = $reportReturnStatus;
+    }
+
+    if ($reportEquipCondition !== '') {
+        $sqlDetail .= " AND COALESCE(o.equipment_return_condition, '') = :d_eq_cond";
+        $paramsDetail[':d_eq_cond'] = $reportEquipCondition;
+    }
+
+    // תנאי ייחודי לפי הפילוח שנבחר
+    switch ($ordersDetailKey) {
+        case 'total':
+            if ($reportStatus === 'returned') {
+                $sqlDetail .= " AND o.status = 'returned'";
+            }
+            // אחרת – סך הכל לכל הסטטוסים תחת הפילטרים הקיימים
+            break;
+        case 'pending':
+            $sqlDetail .= " AND o.status = 'pending'";
+            break;
+        case 'approved':
+            $sqlDetail .= " AND o.status = 'approved'";
+            break;
+        case 'rejected':
+            $sqlDetail .= " AND o.status = 'rejected'";
+            break;
+        case 'on_loan':
+            $sqlDetail .= " AND o.status = 'on_loan'";
+            break;
+        case 'returned':
+            $sqlDetail .= " AND o.status = 'returned'";
+            break;
+        case 'not_picked':
+            $sqlDetail .= " AND o.status = 'approved' AND DATE(o.start_date) < DATE('now')";
+            break;
+        case 'not_returned_late':
+            $sqlDetail .= " AND o.status = 'on_loan' AND DATE(o.end_date) < DATE('now')";
+            break;
+        case 'returned_broken':
+            $sqlDetail .= " AND o.status = 'returned' AND o.equipment_return_condition = 'תקול'";
+            break;
+        case 'returned_missing':
+            $sqlDetail .= " AND o.status = 'returned' AND o.equipment_return_condition = 'חסר'";
+            break;
+        default:
+            $ordersDetailKey = '';
+    }
+
+    if ($ordersDetailKey !== '') {
+        $sqlDetail .= " ORDER BY o.start_date DESC, o.id DESC";
+        $stmtDetail = $pdo->prepare($sqlDetail);
+        $stmtDetail->execute($paramsDetail);
+        $ordersDetailRows = $stmtDetail->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+}
+
 // מקסימום לערכי גרף (למניעת חלוקה ב-0)
 $ordersChartMax = max(
     1,
@@ -584,6 +684,16 @@ if ($eqShow) {
             text-align: left;
             color: #111827;
         }
+        .orders-report-bar-value .link-button.orders-report-value-btn {
+            background: none;
+            border: none;
+            padding: 0;
+            margin: 0;
+            color: #2563eb;
+            cursor: pointer;
+            font-size: inherit;
+            text-decoration: underline;
+        }
         .reports-section {
             display: none;
         }
@@ -701,6 +811,7 @@ if ($eqShow) {
                         <button type="submit" name="orders_show" value="1" class="btn">הצג</button>
                     </div>
                 </div>
+                <input type="hidden" name="orders_detail" id="orders_detail" value="<?= htmlspecialchars(isset($_GET['orders_detail']) ? (string)$_GET['orders_detail'] : '', ENT_QUOTES, 'UTF-8') ?>">
             </form>
 
             <?php if ($ordersReport['has_range']): ?>
@@ -754,16 +865,92 @@ if ($eqShow) {
                     foreach ($bars as $label => $val):
                         $val = (int)$val;
                         $pct = $ordersChartMax > 0 ? max(2, ($val / $ordersChartMax) * 100) : 0;
+
+                        // מזהה לוגי לכל עמודה – ישמש לשליפת טבלת פריטים
+                        $detailKey = '';
+                        switch ($label) {
+                            case 'כמות הזמנות (סה״כ)':
+                                $detailKey = 'total';
+                                break;
+                            case 'ממתין':
+                                $detailKey = 'pending';
+                                break;
+                            case 'מאושר':
+                                $detailKey = 'approved';
+                                break;
+                            case 'נדחה':
+                                $detailKey = 'rejected';
+                                break;
+                            case 'בהשאלה':
+                                $detailKey = 'on_loan';
+                                break;
+                            case 'עבר':
+                                $detailKey = 'returned';
+                                break;
+                            case 'הוזמנו ולא נלקחו':
+                                $detailKey = 'not_picked';
+                                break;
+                            case 'לא הושבו בזמן':
+                                $detailKey = 'not_returned_late';
+                                break;
+                            case 'הוחזר עם ציוד תקול':
+                                $detailKey = 'returned_broken';
+                                break;
+                            case 'הוחזר עם ציוד חסר':
+                                $detailKey = 'returned_missing';
+                                break;
+                        }
                     ?>
                         <div class="orders-report-bar">
                             <div class="orders-report-bar-label"><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></div>
                             <div class="orders-report-bar-track">
                                 <div class="orders-report-bar-fill" style="width: <?= $pct ?>%;"></div>
                             </div>
-                            <div class="orders-report-bar-value"><?= $val ?></div>
+                            <div class="orders-report-bar-value">
+                                <?php if ($detailKey !== '' && $val > 0): ?>
+                                    <button type="button"
+                                            class="link-button orders-report-value-btn"
+                                            data-orders-detail="<?= htmlspecialchars($detailKey, ENT_QUOTES, 'UTF-8') ?>">
+                                        <?= $val ?>
+                                    </button>
+                                <?php else: ?>
+                                    <?= $val ?>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     <?php endforeach; ?>
                 </div>
+                <?php if (!empty($ordersDetailRows)): ?>
+                    <div class="orders-report-details-table">
+                        <h3 style="margin-top:1.5rem;margin-bottom:0.75rem;font-size:1rem;">
+                            פירוט ההזמנות עבור הבחירה שבוצעה בגרף
+                        </h3>
+                        <div class="table-wrapper">
+                            <table class="admin-table">
+                                <thead>
+                                <tr>
+                                    <th>מספר הזמנה</th>
+                                    <th>ציוד שנלקח</th>
+                                    <th>תאריך התחלה</th>
+                                    <th>תאריך סיום</th>
+                                    <th>שם המזמין</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                <?php foreach ($ordersDetailRows as $row): ?>
+                                    <tr>
+                                        <td><?= (int)$row['id'] ?></td>
+                                        <td><?= htmlspecialchars((string)($row['equipment_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td><?= htmlspecialchars((string)($row['start_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td><?= htmlspecialchars((string)($row['end_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td><?= htmlspecialchars((string)($row['borrower_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
 
@@ -1074,6 +1261,23 @@ if ($eqShow) {
         rangeBtn.addEventListener('click', function () {
             panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
             buildCalendar();
+        });
+    })();
+
+    // לחיצה על המספרים בגרף דוח הזמנות – שליפת טבלת פריטים מפורטת
+    (function () {
+        var form = document.getElementById('orders_report_form');
+        if (!form) return;
+        var detailInput = document.getElementById('orders_detail');
+        if (!detailInput) return;
+        var buttons = document.querySelectorAll('.orders-report-value-btn');
+        buttons.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var key = this.getAttribute('data-orders-detail') || '';
+                if (!key) return;
+                detailInput.value = key;
+                form.submit();
+            });
         });
     })();
     // בחירת סטודנטים לדוח הזמנות
