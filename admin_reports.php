@@ -44,17 +44,19 @@ if ($orderStatusStmt) {
 }
 
 $ordersReport = [
-    'has_range'        => false,
-    'start'            => $reportStart,
-    'end'              => $reportEnd,
-    'total'            => 0,
-    'pending'          => 0,
-    'approved'         => 0,
-    'rejected'         => 0,
-    'on_loan'          => 0,
-    'returned'         => 0,
-    'not_picked'       => 0,
-    'not_returned_late'=> 0,
+    'has_range'          => false,
+    'start'              => $reportStart,
+    'end'                => $reportEnd,
+    'total'              => 0,
+    'pending'            => 0,
+    'approved'           => 0,
+    'rejected'           => 0,
+    'on_loan'            => 0,
+    'returned'           => 0,
+    'not_picked'         => 0,
+    'not_returned_late'  => 0,
+    'returned_broken'    => 0,
+    'returned_missing'   => 0,
 ];
 
 // הדוח מוצג רק לאחר לחיצה על "הצג"
@@ -69,7 +71,9 @@ if (isset($_GET['orders_show'])) {
              SUM(CASE WHEN o.status = 'on_loan'  THEN 1 ELSE 0 END) AS on_loan_count,
              SUM(CASE WHEN o.status = 'returned' THEN 1 ELSE 0 END) AS returned_count,
              SUM(CASE WHEN o.status = 'approved' AND DATE(o.end_date) < DATE('now') THEN 1 ELSE 0 END) AS not_picked_count,
-             SUM(CASE WHEN o.status = 'on_loan'  AND DATE(o.end_date) < DATE('now') THEN 1 ELSE 0 END) AS not_returned_late_count
+             SUM(CASE WHEN o.status = 'on_loan'  AND DATE(o.end_date) < DATE('now') THEN 1 ELSE 0 END) AS not_returned_late_count,
+             SUM(CASE WHEN o.status = 'returned' AND o.equipment_return_condition = 'תקול' THEN 1 ELSE 0 END) AS returned_broken_count,
+             SUM(CASE WHEN o.status = 'returned' AND o.equipment_return_condition = 'חסר' THEN 1 ELSE 0 END) AS returned_missing_count
          FROM orders o
          JOIN equipment e ON e.id = o.equipment_id
          WHERE 1=1";
@@ -130,6 +134,31 @@ if (isset($_GET['orders_show'])) {
     $ordersReport['returned']          = (int)($row['returned_count'] ?? 0);
     $ordersReport['not_picked']        = (int)($row['not_picked_count'] ?? 0);
     $ordersReport['not_returned_late'] = (int)($row['not_returned_late_count'] ?? 0);
+    $ordersReport['returned_broken']   = (int)($row['returned_broken_count'] ?? 0);
+    $ordersReport['returned_missing']  = (int)($row['returned_missing_count'] ?? 0);
+}
+
+// ספירת פרמטרים פעילים לדוח הזמנות – סך הכל מוצג רק כשיש יותר מפרמטר אחד
+$ordersReportParamsCount = 0;
+if ($ordersReport['has_range']) {
+    if ($reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
+        $ordersReportParamsCount++;
+    }
+    if (!empty($selectedStudents)) {
+        $ordersReportParamsCount++;
+    }
+    if ($reportCategory !== '') {
+        $ordersReportParamsCount++;
+    }
+    if ($reportStatus !== '' && $reportStatus !== 'הכל') {
+        $ordersReportParamsCount++;
+    }
+    if ($reportReturnStatus !== '') {
+        $ordersReportParamsCount++;
+    }
+    if ($reportEquipCondition !== '') {
+        $ordersReportParamsCount++;
+    }
 }
 
 // מקסימום לערכי גרף (למניעת חלוקה ב-0)
@@ -142,7 +171,9 @@ $ordersChartMax = max(
     $ordersReport['on_loan'],
     $ordersReport['returned'],
     $ordersReport['not_picked'],
-    $ordersReport['not_returned_late']
+    $ordersReport['not_returned_late'],
+    $ordersReport['returned_broken'],
+    $ordersReport['returned_missing']
 );
 
 // רשימת סטודנטים לבחירה (כמו במסך הזמנות)
@@ -676,36 +707,49 @@ if ($eqShow) {
                 <div class="orders-report-bars">
                     <?php
                     // אם נבחר סטטוס ספציפי – מציגים רק אותו, אחרת את כל הסטטוסים
+                    // סך הכל (כמות הזמנות סה״כ) מוצג רק כאשר יש יותר מפרמטר אחד לבדיקה
+                    $showTotalBar = $ordersReportParamsCount > 1;
                     if ($reportStatus !== '' && $reportStatus !== 'הכל') {
-                        $bars = [
-                            'כמות הזמנות (סה״כ)' => $ordersReport['total'],
-                        ];
-                        if ($reportStatus === 'pending') {
-                            $bars['ממתין'] = $ordersReport['pending'];
-                        } elseif ($reportStatus === 'approved') {
-                            $bars['מאושר'] = $ordersReport['approved'];
-                        } elseif ($reportStatus === 'rejected') {
-                            $bars['נדחה'] = $ordersReport['rejected'];
-                        } elseif ($reportStatus === 'on_loan') {
-                            $bars['בהשאלה'] = $ordersReport['on_loan'];
-                        } elseif ($reportStatus === 'returned') {
-                            $bars['עבר'] = $ordersReport['returned'];
-                        } elseif ($reportStatus === 'not_picked') {
-                            $bars['הוזמנו ולא נלקחו'] = $ordersReport['not_picked'];
-                        } elseif ($reportStatus === 'not_returned') {
-                            $bars['לא הושבו בזמן'] = $ordersReport['not_returned_late'];
+                        $bars = [];
+                        if ($reportStatus === 'returned') {
+                            // עבור סטטוס "עבר" מציגים התפלגות מיוחדת
+                            if ($showTotalBar) {
+                                $bars['כמות הזמנות (סה״כ)'] = $ordersReport['returned'];
+                            }
+                            $bars['הוזמנו ולא נלקחו']      = $ordersReport['not_picked'];
+                            $bars['לא הושבו בזמן']         = $ordersReport['not_returned_late'];
+                            $bars['הוחזר עם ציוד תקול']    = $ordersReport['returned_broken'];
+                            $bars['הוחזר עם ציוד חסר']     = $ordersReport['returned_missing'];
+                        } else {
+                            if ($showTotalBar) {
+                                $bars['כמות הזמנות (סה״כ)'] = $ordersReport['total'];
+                            }
+                            if ($reportStatus === 'pending') {
+                                $bars['ממתין'] = $ordersReport['pending'];
+                            } elseif ($reportStatus === 'approved') {
+                                $bars['מאושר'] = $ordersReport['approved'];
+                            } elseif ($reportStatus === 'rejected') {
+                                $bars['נדחה'] = $ordersReport['rejected'];
+                            } elseif ($reportStatus === 'on_loan') {
+                                $bars['בהשאלה'] = $ordersReport['on_loan'];
+                            } elseif ($reportStatus === 'not_picked') {
+                                $bars['הוזמנו ולא נלקחו'] = $ordersReport['not_picked'];
+                            } elseif ($reportStatus === 'not_returned') {
+                                $bars['לא הושבו בזמן'] = $ordersReport['not_returned_late'];
+                            }
                         }
                     } else {
-                        $bars = [
-                            'כמות הזמנות (סה״כ)' => $ordersReport['total'],
-                            'ממתין'              => $ordersReport['pending'],
-                            'מאושר'              => $ordersReport['approved'],
-                            'נדחה'               => $ordersReport['rejected'],
-                            'בהשאלה'             => $ordersReport['on_loan'],
-                            'עבר'                => $ordersReport['returned'],
-                            'הוזמנו ולא נלקחו'   => $ordersReport['not_picked'],
-                            'לא הושבו בזמן'      => $ordersReport['not_returned_late'],
-                        ];
+                        $bars = [];
+                        if ($showTotalBar) {
+                            $bars['כמות הזמנות (סה״כ)'] = $ordersReport['total'];
+                        }
+                        $bars['ממתין']              = $ordersReport['pending'];
+                        $bars['מאושר']              = $ordersReport['approved'];
+                        $bars['נדחה']               = $ordersReport['rejected'];
+                        $bars['בהשאלה']             = $ordersReport['on_loan'];
+                        $bars['עבר']                = $ordersReport['returned'];
+                        $bars['הוזמנו ולא נלקחו']   = $ordersReport['not_picked'];
+                        $bars['לא הושבו בזמן']      = $ordersReport['not_returned_late'];
                     }
                     foreach ($bars as $label => $val):
                         $val = (int)$val;
