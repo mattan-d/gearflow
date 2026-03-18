@@ -12,6 +12,24 @@ $role = $me['role'] ?? 'student';
 $pdo      = get_db();
 $nowTs    = time();
 
+// Prefill עבור פתיחה דרך "ניהול יומי"
+$prefillDay = trim((string)($_GET['prefill_day'] ?? ''));
+$prefillStartTime = trim((string)($_GET['prefill_start_time'] ?? ''));
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $prefillDay)) {
+    $prefillDay = '';
+}
+if (!preg_match('/^\d{2}:\d{2}$/', $prefillStartTime)) {
+    $prefillStartTime = '';
+}
+// end_time ברירת מחדל: שעה אחרי start_time (עם תקרה 17:00)
+$prefillEndTime = '';
+if ($prefillStartTime !== '') {
+    [$ph, $pm] = array_map('intval', explode(':', $prefillStartTime));
+    $mins = max(0, min(23, $ph)) * 60 + max(0, min(59, $pm));
+    $mins2 = min(17 * 60, $mins + 60);
+    $prefillEndTime = sprintf('%02d:%02d', intdiv($mins2, 60), $mins2 % 60);
+}
+
 /**
  * יצירת התראה חדשה.
  *
@@ -1745,12 +1763,18 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                     <div>
                         <!-- שדות נסתרים לתאריכים בפורמט YYYY-MM-DD לצורך שליחה לשרת -->
                         <input type="hidden" id="start_date" name="start_date"
-                               value="<?= $editingOrder ? htmlspecialchars($editingOrder['start_date'], ENT_QUOTES, 'UTF-8') : '' ?>">
+                               value="<?= $editingOrder
+                                   ? htmlspecialchars($editingOrder['start_date'], ENT_QUOTES, 'UTF-8')
+                                   : (($mode === 'new' && $prefillDay !== '') ? htmlspecialchars($prefillDay, ENT_QUOTES, 'UTF-8') : '') ?>">
                         <input type="hidden" id="end_date" name="end_date"
-                               value="<?= $editingOrder ? htmlspecialchars($editingOrder['end_date'], ENT_QUOTES, 'UTF-8') : '' ?>">
+                               value="<?= $editingOrder
+                                   ? htmlspecialchars($editingOrder['end_date'], ENT_QUOTES, 'UTF-8')
+                                   : (($mode === 'new' && $prefillDay !== '') ? htmlspecialchars($prefillDay, ENT_QUOTES, 'UTF-8') : '') ?>">
                         <!-- שדות חבויים לשעת התחלה/סיום (לבחירה בחלון שעות) -->
-                        <input type="hidden" id="start_time" name="start_time" value="">
-                        <input type="hidden" id="end_time" name="end_time" value="">
+                        <input type="hidden" id="start_time" name="start_time"
+                               value="<?= ($mode === 'new' && $prefillStartTime !== '') ? htmlspecialchars($prefillStartTime, ENT_QUOTES, 'UTF-8') : '' ?>">
+                        <input type="hidden" id="end_time" name="end_time"
+                               value="<?= ($mode === 'new' && $prefillEndTime !== '') ? htmlspecialchars($prefillEndTime, ENT_QUOTES, 'UTF-8') : '' ?>">
                         <?php if ($editingOrder && $isDuplicateMode): ?>
                             <input type="hidden" name="original_start_date"
                                    value="<?= htmlspecialchars((string)($editingOrder['start_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">

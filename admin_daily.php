@@ -469,7 +469,7 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                                         }
 
                                         if (!$hit) {
-                                            echo '<td><div class="cell"></div></td>';
+                                            echo '<td class="js-daily-slot" data-hour="' . (int)$h . '"><div class="cell"></div></td>';
                                             $i++;
                                             continue;
                                         }
@@ -490,7 +490,7 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
 
                                         // אם ההזמנה התחילה לפני התא הנוכחי – זה "המשך" שכבר הוצג, אז נדלג
                                         if ($i > $startIdx) {
-                                            echo '<td><div class="cell"></div></td>';
+                                            echo '<td class="js-daily-slot" data-hour="' . (int)$h . '"><div class="cell"></div></td>';
                                             $i++;
                                             continue;
                                         }
@@ -590,6 +590,15 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
             modal.setAttribute('aria-hidden', 'false');
             if (window.lucide) lucide.createIcons();
         }
+
+        function openNewOrderModal(day, hour) {
+            var hh = String(hour).padStart(2, '0') + ':00';
+            modalTitle.textContent = 'הזמנה חדשה · ' + day + ' · ' + hh;
+            modalFrame.src = 'admin_orders.php?mode=new&prefill_day=' + encodeURIComponent(day) + '&prefill_start_time=' + encodeURIComponent(hh);
+            modal.style.display = 'flex';
+            modal.setAttribute('aria-hidden', 'false');
+            if (window.lucide) lucide.createIcons();
+        }
         function closeModal() {
             modal.style.display = 'none';
             modal.setAttribute('aria-hidden', 'true');
@@ -608,6 +617,15 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                 if (!id) return;
                 // הצגה בחלון קופץ במצב עריכה
                 openModal(id);
+            });
+        });
+
+        // דאבל קליק על תא שעה ריק – פתיחת הזמנה חדשה עם שעת התחלה לפי התא שנבחר
+        document.querySelectorAll('td.js-daily-slot').forEach(function (td) {
+            td.addEventListener('dblclick', function () {
+                var hour = parseInt(td.getAttribute('data-hour') || '0', 10);
+                if (!hour || hour < 9 || hour > 17) return;
+                openNewOrderModal('<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>', hour);
             });
         });
 
