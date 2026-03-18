@@ -443,6 +443,9 @@ function initialize_database(PDO $pdo): void
         if (!in_array('warranty_image', $equipNames, true)) {
             $pdo->exec("ALTER TABLE equipment ADD COLUMN warranty_image TEXT");
         }
+        if (!in_array('manufacturer_code', $equipNames, true)) {
+            $pdo->exec("ALTER TABLE equipment ADD COLUMN manufacturer_code TEXT");
+        }
     } catch (Throwable $e) {
         // מתעלמים משגיאות מיגרציה של עמודות שירות/אחריות
     }

@@ -78,6 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id           = isset($_POST['id']) ? (int)$_POST['id'] : 0;
         $name         = trim($_POST['name'] ?? '');
         $code         = trim($_POST['code'] ?? '');
+        $manufacturerCode = trim($_POST['manufacturer_code'] ?? '');
         $description  = trim($_POST['description'] ?? '');
         $category     = trim($_POST['category'] ?? '');
         $location     = trim($_POST['location'] ?? '');
@@ -181,6 +182,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'UPDATE equipment
                          SET name = :name,
                              code = :code,
+                             manufacturer_code = :manufacturer_code,
                              description = :description,
                              category = :category,
                              location = :location,
@@ -201,6 +203,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute([
                         ':name'              => $name,
                         ':code'              => $code,
+                        ':manufacturer_code' => $manufacturerCode !== '' ? $manufacturerCode : null,
                         ':description'       => $description,
                         ':category'          => $category,
                         ':location'          => $location,
@@ -222,17 +225,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $stmt = $pdo->prepare(
                         'INSERT INTO equipment
-                         (name, code, description, category, location, quantity_total, quantity_available, status, picture,
+                         (name, code, manufacturer_code, description, category, location, quantity_total, quantity_available, status, picture,
                           service_supplier_id, service_lab_id, service_warranty_mode, service_warranty_supplier_id,
                           warranty_start, warranty_end, warranty_image, created_at)
                          VALUES
-                         (:name, :code, :description, :category, :location, :quantity_total, :quantity_available, :status, :picture,
+                         (:name, :code, :manufacturer_code, :description, :category, :location, :quantity_total, :quantity_available, :status, :picture,
                           :service_supplier_id, :service_lab_id, :service_warranty_mode, :service_warranty_supplier_id,
                           :warranty_start, :warranty_end, :warranty_image, :created_at)'
                     );
                     $stmt->execute([
                         ':name'               => $name,
                         ':code'               => $code,
+                        ':manufacturer_code'  => $manufacturerCode !== '' ? $manufacturerCode : null,
                         ':description'        => $description,
                         ':category'           => $category,
                         ':location'           => $location,
@@ -1720,6 +1724,13 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                                value="<?= $editingEquipment
                                    ? htmlspecialchars($editingEquipment['code'], ENT_QUOTES, 'UTF-8')
                                    : htmlspecialchars($nextCode, ENT_QUOTES, 'UTF-8') ?>">
+
+                        <label for="manufacturer_code">קוד יצרן</label>
+                        <input type="text"
+                               id="manufacturer_code"
+                               name="manufacturer_code"
+                               <?= $isViewModeEq ? 'readonly' : '' ?>
+                               value="<?= $editingEquipment ? htmlspecialchars((string)($editingEquipment['manufacturer_code'] ?? ''), ENT_QUOTES, 'UTF-8') : '' ?>">
 
                         <label for="description">תיאור</label>
                         <textarea id="description" name="description" <?= $isViewModeEq ? 'readonly' : '' ?>><?= $editingEquipment ? htmlspecialchars($editingEquipment['description'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
