@@ -458,6 +458,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <a href="admin_orders.php"><?= htmlspecialchars($navLabels['orders'], ENT_QUOTES, 'UTF-8') ?></a>
                     <a href="admin_users.php"><?= htmlspecialchars($navLabels['users'], ENT_QUOTES, 'UTF-8') ?></a>
                     <a href="admin_suppliers.php"><?= htmlspecialchars($navLabels['suppliers'], ENT_QUOTES, 'UTF-8') ?></a>
+                    <a href="admin_daily.php">ניהול יומי</a>
                     <a href="admin_reports.php"><?= htmlspecialchars($navLabels['reports'], ENT_QUOTES, 'UTF-8') ?></a>
                     <div class="main-nav-item-wrapper">
                         <a href="admin.php"><?= htmlspecialchars($navLabels['system'], ENT_QUOTES, 'UTF-8') ?></a>

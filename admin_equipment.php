@@ -1674,7 +1674,17 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
     <div class="equipment-filters">
         <div class="equipment-filters-inner">
             <form method="get" action="admin_equipment.php">
-                <input type="hidden" name="equipment_tab" value="<?= htmlspecialchars($equipmentTab === 'all' ? '' : $equipmentTab, ENT_QUOTES, 'UTF-8') ?>">
+                <div class="filter-group">
+                    <label for="equipment_tab">קטגוריה</label>
+                    <select id="equipment_tab" name="equipment_tab" onchange="this.form.submit()">
+                        <option value="all" <?= ($equipmentTab === 'all' || $equipmentTab === '') ? 'selected' : '' ?>>הכל</option>
+                        <?php foreach ($uniqueCategories as $catName): ?>
+                            <option value="<?= htmlspecialchars($catName, ENT_QUOTES, 'UTF-8') ?>" <?= $equipmentTab === $catName ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($catName, ENT_QUOTES, 'UTF-8') ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
                 <div class="filter-group">
                     <label for="filter_q">חיפוש לפי שם ציוד</label>
                     <input type="text" id="filter_q" name="q"
@@ -2325,23 +2335,10 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
             'availability_start' => $availabilityStartRaw !== '' ? $availabilityStartRaw : null,
             'availability_end'   => $availabilityEndRaw !== '' ? $availabilityEndRaw : null,
         ]);
-        $tabBaseQuery = http_build_query($tabBaseParams);
-        $tabBaseUrl = 'admin_equipment.php' . ($tabBaseQuery !== '' ? '?' . $tabBaseQuery : '');
         ?>
         <?php if (count($allEquipment) === 0): ?>
             <p class="muted-small">עדיין לא הוגדר ציוד במערכת.</p>
         <?php else: ?>
-            <div class="tabs">
-                <a href="<?= htmlspecialchars($tabBaseUrl, ENT_QUOTES, 'UTF-8') ?>"
-                   class="<?= ($equipmentTab === 'all' || $equipmentTab === '') ? 'active' : '' ?>">הכל</a>
-                <?php foreach ($uniqueCategories as $catName): ?>
-                    <?php
-                    $tabUrl = $tabBaseUrl . (strpos($tabBaseUrl, '?') !== false ? '&' : '?') . 'equipment_tab=' . rawurlencode($catName);
-                    ?>
-                    <a href="<?= htmlspecialchars($tabUrl, ENT_QUOTES, 'UTF-8') ?>"
-                       class="<?= $equipmentTab === $catName ? 'active' : '' ?>"><?= htmlspecialchars($catName, ENT_QUOTES, 'UTF-8') ?></a>
-                <?php endforeach; ?>
-            </div>
             <?php if (count($equipmentList) === 0): ?>
                 <p class="muted-small">אין פריטים בקטגוריה זו.</p>
             <?php else: ?>
