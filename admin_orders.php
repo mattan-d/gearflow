@@ -3638,6 +3638,12 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         if (componentChecksCache[orderId] && componentChecksCache[orderId][code]) {
                             savedChecks = componentChecksCache[orderId][code];
                         }
+                        var hasSavedChecks = false;
+                        try {
+                            hasSavedChecks = savedChecks && Object.keys(savedChecks).length > 0;
+                        } catch (e2) {
+                            hasSavedChecks = false;
+                        }
 
                         components.forEach(function (c) {
                             var li = document.createElement('li');
@@ -3646,10 +3652,11 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             li.style.marginBottom = '0.25rem';
 
                             var qty = c.quantity && c.quantity > 1 ? ' (' + c.quantity + ')' : '';
-                            var present = !!(savedChecks[c.name] && savedChecks[c.name].present);
-                            var returned = !!(savedChecks[c.name] && savedChecks[c.name].returned);
+                            // אם אין שמירה קודמת (בעיקר במצב החזרה) – מציגים את כל הרכיבים כברירת מחדל כ"נלקח"
+                            var present = hasSavedChecks ? !!(savedChecks[c.name] && savedChecks[c.name].present) : true;
+                            var returned = hasSavedChecks ? !!(savedChecks[c.name] && savedChecks[c.name].returned) : false;
 
-                            if (context === 'return' && !present) {
+                            if (context === 'return' && hasSavedChecks && !present) {
                                 // בשלב החזרה מציגים רק רכיבים שסומנו כ"נלקח"
                                 return;
                             }
