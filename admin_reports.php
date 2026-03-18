@@ -844,6 +844,7 @@ if ($eqShow) {
                     </div>
                 </div>
                 <input type="hidden" name="orders_detail" id="orders_detail" value="<?= htmlspecialchars(isset($_GET['orders_detail']) ? (string)$_GET['orders_detail'] : '', ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="orders_show" id="orders_show_hidden" value="1">
             </form>
 
             <?php if ($ordersReport['has_range']): ?>
@@ -966,7 +967,7 @@ if ($eqShow) {
                     <?php endforeach; ?>
                 </div>
                 <?php if (!empty($ordersDetailRows)): ?>
-                    <div class="orders-report-details-table">
+                    <div class="orders-report-details-table" id="orders_report_details">
                         <h3 style="margin-top:1.5rem;margin-bottom:0.75rem;font-size:1rem;">
                             פירוט ההזמנות עבור הבחירה שבוצעה בגרף
                         </h3>
@@ -1324,6 +1325,19 @@ if ($eqShow) {
                 form.submit();
             });
         });
+    })();
+
+    // לאחר רענון עם orders_detail – גלילה לטבלת הפירוט (מתחת לגרפים)
+    (function () {
+        try {
+            var params = new URLSearchParams(window.location.search || '');
+            if (!params.get('orders_detail')) return;
+            var el = document.getElementById('orders_report_details');
+            if (!el) return;
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (e) {
+            // ignore
+        }
     })();
     // בחירת סטודנטים לדוח הזמנות
     (function () {
