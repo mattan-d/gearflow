@@ -191,6 +191,18 @@ function initialize_database(PDO $pdo): void
         // מתעלמים משגיאות מיגרציה כדי לא להפיל את הטעינה
     }
 
+    // תיקון נתונים: הזמנות בסטטוס "עבר" חייבות לכלול סטטוס ציוד מוחזר (ברירת מחדל: תקין)
+    try {
+        $pdo->exec("
+            UPDATE orders
+            SET equipment_return_condition = 'תקין'
+            WHERE status = 'returned'
+              AND (equipment_return_condition IS NULL OR TRIM(equipment_return_condition) = '')
+        ");
+    } catch (PDOException $e) {
+        // לא מפילים טעינה בגלל תיקון נתונים
+    }
+
     // טבלת מסמכים מותאמים אישית (לנהלים נוספים וכו')
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS documents_custom (

@@ -577,8 +577,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $equipmentReturnConditionDb = (string)($orderRow['equipment_return_condition'] ?? '');
                     if ($role === 'admin' || $role === 'warehouse_manager') {
-                        if ($equipmentReturnConditionInput !== '') {
+                        $allowedReturnConditions = ['תקין', 'תקול', 'חסר'];
+                        if ($equipmentReturnConditionInput !== '' && in_array($equipmentReturnConditionInput, $allowedReturnConditions, true)) {
                             $equipmentReturnConditionDb = $equipmentReturnConditionInput;
+                        }
+
+                        // אם ההזמנה במצב "עבר" ולא נבחר מצב ציוד מוחזר – ברירת מחדל היא "תקין"
+                        if ($newStatus === 'returned') {
+                            if (!in_array($equipmentReturnConditionDb, $allowedReturnConditions, true)) {
+                                $equipmentReturnConditionDb = 'תקין';
+                            }
                         }
                     }
 
