@@ -173,6 +173,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $quantityAvailable = 1;
         }
 
+        // מספר פריטים (רלוונטי רק ליצירה חדשה)
+        $itemsCount = 1;
+        if ($id <= 0) {
+            $itemsCount = (int)($_POST['items_count'] ?? 1);
+            if ($itemsCount < 1) $itemsCount = 1;
+            if ($itemsCount > 50) $itemsCount = 50;
+        }
+
         // פריט חדש: אם לא הוקלד קוד זיהוי – נייצר מספר סידורי אוטומטי (המקס' עבור אותו שם ציוד + 1)
         if ($id <= 0 && $code === '' && $name !== '') {
             try {
@@ -245,7 +253,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ]);
                     $success = 'הציוד עודכן בהצלחה.';
                 } else {
-                    $stmt = $pdo->prepare(
+                    // יצירת מספר פריטים > 1: יוצרים N רשומות זהות עם מספר סידורי עולה (קוד+1)
+                    if ($itemsCount > 1 && !ctype_digit($code)) {
+                        throw new RuntimeException('קוד זיהוי חייב להיות מספרי כאשר מוסיפים מספר פריטים.');
+                    }
+                    $baseCodeNum = $itemsCount > 1 ? (int)$code : 0;
+
+                    $insertStmt = $pdo->prepare(
                         'INSERT INTO equipment
                          (name, code, manufacturer_code, description, category, location, quantity_total, quantity_available, status, picture,
                           service_supplier_id, service_lab_id, service_warranty_mode, service_warranty_supplier_id,
@@ -255,51 +269,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                           :service_supplier_id, :service_lab_id, :service_warranty_mode, :service_warranty_supplier_id,
                           :warranty_start, :warranty_end, :warranty_image, :created_at)'
                     );
-                    $stmt->execute([
-                        ':name'               => $name,
-                        ':code'               => $code,
-                        ':manufacturer_code'  => $manufacturerCode !== '' ? $manufacturerCode : null,
-                        ':description'        => $description,
-                        ':category'           => $category,
-                        ':location'           => $location,
-                        ':quantity_total'     => $quantityTotal,
-                        ':quantity_available' => $quantityAvailable,
-                        ':status'             => $status,
-                        ':picture'            => $picturePath,
-                        ':service_supplier_id'         => $serviceSupplierId ?: null,
-                        ':service_lab_id'              => $serviceLabId ?: null,
-                        ':service_warranty_mode'       => $serviceWarrantyMode,
-                        ':service_warranty_supplier_id'=> $serviceWarrantySupplierId ?: null,
-                        ':warranty_start'     => $warrantyStart !== '' ? $warrantyStart : null,
-                        ':warranty_end'       => $warrantyEnd !== '' ? $warrantyEnd : null,
-                        ':warranty_image'     => $warrantyImagePath,
-                        ':created_at'         => date('Y-m-d H:i:s'),
-                    ]);
-                    $id = (int)$pdo->lastInsertId();
-                    $success = 'הציוד נוסף בהצלחה.';
+
+                    $createdIds = [];
+                    $nowCreated = date('Y-m-d H:i:s');
+                    $pdo->beginTransaction();
+                    try {
+                        for ($i = 0; $i < $itemsCount; $i++) {
+                            $codeToUse = ($itemsCount > 1) ? (string)($baseCodeNum + $i) : $code;
+                            $insertStmt->execute([
+                                ':name'               => $name,
+                                ':code'               => $codeToUse,
+                                ':manufacturer_code'  => $manufacturerCode !== '' ? $manufacturerCode : null,
+                                ':description'        => $description,
+                                ':category'           => $category,
+                                ':location'           => $location,
+                                ':quantity_total'     => $quantityTotal,
+                                ':quantity_available' => $quantityAvailable,
+                                ':status'             => $status,
+                                ':picture'            => $picturePath,
+                                ':service_supplier_id'         => $serviceSupplierId ?: null,
+                                ':service_lab_id'              => $serviceLabId ?: null,
+                                ':service_warranty_mode'       => $serviceWarrantyMode,
+                                ':service_warranty_supplier_id'=> $serviceWarrantySupplierId ?: null,
+                                ':warranty_start'     => $warrantyStart !== '' ? $warrantyStart : null,
+                                ':warranty_end'       => $warrantyEnd !== '' ? $warrantyEnd : null,
+                                ':warranty_image'     => $warrantyImagePath,
+                                ':created_at'         => $nowCreated,
+                            ]);
+                            $createdIds[] = (int)$pdo->lastInsertId();
+                        }
+                        $pdo->commit();
+                    } catch (Throwable $e) {
+                        if ($pdo->inTransaction()) {
+                            $pdo->rollBack();
+                        }
+                        throw $e;
+                    }
+
+                    $id = (int)($createdIds[0] ?? 0);
+                    $success = ($itemsCount > 1) ? ('נוספו ' . $itemsCount . ' פריטי ציוד בהצלחה.') : 'הציוד נוסף בהצלחה.';
                 }
                 // שמירת רכיבי פריט (מטופס הציוד) – עד MAX_EQUIPMENT_COMPONENTS, כמות תמיד 1
                 $names = $_POST['component_name'] ?? [];
                 if (!is_array($names)) $names = [];
                 $names = array_values(array_filter(array_map('trim', array_map('strval', $names))));
                 $names = array_slice($names, 0, MAX_EQUIPMENT_COMPONENTS);
-                $eqId = $id > 0 ? $id : (int)($editingEquipment['id'] ?? 0);
-                if ($eqId > 0) {
+                // בריבוי פריטים – נשמור רכיבים עבור כולם; בעריכה – מחליפים רכיבים קיימים
+                $targetEquipmentIds = [];
+                if ($id > 0 && $editingEquipment !== null) {
+                    $targetEquipmentIds = [(int)$editingEquipment['id']];
+                } else {
+                    if (isset($createdIds) && is_array($createdIds) && !empty($createdIds)) {
+                        $targetEquipmentIds = array_values(array_map('intval', $createdIds));
+                    } elseif ($id > 0) {
+                        $targetEquipmentIds = [$id];
+                    }
+                }
+
+                if (!empty($targetEquipmentIds)) {
                     try {
-                        $del = $pdo->prepare('DELETE FROM equipment_components WHERE equipment_id = :eid');
-                        $del->execute([':eid' => $eqId]);
                         $ins = $pdo->prepare(
                             'INSERT INTO equipment_components (equipment_id, name, quantity, created_at)
                              VALUES (:equipment_id, :name, 1, :created_at)'
                         );
                         $now = date('Y-m-d H:i:s');
-                        foreach ($names as $nameVal) {
-                            if ($nameVal === '') continue;
-                            $ins->execute([
-                                ':equipment_id' => $eqId,
-                                ':name'         => $nameVal,
-                                ':created_at'   => $now,
-                            ]);
+                        foreach ($targetEquipmentIds as $eqId) {
+                            if ($eqId <= 0) continue;
+                            // בעריכה נחליף; ביצירה חדשה זה בטוח גם אם אין רכיבים
+                            $del = $pdo->prepare('DELETE FROM equipment_components WHERE equipment_id = :eid');
+                            $del->execute([':eid' => $eqId]);
+                            foreach ($names as $nameVal) {
+                                if ($nameVal === '') continue;
+                                $ins->execute([
+                                    ':equipment_id' => $eqId,
+                                    ':name'         => $nameVal,
+                                    ':created_at'   => $now,
+                                ]);
+                            }
                         }
                     } catch (Throwable $e) {
                         // לא מפילים את השמירה אם רכיבים נכשלו
@@ -312,9 +358,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $editId = 0;
                     $viewId = 0;
                 }
-            } catch (PDOException $e) {
-                if (str_contains($e->getMessage(), 'UNIQUE') && str_contains($e->getMessage(), 'code')) {
+            } catch (Throwable $e) {
+                $msg = $e->getMessage();
+                if (str_contains($msg, 'UNIQUE') && str_contains($msg, 'code')) {
                     $error = 'קוד הציוד כבר קיים במערכת.';
+                } elseif (str_contains($msg, 'קוד זיהוי חייב להיות מספרי')) {
+                    $error = 'כדי ליצור מספר פריטים, קוד הזיהוי חייב להיות מספרי.';
                 } else {
                     $error = 'שגיאה בשמירת הציוד.';
                 }
@@ -1989,6 +2038,27 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                         <?php endif; ?>
                     </div>
                 </div>
+
+                <?php
+                $itemsCountVal = 1;
+                if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['items_count'])) {
+                    $itemsCountVal = max(1, (int)$_POST['items_count']);
+                }
+                $itemsCountVal = min(50, $itemsCountVal);
+                ?>
+                <?php if (!$editingEquipment && !$isViewModeEq): ?>
+                    <div style="margin-top:0.75rem; display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+                        <label for="items_count" style="min-width:90px; margin:0;">מספר פריטים</label>
+                        <input type="number"
+                               id="items_count"
+                               name="items_count"
+                               min="1"
+                               max="50"
+                               value="<?= (int)$itemsCountVal ?>"
+                               style="width:110px;padding:0.4rem 0.6rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.9rem;">
+                        <span class="muted-small">1–50</span>
+                    </div>
+                <?php endif; ?>
 
                 <?php if (!$isViewModeEq): ?>
                     <button type="submit" class="btn">
