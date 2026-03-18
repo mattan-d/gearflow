@@ -88,7 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // שדה אחריות באזור "שירות" הוסר – נשמר רק עבור תאימות אחורה
         $serviceWarrantyMode = trim((string)($_POST['service_warranty_mode'] ?? ''));
         $serviceWarrantySupplierId = isset($_POST['service_warranty_supplier_id']) ? (int)$_POST['service_warranty_supplier_id'] : 0;
-        $warrantyStart = trim((string)($_POST['warranty_start'] ?? ''));
+        // התחלת אחריות הוסרה מהטופס – נשמר רק עבור תאימות אחורה (לא מעדכנים בעריכה)
+        $warrantyStart = '';
         $warrantyEnd   = trim((string)($_POST['warranty_end'] ?? ''));
         // אם נבחר ספק אחריות מהרשימה (sup_ID), נשמור גם את ה-ID בעמודה הייעודית
         if (str_starts_with($serviceWarrantyMode, 'sup_')) {
@@ -96,6 +97,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if ($serviceWarrantyMode === '') {
             $serviceWarrantySupplierId = 0;
+        }
+
+        // אם מדובר בעריכה – לא משנים warranty_start (שדה כבר לא מוצג)
+        if ($id > 0 && $editingEquipment !== null) {
+            $warrantyStart = (string)($editingEquipment['warranty_start'] ?? '');
         }
 
         // ניהול תמונה: שמירה / מחיקה / החלפה של קובץ שהועלה לשרת
@@ -1922,19 +1928,12 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                 </div>
 
                 <?php
-                $warrantyStartVal = (string)($editingEquipment['warranty_start'] ?? '');
                 $warrantyEndVal   = (string)($editingEquipment['warranty_end'] ?? '');
                 $warrantyImageVal = (string)($editingEquipment['warranty_image'] ?? '');
                 ?>
                 <div style="margin-top:0.75rem; margin-bottom:0.5rem;">
                     <div class="muted-small" style="margin-bottom:0.25rem;font-weight:600;font-size:0.95rem;">אחריות</div>
                     <div style="display:flex; gap:0.75rem; align-items:flex-start; flex-wrap:wrap;">
-                        <div style="min-width:160px;">
-                            <label for="warranty_start">התחלת אחריות</label>
-                            <input type="date" id="warranty_start" name="warranty_start"
-                                   value="<?= htmlspecialchars($warrantyStartVal, ENT_QUOTES, 'UTF-8') ?>"
-                                   <?= $isViewModeEq ? 'readonly' : '' ?>>
-                        </div>
                         <div style="min-width:160px;">
                             <label for="warranty_end">סיום אחריות</label>
                             <input type="date" id="warranty_end" name="warranty_end"
