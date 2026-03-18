@@ -27,6 +27,7 @@ if ($day === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) {
 
 $selectedCategory = isset($_GET['category']) ? trim((string)$_GET['category']) : 'all';
 if ($selectedCategory === '') $selectedCategory = 'all';
+$searchQ = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
 
 // קטגוריות ציוד (כולל "ללא קטגוריה")
 $categories = [];
@@ -45,15 +46,42 @@ try {
 $equipmentRows = [];
 try {
     if ($selectedCategory === 'all') {
-        $stmtEq = $pdo->prepare("SELECT id, name, code, TRIM(COALESCE(category,'')) AS category FROM equipment ORDER BY category ASC, name ASC, code ASC");
-        $stmtEq->execute();
+        $sqlEq = "SELECT id, name, code, TRIM(COALESCE(category,'')) AS category
+                  FROM equipment
+                  WHERE 1=1";
+        $paramsEq = [];
+        if ($searchQ !== '') {
+            $sqlEq .= " AND TRIM(COALESCE(name,'')) LIKE :q";
+            $paramsEq[':q'] = '%' . $searchQ . '%';
+        }
+        $sqlEq .= " ORDER BY category ASC, name ASC, code ASC";
+        $stmtEq = $pdo->prepare($sqlEq);
+        $stmtEq->execute($paramsEq);
     } else {
         if ($selectedCategory === 'ללא קטגוריה') {
-            $stmtEq = $pdo->prepare("SELECT id, name, code, TRIM(COALESCE(category,'')) AS category FROM equipment WHERE TRIM(COALESCE(category,'')) = '' ORDER BY name ASC, code ASC");
-            $stmtEq->execute();
+            $sqlEq = "SELECT id, name, code, TRIM(COALESCE(category,'')) AS category
+                      FROM equipment
+                      WHERE TRIM(COALESCE(category,'')) = ''";
+            $paramsEq = [];
+            if ($searchQ !== '') {
+                $sqlEq .= " AND TRIM(COALESCE(name,'')) LIKE :q";
+                $paramsEq[':q'] = '%' . $searchQ . '%';
+            }
+            $sqlEq .= " ORDER BY name ASC, code ASC";
+            $stmtEq = $pdo->prepare($sqlEq);
+            $stmtEq->execute($paramsEq);
         } else {
-            $stmtEq = $pdo->prepare("SELECT id, name, code, TRIM(COALESCE(category,'')) AS category FROM equipment WHERE TRIM(COALESCE(category,'')) = :c ORDER BY name ASC, code ASC");
-            $stmtEq->execute([':c' => $selectedCategory]);
+            $sqlEq = "SELECT id, name, code, TRIM(COALESCE(category,'')) AS category
+                      FROM equipment
+                      WHERE TRIM(COALESCE(category,'')) = :c";
+            $paramsEq = [':c' => $selectedCategory];
+            if ($searchQ !== '') {
+                $sqlEq .= " AND TRIM(COALESCE(name,'')) LIKE :q";
+                $paramsEq[':q'] = '%' . $searchQ . '%';
+            }
+            $sqlEq .= " ORDER BY name ASC, code ASC";
+            $stmtEq = $pdo->prepare($sqlEq);
+            $stmtEq->execute($paramsEq);
         }
     }
     $equipmentRows = $stmtEq->fetchAll(PDO::FETCH_ASSOC) ?: [];
@@ -151,32 +179,49 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
         body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#f3f4f6; margin:0; }
         main { max-width: 1200px; margin: 1.5rem auto; padding: 0 1rem 2rem; }
         .card { background:#fff; border-radius:12px; padding:1rem 1.25rem; box-shadow:0 10px 25px rgba(15,23,42,0.08); }
-        .layout { display:flex; gap:1rem; align-items:flex-start; }
-        .left { flex: 1; min-width: 0; }
-        .right { width: 280px; flex: 0 0 280px; }
         .topbar { display:flex; justify-content:space-between; align-items:center; gap:0.75rem; flex-wrap:wrap; margin-bottom:0.75rem; }
-        .btn { padding:0.45rem 0.95rem; border-radius:999px; border:none; background:#111827; color:#f9fafb; cursor:pointer; font-size:0.85rem; font-family:inherit; }
-        .btn.secondary { background:#e5e7eb; color:#111827; }
-        .btn:disabled { opacity:0.6; cursor:not-allowed; }
-        .pill-row { display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center; }
-        .pill { padding:0.35rem 0.75rem; border-radius:999px; background:#f3f4f6; border:1px solid #e5e7eb; cursor:pointer; font-size:0.85rem; color:#111827; text-decoration:none; }
-        .pill.active { background:#111827; color:#f9fafb; border-color:#111827; }
         .legend { display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center; margin-top:0.5rem; }
         .legend-item { display:flex; align-items:center; gap:0.35rem; font-size:0.82rem; color:#374151; }
         .swatch { width:12px; height:12px; border-radius:4px; border:1px solid rgba(0,0,0,0.12); }
         .muted { color:#6b7280; font-size:0.85rem; }
-        .calendar-box input[type="date"] { width:100%; padding:0.5rem 0.6rem; border-radius:10px; border:1px solid #d1d5db; font-size:0.9rem; }
-        .day-nav { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin: 0.75rem 0; }
+        .filters-row { display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap; margin: 0.5rem 0 0.75rem; }
+        .filter-block { min-width: 160px; }
+        .filter-block label { display:block; font-size:0.8rem; color:#374151; margin-bottom:0.25rem; }
+        .filter-block input[type="date"],
+        .filter-block select,
+        .filter-block input[type="text"] {
+            width:100%;
+            padding:0.45rem 0.6rem;
+            border-radius:10px;
+            border:1px solid #d1d5db;
+            font-size:0.9rem;
+            font-family:inherit;
+        }
+        .icon-btn {
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            color: #111827;
+            cursor: pointer;
+            text-decoration:none;
+        }
+        .icon-btn:hover { background:#f3f4f6; }
+        .day-nav { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin: 0.5rem 0 0.75rem; }
 
         .grid-wrap { overflow:auto; border-radius:12px; border:1px solid #e5e7eb; }
         table.daily { border-collapse: collapse; width: 100%; min-width: 980px; background:#fff; }
-        table.daily th, table.daily td { border-bottom:1px solid #eef2f7; border-left:1px solid #eef2f7; padding:0.35rem 0.45rem; text-align:center; font-size:0.82rem; }
+                        table.daily th, table.daily td { border-bottom:1px solid #eef2f7; border-left:1px solid #eef2f7; padding:0.25rem 0.35rem; text-align:center; font-size:0.82rem; }
         table.daily th:first-child, table.daily td:first-child { position: sticky; right: 0; background:#fff; z-index: 2; text-align:right; min-width: 220px; }
         table.daily thead th { position: sticky; top: 0; background:#f9fafb; z-index: 3; font-weight:700; }
         table.daily thead th:first-child { z-index: 4; }
         .eq-name { font-weight:600; color:#111827; }
         .eq-code { font-size:0.75rem; color:#6b7280; }
-        .cell { height: 28px; border-radius: 8px; }
+        .cell { height: 30px; border-radius: 10px; display:flex; align-items:center; justify-content:center; }
         .cell.occupied { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06); }
         .cell .tiny { font-size:0.72rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:110px; display:inline-block; vertical-align:middle; }
         .order-cell-link { display:block; text-decoration:none; }
@@ -187,32 +232,54 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
 <body>
 <?php include __DIR__ . '/admin_header.php'; ?>
 <main>
-    <div class="layout">
-        <div class="left">
-            <div class="card">
-                <div class="topbar">
-                    <div>
-                        <h2 style="margin:0 0 0.15rem;font-size:1.25rem;">ניהול יומי</h2>
-                        <div class="muted">תצוגת הזמנות לפי יום ושעות השאלה (09:00–17:00)</div>
-                    </div>
-                    <div class="pill-row">
-                        <a class="btn secondary" href="admin_daily.php?<?= htmlspecialchars(http_build_query(['day' => $prevDay, 'category' => $selectedCategory]), ENT_QUOTES, 'UTF-8') ?>">יום קודם</a>
-                        <a class="btn secondary" href="admin_daily.php?<?= htmlspecialchars(http_build_query(['day' => $nextDay, 'category' => $selectedCategory]), ENT_QUOTES, 'UTF-8') ?>">יום הבא</a>
-                    </div>
-                </div>
+    <div class="card">
+        <div class="topbar">
+            <div>
+                <h2 style="margin:0 0 0.15rem;font-size:1.25rem;">ניהול יומי</h2>
+                <div class="muted">תצוגת הזמנות לפי יום ושעות השאלה (09:00–17:00)</div>
+            </div>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+                <a class="icon-btn"
+                   href="admin_daily.php?<?= htmlspecialchars(http_build_query(['day' => $prevDay, 'category' => $selectedCategory, 'q' => $searchQ]), ENT_QUOTES, 'UTF-8') ?>"
+                   title="יום קודם"
+                   aria-label="יום קודם">
+                    <i data-lucide="chevron-right" aria-hidden="true"></i>
+                </a>
+                <a class="icon-btn"
+                   href="admin_daily.php?<?= htmlspecialchars(http_build_query(['day' => $nextDay, 'category' => $selectedCategory, 'q' => $searchQ]), ENT_QUOTES, 'UTF-8') ?>"
+                   title="יום הבא"
+                   aria-label="יום הבא">
+                    <i data-lucide="chevron-left" aria-hidden="true"></i>
+                </a>
+            </div>
+        </div>
 
-                <div class="pill-row" style="margin-top:0.25rem;">
-                    <a class="pill<?= $selectedCategory === 'all' ? ' active' : '' ?>"
-                       href="admin_daily.php?<?= htmlspecialchars(http_build_query(['day' => $day, 'category' => 'all']), ENT_QUOTES, 'UTF-8') ?>">
-                        הכל
-                    </a>
+        <form method="get" action="admin_daily.php" class="filters-row">
+            <div class="filter-block" style="min-width:170px;">
+                <label for="day_input">בחירת תאריך</label>
+                <input id="day_input" type="date" name="day" value="<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>">
+            </div>
+            <div class="filter-block" style="min-width:200px;">
+                <label for="cat_input">בחירת קטגוריה</label>
+                <select id="cat_input" name="category">
+                    <option value="all" <?= ($selectedCategory === 'all' || $selectedCategory === '') ? 'selected' : '' ?>>הכל</option>
                     <?php foreach ($categories as $cat): ?>
-                        <a class="pill<?= $selectedCategory === $cat ? ' active' : '' ?>"
-                           href="admin_daily.php?<?= htmlspecialchars(http_build_query(['day' => $day, 'category' => $cat]), ENT_QUOTES, 'UTF-8') ?>">
+                        <option value="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>" <?= $selectedCategory === $cat ? 'selected' : '' ?>>
                             <?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>
-                        </a>
+                        </option>
                     <?php endforeach; ?>
-                </div>
+                </select>
+            </div>
+            <div class="filter-block" style="flex:1; min-width:220px;">
+                <label for="q_input">חיפוש פריט ציוד לפי שם</label>
+                <input id="q_input" type="text" name="q" value="<?= htmlspecialchars($searchQ, ENT_QUOTES, 'UTF-8') ?>" placeholder="הקלד שם פריט...">
+            </div>
+            <div style="min-width:110px;">
+                <button type="submit" class="icon-btn" title="סינון" aria-label="סינון">
+                    <i data-lucide="search" aria-hidden="true"></i>
+                </button>
+            </div>
+        </form>
 
                 <div class="legend">
                     <?php foreach (['pending','approved','on_loan','returned','rejected'] as $st): ?>
@@ -259,11 +326,15 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                                         <div class="eq-name"><?= htmlspecialchars($eqName, ENT_QUOTES, 'UTF-8') ?></div>
                                         <div class="eq-code"><?= htmlspecialchars($eqCode, ENT_QUOTES, 'UTF-8') ?></div>
                                     </td>
-                                    <?php foreach ($hours as $h): ?>
-                                        <?php
+                                    <?php
+                                    $colCount = count($hours);
+                                    $i = 0;
+                                    while ($i < $colCount) {
+                                        $h = $hours[$i];
                                         $cellStart = $h * 60;
                                         $cellEnd   = ($h + 1) * 60;
 
+                                        // מוצאים הזמנה שמתחילה/נמשכת בתא הנוכחי
                                         $hit = null;
                                         foreach ($ordersForEq as $o) {
                                             $sMin = gf_time_to_minutes((string)($o['start_time'] ?? '09:00'));
@@ -275,48 +346,60 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                                             break;
                                         }
 
-                                        if ($hit) {
-                                            $st = (string)($hit['status'] ?? '');
-                                            $c = gf_status_color($st);
-                                            $borrower = trim((string)($hit['borrower_name'] ?? ''));
-                                            $title = 'הזמנה #' . (int)($hit['id'] ?? 0) . ' · ' . $borrower . ' · ' . ($hit['start_time'] ?? '') . '-' . ($hit['end_time'] ?? '') . ' · ' . $c['label'];
-                                            ?>
-                                            <td title="<?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?>">
-                                                <a class="order-cell-link"
-                                                   href="admin_orders.php?view_id=<?= (int)($hit['id'] ?? 0) ?>"
-                                                   target="_blank"
-                                                   rel="noopener noreferrer"
-                                                   aria-label="צפייה בהזמנה #<?= (int)($hit['id'] ?? 0) ?>">
-                                                    <div class="cell occupied" style="background:<?= htmlspecialchars($c['bg'], ENT_QUOTES, 'UTF-8') ?>; color:<?= htmlspecialchars($c['fg'], ENT_QUOTES, 'UTF-8') ?>;">
-                                                        <span class="tiny">#<?= (int)($hit['id'] ?? 0) ?> <?= htmlspecialchars($borrower, ENT_QUOTES, 'UTF-8') ?></span>
-                                                    </div>
-                                                </a>
-                                            </td>
-                                        <?php } else { ?>
-                                            <td><div class="cell"></div></td>
-                                        <?php } ?>
-                                    <?php endforeach; ?>
+                                        if (!$hit) {
+                                            echo '<td><div class="cell"></div></td>';
+                                            $i++;
+                                            continue;
+                                        }
+
+                                        $sMin = gf_time_to_minutes((string)($hit['start_time'] ?? '09:00'));
+                                        $eMin = gf_time_to_minutes((string)($hit['end_time'] ?? '17:00'));
+                                        // גבולות התצוגה (09:00–18:00 בקצה העליון כדי לחשב colspan)
+                                        $gridStart = 9 * 60;
+                                        $gridEnd   = 18 * 60;
+                                        $sMin = max($gridStart, min($gridEnd, $sMin));
+                                        $eMin = max($gridStart, min($gridEnd, $eMin));
+                                        if ($eMin <= $sMin) $eMin = min($gridEnd, $sMin + 60);
+
+                                        $startIdx = (int)floor(($sMin - $gridStart) / 60);
+                                        $endIdxExcl = (int)ceil(($eMin - $gridStart) / 60);
+                                        $startIdx = max(0, min($colCount - 1, $startIdx));
+                                        $endIdxExcl = max($startIdx + 1, min($colCount, $endIdxExcl));
+
+                                        // אם ההזמנה התחילה לפני התא הנוכחי – זה "המשך" שכבר הוצג, אז נדלג
+                                        if ($i > $startIdx) {
+                                            echo '<td><div class="cell"></div></td>';
+                                            $i++;
+                                            continue;
+                                        }
+
+                                        $span = max(1, $endIdxExcl - $startIdx);
+                                        $st = (string)($hit['status'] ?? '');
+                                        $c = gf_status_color($st);
+                                        $borrower = trim((string)($hit['borrower_name'] ?? ''));
+                                        $title = 'הזמנה #' . (int)($hit['id'] ?? 0) . ' · ' . $borrower . ' · ' . ($hit['start_time'] ?? '') . '-' . ($hit['end_time'] ?? '') . ' · ' . $c['label'];
+                                        ?>
+                                        <td colspan="<?= (int)$span ?>" title="<?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?>">
+                                            <a class="order-cell-link"
+                                               href="admin_orders.php?view_id=<?= (int)($hit['id'] ?? 0) ?>"
+                                               target="_blank"
+                                               rel="noopener noreferrer"
+                                               aria-label="צפייה בהזמנה #<?= (int)($hit['id'] ?? 0) ?>">
+                                                <div class="cell occupied" style="background:<?= htmlspecialchars($c['bg'], ENT_QUOTES, 'UTF-8') ?>; color:<?= htmlspecialchars($c['fg'], ENT_QUOTES, 'UTF-8') ?>;">
+                                                    <span class="tiny">#<?= (int)($hit['id'] ?? 0) ?> <?= htmlspecialchars($borrower, ENT_QUOTES, 'UTF-8') ?></span>
+                                                </div>
+                                            </a>
+                                        </td>
+                                        <?php
+                                        $i += $span;
+                                    }
+                                    ?>
                                 </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>
                         </tbody>
                     </table>
                 </div>
-            </div>
-        </div>
-
-        <div class="right">
-            <div class="card calendar-box">
-                <div style="font-weight:700;margin-bottom:0.5rem;">לוח שנה</div>
-                <form method="get" action="admin_daily.php">
-                    <input type="date" name="day" value="<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>" onchange="this.form.submit()">
-                    <input type="hidden" name="category" value="<?= htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8') ?>">
-                </form>
-                <div class="muted" style="margin-top:0.5rem;">
-                    ברירת מחדל: היום הנוכחי.
-                </div>
-            </div>
-        </div>
     </div>
 </main>
 <?php include __DIR__ . '/admin_footer.php'; ?>
