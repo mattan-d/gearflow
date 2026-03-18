@@ -191,10 +191,10 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
         .filter-block select,
         .filter-block input[type="text"] {
             width:100%;
-            padding:0.45rem 0.6rem;
-            border-radius:10px;
+            padding:0.4rem 0.6rem;
+            border-radius:8px;
             border:1px solid #d1d5db;
-            font-size:0.9rem;
+            font-size:0.85rem;
             font-family:inherit;
         }
         .icon-btn {
@@ -203,7 +203,7 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
             justify-content:center;
             width: 36px;
             height: 36px;
-            border-radius: 10px;
+            border-radius: 8px;
             border: 1px solid #d1d5db;
             background: #f9fafb;
             color: #111827;
@@ -211,6 +211,20 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
             text-decoration:none;
         }
         .icon-btn:hover { background:#f3f4f6; }
+        .nav-arrow {
+            display:inline-flex;
+            align-items:center;
+            justify-content:center;
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: transparent;
+            color: #111827;
+            cursor: pointer;
+            text-decoration: none;
+            border-radius: 8px;
+        }
+        .nav-arrow:hover { background:#f3f4f6; }
         .day-nav { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin: 0.5rem 0 0.75rem; }
 
         .grid-wrap { overflow-y:auto; overflow-x:hidden; border-radius:12px; border:1px solid #e5e7eb; }
@@ -222,7 +236,7 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
         table.daily thead th:first-child { z-index: 4; }
         .eq-name { font-weight:600; color:#111827; }
         .eq-code { font-size:0.75rem; color:#6b7280; }
-        .cell { height: 24px; border-radius: 10px; display:flex; align-items:center; justify-content:center; }
+        .cell { height: 24px; border-radius: 8px; display:flex; align-items:center; justify-content:center; }
         .cell.occupied { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06); }
         .cell .tiny { font-size:0.7rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; display:inline-block; vertical-align:middle; }
         .order-cell-link { display:block; text-decoration:none; }
@@ -239,30 +253,16 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                 <h2 style="margin:0 0 0.15rem;font-size:1.25rem;">ניהול יומי</h2>
                 <div class="muted">תצוגת הזמנות לפי יום ושעות השאלה (09:00–17:00)</div>
             </div>
-            <div style="display:flex; gap:0.5rem; align-items:center;">
-                <a class="icon-btn"
-                   href="admin_daily.php?<?= htmlspecialchars(http_build_query(['day' => $prevDay, 'category' => $selectedCategory, 'q' => $searchQ]), ENT_QUOTES, 'UTF-8') ?>"
-                   title="יום קודם"
-                   aria-label="יום קודם">
-                    <i data-lucide="chevron-right" aria-hidden="true"></i>
-                </a>
-                <a class="icon-btn"
-                   href="admin_daily.php?<?= htmlspecialchars(http_build_query(['day' => $nextDay, 'category' => $selectedCategory, 'q' => $searchQ]), ENT_QUOTES, 'UTF-8') ?>"
-                   title="יום הבא"
-                   aria-label="יום הבא">
-                    <i data-lucide="chevron-left" aria-hidden="true"></i>
-                </a>
-            </div>
         </div>
 
-        <form method="get" action="admin_daily.php" class="filters-row">
+        <form method="get" action="admin_daily.php" class="filters-row" id="daily_filters_form">
             <div class="filter-block" style="min-width:170px;">
                 <label for="day_input">בחירת תאריך</label>
-                <input id="day_input" type="date" name="day" value="<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>">
+                <input id="day_input" type="date" name="day" value="<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>" onchange="this.form.submit()">
             </div>
             <div class="filter-block" style="min-width:200px;">
                 <label for="cat_input">בחירת קטגוריה</label>
-                <select id="cat_input" name="category">
+                <select id="cat_input" name="category" onchange="this.form.submit()">
                     <option value="all" <?= ($selectedCategory === 'all' || $selectedCategory === '') ? 'selected' : '' ?>>הכל</option>
                     <?php foreach ($categories as $cat): ?>
                         <option value="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>" <?= $selectedCategory === $cat ? 'selected' : '' ?>>
@@ -275,7 +275,19 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                 <label for="q_input">חיפוש פריט ציוד לפי שם</label>
                 <input id="q_input" type="text" name="q" value="<?= htmlspecialchars($searchQ, ENT_QUOTES, 'UTF-8') ?>" placeholder="הקלד שם פריט...">
             </div>
-            <div style="min-width:110px;">
+            <div style="display:flex; gap:0.25rem; align-items:flex-end;">
+                <a class="nav-arrow"
+                   href="admin_daily.php?<?= htmlspecialchars(http_build_query(['day' => $prevDay, 'category' => $selectedCategory, 'q' => $searchQ]), ENT_QUOTES, 'UTF-8') ?>"
+                   title="יום קודם"
+                   aria-label="יום קודם">
+                    <i data-lucide="chevron-right" aria-hidden="true"></i>
+                </a>
+                <a class="nav-arrow"
+                   href="admin_daily.php?<?= htmlspecialchars(http_build_query(['day' => $nextDay, 'category' => $selectedCategory, 'q' => $searchQ]), ENT_QUOTES, 'UTF-8') ?>"
+                   title="יום הבא"
+                   aria-label="יום הבא">
+                    <i data-lucide="chevron-left" aria-hidden="true"></i>
+                </a>
                 <button type="submit" class="icon-btn" title="סינון" aria-label="סינון">
                     <i data-lucide="search" aria-hidden="true"></i>
                 </button>
@@ -404,6 +416,20 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
     </div>
 </main>
 <?php include __DIR__ . '/admin_footer.php'; ?>
+<script>
+    (function () {
+        var form = document.getElementById('daily_filters_form');
+        var q = document.getElementById('q_input');
+        if (!form || !q) return;
+        var t = null;
+        q.addEventListener('input', function () {
+            if (t) window.clearTimeout(t);
+            t = window.setTimeout(function () {
+                form.submit();
+            }, 350);
+        });
+    })();
+</script>
 </body>
 </html>
 
