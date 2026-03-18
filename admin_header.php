@@ -402,17 +402,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 <?php endif; ?>
             </div>
             <div>
-                <h1 style="margin:0;font-size:1.3rem;">
-                    <?= ($role === 'admin' || $role === 'warehouse_manager') ? 'מערכת הזמנות ומלאי' : 'מערכת הזמנות' ?>
-                </h1>
                 <?php
                 $userWarehouse = trim((string)($me['warehouse'] ?? ''));
+                $headerTitle = ($role === 'admin' || $role === 'warehouse_manager') ? 'מערכת הזמנות ומלאי' : 'מערכת הזמנות';
                 ?>
+                <h1 style="margin:0;font-size:1.3rem;">
+                    <?= htmlspecialchars($headerTitle, ENT_QUOTES, 'UTF-8') ?>
+                    <?php if ($userWarehouse !== ''): ?>
+                        · <?= htmlspecialchars($userWarehouse, ENT_QUOTES, 'UTF-8') ?>
+                    <?php endif; ?>
+                </h1>
                 <div class="muted">
                     פלטפורמה לניהול השאלת ציוד
-                    <?php if ($userWarehouse !== ''): ?>
-                        · מחסן: <?= htmlspecialchars($userWarehouse, ENT_QUOTES, 'UTF-8') ?>
-                    <?php endif; ?>
                 </div>
             </div>
         </div>
