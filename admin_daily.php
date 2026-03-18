@@ -213,17 +213,18 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
         .icon-btn:hover { background:#f3f4f6; }
         .day-nav { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin: 0.5rem 0 0.75rem; }
 
-        .grid-wrap { overflow:auto; border-radius:12px; border:1px solid #e5e7eb; }
-        table.daily { border-collapse: collapse; width: 100%; min-width: 980px; background:#fff; }
-                        table.daily th, table.daily td { border-bottom:1px solid #eef2f7; border-left:1px solid #eef2f7; padding:0.25rem 0.35rem; text-align:center; font-size:0.82rem; }
-        table.daily th:first-child, table.daily td:first-child { position: sticky; right: 0; background:#fff; z-index: 2; text-align:right; min-width: 220px; }
+        .grid-wrap { overflow-y:auto; overflow-x:hidden; border-radius:12px; border:1px solid #e5e7eb; }
+        table.daily { border-collapse: collapse; width: 100%; min-width: 0; background:#fff; table-layout: fixed; }
+        table.daily th, table.daily td { border-bottom:1px solid #eef2f7; border-left:1px solid #eef2f7; padding:0.18rem 0.22rem; text-align:center; font-size:0.74rem; }
+        table.daily th:first-child, table.daily td:first-child { position: sticky; right: 0; background:#fff; z-index: 2; text-align:right; width: 190px; }
+        table.daily th:not(:first-child), table.daily td:not(:first-child) { width: 64px; }
         table.daily thead th { position: sticky; top: 0; background:#f9fafb; z-index: 3; font-weight:700; }
         table.daily thead th:first-child { z-index: 4; }
         .eq-name { font-weight:600; color:#111827; }
         .eq-code { font-size:0.75rem; color:#6b7280; }
-        .cell { height: 30px; border-radius: 10px; display:flex; align-items:center; justify-content:center; }
+        .cell { height: 24px; border-radius: 10px; display:flex; align-items:center; justify-content:center; }
         .cell.occupied { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06); }
-        .cell .tiny { font-size:0.72rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:110px; display:inline-block; vertical-align:middle; }
+        .cell .tiny { font-size:0.7rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; display:inline-block; vertical-align:middle; }
         .order-cell-link { display:block; text-decoration:none; }
         .order-cell-link .cell { cursor: pointer; }
         .order-cell-link:hover .cell { filter: brightness(0.98); }
