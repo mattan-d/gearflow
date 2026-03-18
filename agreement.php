@@ -226,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$hasSignature) {
             <div>חתימת השואל:</div>
             <?php if ($hasSignature): ?>
                 <div style="margin-top: 0.75rem;">
-                    <img src="signatures/order_<?= (int)$orderId ?>.png"
+                    <img src="order_signature.php?order_id=<?= (int)$orderId ?>"
                          alt="חתימת השואל"
                          style="max-width: 100%; max-height: 180px; border: 1px solid #e5e7eb; border-radius: 8px;">
                 </div>

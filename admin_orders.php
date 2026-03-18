@@ -2091,7 +2091,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                         <?php
                         $todayYmd = date('Y-m-d');
-                        $canShowAgreementButton = false;
+                                $canShowAgreementButton = false;
                         $agreementSigned = false;
                         if ($editingOrder) {
                             $orderStatus = (string)($editingOrder['status'] ?? '');
@@ -2112,8 +2112,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <?php if ($canShowAgreementButton): ?>
                             <button type="button" class="btn secondary"
                                     onclick="window.open('agreement.php?order_id=<?= (int)$editingOrder['id'] ?>', 'agreement', 'width=900,height=700')">
-                                הסכם השאלה<?= $agreementSigned ? ' ✓' : '' ?>
+                                הסכם השאלה<?= $agreementSigned ? ' V' : '' ?>
                             </button>
+                            <?php if ($agreementSigned): ?>
+                                <a href="order_signature.php?order_id=<?= (int)$editingOrder['id'] ?>" target="_blank" class="muted-small" style="margin-right:0.5rem;">
+                                    תמונה חתומה
+                                </a>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </div>
 
@@ -2437,8 +2442,12 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             );
                             if ($showAgreementLink): ?>
                                 <a href="agreement.php?order_id=<?= (int)$order['id'] ?>" target="_blank">
-                                    הסכם השאלה<?= $hasSignatureRow ? ' ✓' : '' ?>
+                                    הסכם השאלה<?= $hasSignatureRow ? ' V' : '' ?>
                                 </a>
+                                <?php if ($hasSignatureRow): ?>
+                                    <span class="muted-small">·</span>
+                                    <a href="order_signature.php?order_id=<?= (int)$order['id'] ?>" target="_blank" class="muted-small">תמונה חתומה</a>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </td>
                         <td class="muted-small">
