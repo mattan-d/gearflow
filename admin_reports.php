@@ -551,6 +551,10 @@ if ($eqShow) {
             align-items: flex-start;
             gap: 1.25rem;
             margin-bottom: 0.75rem;
+            background: #ffffff;
+            border-radius: 10px;
+            padding: 0.7rem 0.75rem;
+            box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
         }
         .report-param-block {
             display: flex;
@@ -566,6 +570,14 @@ if ($eqShow) {
             line-height: 1.35;
             white-space: nowrap;
             display: block;
+        }
+        .report-param-block select,
+        .report-param-block input[type="text"] {
+            padding: 0.25rem 0.6rem;
+            border-radius: 999px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            font-size: 0.85rem;
         }
         .btn {
             border: none;
@@ -592,10 +604,10 @@ if ($eqShow) {
             margin-top: 0.2rem;
         }
         .calendar-icon-btn {
-            width: 2.5rem;
-            height: 2.5rem;
-            border-radius: 8px;
-            border: 1px solid #d1d5db;
+            width: 2.25rem;
+            height: 2.25rem;
+            border-radius: 999px;
+            border: 1px solid #e5e7eb;
             background: #f9fafb;
             color: #374151;
             font-size: 1.15rem;
