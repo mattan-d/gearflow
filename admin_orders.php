@@ -1910,7 +1910,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <label for="borrower_search">שם שואל</label>
                         <?php
                         $defaultBorrower = '';
-                        if (!$editingOrder && $me) {
+                        // פתיחה דרך "ניהול יומי" – לא ממלאים שם שואל אוטומטית
+                        $isDailyPrefillNew = (!$editingOrder && $mode === 'new' && $prefillDay !== '' && $prefillStartTime !== '');
+                        if (!$isDailyPrefillNew && !$editingOrder && $me) {
                             $fn = trim((string)($me['first_name'] ?? ''));
                             $ln = trim((string)($me['last_name'] ?? ''));
                             if ($fn !== '' || $ln !== '') {
@@ -3358,6 +3360,16 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     }
     if (recurringStartTimeSelect) recurringStartTimeSelect.addEventListener('change', function () { updateEquipmentState(); });
 
+    // פתיחה דרך "ניהול יומי": ברירת מחדל הזמנה רגילה + פתיחת לוח שנה + שעת התחלה מוכנה
+    const isDailyPrefillNew = <?= (!$editingOrder && $mode === 'new' && $prefillDay !== '' && $prefillStartTime !== '') ? 'true' : 'false' ?>;
+    if (isDailyPrefillNew) {
+        if (regularToggle) regularToggle.checked = true;
+        if (recurringToggle) recurringToggle.checked = false;
+        if (borrowerSearch) borrowerSearch.value = '';
+        if (borrowerHidden) borrowerHidden.value = '';
+        if (borrowerContactHidden) borrowerContactHidden.value = '';
+    }
+
     // הפעלה ראשונית של מצב ההזמנה (ברירת מחדל: הזמנה רגילה)
     syncOrderModeVisibility();
 
@@ -3522,6 +3534,15 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     // אתחול
     setMode('start');
     updateLabels();
+    // אם נפתח דרך "ניהול יומי" – לוח השנה יישאר פתוח כברירת מחדל, והחודש יתיישר לתאריך שנבחר
+    if (isDailyPrefillNew) {
+        try {
+            viewDate = new Date('<?= htmlspecialchars($prefillDay, ENT_QUOTES, 'UTF-8') ?>T00:00:00');
+        } catch (e) {
+            // ignore
+        }
+        panel.style.display = 'block';
+    }
     updateEquipmentState();
     updateSelectedEquipmentSummary();
     renderCalendar();
