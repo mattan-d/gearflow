@@ -179,6 +179,9 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
         .cell { height: 28px; border-radius: 8px; }
         .cell.occupied { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06); }
         .cell .tiny { font-size:0.72rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:110px; display:inline-block; vertical-align:middle; }
+        .order-cell-link { display:block; text-decoration:none; }
+        .order-cell-link .cell { cursor: pointer; }
+        .order-cell-link:hover .cell { filter: brightness(0.98); }
     </style>
 </head>
 <body>
@@ -279,9 +282,15 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                                             $title = 'הזמנה #' . (int)($hit['id'] ?? 0) . ' · ' . $borrower . ' · ' . ($hit['start_time'] ?? '') . '-' . ($hit['end_time'] ?? '') . ' · ' . $c['label'];
                                             ?>
                                             <td title="<?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?>">
-                                                <div class="cell occupied" style="background:<?= htmlspecialchars($c['bg'], ENT_QUOTES, 'UTF-8') ?>; color:<?= htmlspecialchars($c['fg'], ENT_QUOTES, 'UTF-8') ?>;">
-                                                    <span class="tiny">#<?= (int)($hit['id'] ?? 0) ?> <?= htmlspecialchars($borrower, ENT_QUOTES, 'UTF-8') ?></span>
-                                                </div>
+                                                <a class="order-cell-link"
+                                                   href="admin_orders.php?view_id=<?= (int)($hit['id'] ?? 0) ?>"
+                                                   target="_blank"
+                                                   rel="noopener noreferrer"
+                                                   aria-label="צפייה בהזמנה #<?= (int)($hit['id'] ?? 0) ?>">
+                                                    <div class="cell occupied" style="background:<?= htmlspecialchars($c['bg'], ENT_QUOTES, 'UTF-8') ?>; color:<?= htmlspecialchars($c['fg'], ENT_QUOTES, 'UTF-8') ?>;">
+                                                        <span class="tiny">#<?= (int)($hit['id'] ?? 0) ?> <?= htmlspecialchars($borrower, ENT_QUOTES, 'UTF-8') ?></span>
+                                                    </div>
+                                                </a>
                                             </td>
                                         <?php } else { ?>
                                             <td><div class="cell"></div></td>
