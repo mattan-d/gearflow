@@ -173,6 +173,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $quantityAvailable = 1;
         }
 
+        // פריט חדש: אם לא הוקלד קוד זיהוי – נייצר מספר סידורי אוטומטי (המקס' עבור אותו שם ציוד + 1)
+        if ($id <= 0 && $code === '' && $name !== '') {
+            try {
+                $stmtMax = $pdo->prepare("
+                    SELECT MAX(
+                        CASE
+                            WHEN TRIM(COALESCE(code,'')) GLOB '[0-9]*' THEN CAST(code AS INTEGER)
+                            ELSE NULL
+                        END
+                    ) AS mx
+                    FROM equipment
+                    WHERE TRIM(COALESCE(name,'')) = :n
+                ");
+                $stmtMax->execute([':n' => $name]);
+                $mxRow = $stmtMax->fetch(PDO::FETCH_ASSOC) ?: [];
+                $mx = (int)($mxRow['mx'] ?? 0);
+                $code = (string)($mx + 1);
+            } catch (Throwable $e) {
+                // fallback: נשאיר ריק ונטפל בהמשך ולידציה
+            }
+        }
+
         if ($name === '' || $code === '') {
             $error = 'יש למלא שם ציוד וקוד זיהוי.';
         } else {
@@ -2399,6 +2421,49 @@ document.addEventListener('DOMContentLoaded', function () {
     var deletePictureBtn = document.getElementById('delete_picture_btn');
     var deletePictureInput = document.getElementById('delete_picture');
     var existingPictureRow = document.getElementById('existing_picture_row');
+
+    // מספר סידורי אוטומטי: בעת הזנת שם ציוד בפריט חדש – קוד הזיהוי יקבע ל-(המקס' עבור אותו שם + 1)
+    (function () {
+        var isNew = <?= (!$editingEquipment && !$isViewModeEq) ? 'true' : 'false' ?>;
+        if (!isNew) return;
+        var nameInput = document.getElementById('name');
+        var codeInput = document.getElementById('code');
+        if (!nameInput || !codeInput) return;
+
+        // בניית מפה name->max מתוך כל הציוד הטעון (לא מדויק לכל פילטרים אבל מספיק כברירת מחדל)
+        var maxByName = {};
+        try {
+            var rows = <?= json_encode(array_map(function ($r) {
+                return [
+                    'name' => trim((string)($r['name'] ?? '')),
+                    'code' => trim((string)($r['code'] ?? '')),
+                ];
+            }, $allEquipment ?? []), JSON_UNESCAPED_UNICODE) ?>;
+            if (Array.isArray(rows)) {
+                rows.forEach(function (r) {
+                    var n = (r && r.name) ? String(r.name).trim() : '';
+                    var c = (r && r.code) ? String(r.code).trim() : '';
+                    if (!n || !c) return;
+                    if (!/^\d+$/.test(c)) return;
+                    var num = parseInt(c, 10);
+                    if (!maxByName[n] || num > maxByName[n]) maxByName[n] = num;
+                });
+            }
+        } catch (e) {
+            maxByName = {};
+        }
+
+        function setNextIfEmpty() {
+            if (String(codeInput.value || '').trim() !== '') return;
+            var n = String(nameInput.value || '').trim();
+            if (!n) return;
+            var mx = maxByName[n] || 0;
+            codeInput.value = String(mx + 1);
+        }
+
+        nameInput.addEventListener('blur', setNextIfEmpty);
+        nameInput.addEventListener('change', setNextIfEmpty);
+    })();
 
     if (deletePictureBtn && deletePictureInput) {
         deletePictureBtn.addEventListener('click', function () {
