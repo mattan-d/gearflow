@@ -505,7 +505,7 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
             if (t) window.clearTimeout(t);
             t = window.setTimeout(function () {
                 form.submit();
-            }, 350);
+            }, 500);
         });
     })();
 </script>
