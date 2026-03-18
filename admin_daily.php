@@ -229,6 +229,7 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
         .swatch { width:12px; height:12px; border-radius:4px; border:1px solid rgba(0,0,0,0.12); }
         .muted { color:#6b7280; font-size:0.85rem; }
         .filters-row { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; margin: 0.65rem 0 0.85rem; }
+        .filter-block + .filter-block { margin-right: 0.5rem; }
         .filter-block { min-width: 160px; }
         .filter-block label { display:block; font-size:0.8rem; color:#374151; margin-bottom:0.25rem; }
         .filter-block input[type="date"],
