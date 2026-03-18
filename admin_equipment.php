@@ -85,6 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status       = $_POST['status'] ?? 'active';
         $serviceSupplierId = isset($_POST['service_supplier_id']) ? (int)$_POST['service_supplier_id'] : 0;
         $serviceLabId      = isset($_POST['service_lab_id']) ? (int)$_POST['service_lab_id'] : 0;
+        // שדה אחריות באזור "שירות" הוסר – נשמר רק עבור תאימות אחורה
         $serviceWarrantyMode = trim((string)($_POST['service_warranty_mode'] ?? ''));
         $serviceWarrantySupplierId = isset($_POST['service_warranty_supplier_id']) ? (int)$_POST['service_warranty_supplier_id'] : 0;
         $warrantyStart = trim((string)($_POST['warranty_start'] ?? ''));
@@ -92,6 +93,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // אם נבחר ספק אחריות מהרשימה (sup_ID), נשמור גם את ה-ID בעמודה הייעודית
         if (str_starts_with($serviceWarrantyMode, 'sup_')) {
             $serviceWarrantySupplierId = (int)substr($serviceWarrantyMode, 4);
+        }
+        if ($serviceWarrantyMode === '') {
+            $serviceWarrantySupplierId = 0;
         }
 
         // ניהול תמונה: שמירה / מחיקה / החלפה של קובץ שהועלה לשרת
@@ -1869,8 +1873,6 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                     <?php
                     $currentServiceSupplierId         = (int)($editingEquipment['service_supplier_id'] ?? 0);
                     $currentServiceLabId              = (int)($editingEquipment['service_lab_id'] ?? 0);
-                    $currentServiceWarrantyMode       = (string)($editingEquipment['service_warranty_mode'] ?? '');
-                    $currentServiceWarrantySupplierId = (int)($editingEquipment['service_warranty_supplier_id'] ?? 0);
                     ?>
                     <div style="margin-top:0.75rem;">
                         <div class="muted-small" style="margin-bottom:0.25rem;font-weight:600;font-size:0.95rem;">שירות</div>
@@ -1914,42 +1916,6 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                                         <?php endforeach; ?>
                                     </select>
                                 <?php endif; ?>
-                            </div>
-                            <div>
-                                <label for="service_warranty_mode">אחריות</label>
-                                <?php
-                                $warrantySupplierId = 0;
-                                if ($currentServiceWarrantyMode === 'by_supplier') {
-                                    $warrantySupplierId = $currentServiceSupplierId;
-                                } elseif ($currentServiceWarrantyMode === 'by_lab') {
-                                    $warrantySupplierId = $currentServiceLabId;
-                                } elseif (str_starts_with($currentServiceWarrantyMode, 'sup_')) {
-                                    $warrantySupplierId = (int)substr($currentServiceWarrantyMode, 4);
-                                } elseif ($currentServiceWarrantySupplierId > 0) {
-                                    $warrantySupplierId = $currentServiceWarrantySupplierId;
-                                }
-                                ?>
-                                <?php if ($isViewModeEq && $warrantySupplierId > 0 && isset($serviceSuppliersById[$warrantySupplierId])): ?>
-                                    <a href="admin_suppliers.php?view_id=<?= $warrantySupplierId ?>"
-                                       style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#2563eb;min-width:0;"
-                                       target="_blank" rel="noopener noreferrer">
-                                        <?= htmlspecialchars((string)($serviceSuppliersById[$warrantySupplierId]['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
-                                    </a>
-                                <?php else: ?>
-                                    <select id="service_warranty_mode" name="service_warranty_mode" <?= $isViewModeEq ? 'disabled' : '' ?>>
-                                        <option value="">ללא</option>
-                                        <option value="by_supplier" <?= $currentServiceWarrantyMode === 'by_supplier' ? 'selected' : '' ?>>על פי ספק</option>
-                                        <option value="by_lab" <?= $currentServiceWarrantyMode === 'by_lab' ? 'selected' : '' ?>>על פי מעבדה</option>
-                                        <?php foreach ($serviceSuppliers['warranty'] as $sup): ?>
-                                            <?php $sid = (int)($sup['id'] ?? 0); ?>
-                                            <option value="sup_<?= $sid ?>" <?= $currentServiceWarrantyMode === 'sup_'.$sid ? 'selected' : '' ?>>
-                                                <?= htmlspecialchars((string)($sup['company_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
-                                <?php endif; ?>
-                                <input type="hidden" id="service_warranty_supplier_id" name="service_warranty_supplier_id"
-                                       value="<?= $currentServiceWarrantySupplierId > 0 ? (int)$currentServiceWarrantySupplierId : 0 ?>">
                             </div>
                         </div>
                     </div>
