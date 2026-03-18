@@ -55,6 +55,9 @@ $ordersReport = [
     'returned'           => 0,
     'not_picked'         => 0,
     'not_returned_late'  => 0,
+    'returned_ok'        => 0,
+    'returned_after_not_picked' => 0,
+    'returned_after_not_returned_time' => 0,
     'returned_broken'    => 0,
     'returned_missing'   => 0,
 ];
@@ -72,6 +75,16 @@ if (isset($_GET['orders_show'])) {
              SUM(CASE WHEN o.status = 'returned' THEN 1 ELSE 0 END) AS returned_count,
              SUM(CASE WHEN o.status = 'approved' AND DATE(o.end_date) < DATE('now') THEN 1 ELSE 0 END) AS not_picked_count,
              SUM(CASE WHEN o.status = 'on_loan'  AND DATE(o.end_date) < DATE('now') THEN 1 ELSE 0 END) AS not_returned_late_count,
+             SUM(CASE WHEN o.status = 'returned'
+                       AND COALESCE(o.return_equipment_status, '') = 'תקין'
+                       AND COALESCE(o.equipment_return_condition, '') = 'תקין'
+                 THEN 1 ELSE 0 END) AS returned_ok_count,
+             SUM(CASE WHEN o.status = 'returned'
+                       AND COALESCE(o.return_equipment_status, '') = 'לא נאסף'
+                 THEN 1 ELSE 0 END) AS returned_after_not_picked_count,
+             SUM(CASE WHEN o.status = 'returned'
+                       AND COALESCE(o.return_equipment_status, '') = 'לא הוחזר בזמן'
+                 THEN 1 ELSE 0 END) AS returned_after_not_returned_time_count,
              SUM(CASE WHEN o.status = 'returned' AND o.equipment_return_condition = 'תקול' THEN 1 ELSE 0 END) AS returned_broken_count,
              SUM(CASE WHEN o.status = 'returned' AND o.equipment_return_condition = 'חסר' THEN 1 ELSE 0 END) AS returned_missing_count
          FROM orders o
@@ -134,6 +147,9 @@ if (isset($_GET['orders_show'])) {
     $ordersReport['returned']          = (int)($row['returned_count'] ?? 0);
     $ordersReport['not_picked']        = (int)($row['not_picked_count'] ?? 0);
     $ordersReport['not_returned_late'] = (int)($row['not_returned_late_count'] ?? 0);
+    $ordersReport['returned_ok']       = (int)($row['returned_ok_count'] ?? 0);
+    $ordersReport['returned_after_not_picked'] = (int)($row['returned_after_not_picked_count'] ?? 0);
+    $ordersReport['returned_after_not_returned_time'] = (int)($row['returned_after_not_returned_time_count'] ?? 0);
     $ordersReport['returned_broken']   = (int)($row['returned_broken_count'] ?? 0);
     $ordersReport['returned_missing']  = (int)($row['returned_missing_count'] ?? 0);
 }
@@ -237,6 +253,19 @@ if ($ordersReport['has_range'] && $ordersDetailKey !== '') {
         case 'returned':
             $sqlDetail .= " AND o.status = 'returned'";
             break;
+        case 'returned_ok':
+            $sqlDetail .= " AND o.status = 'returned'
+                            AND COALESCE(o.return_equipment_status, '') = 'תקין'
+                            AND COALESCE(o.equipment_return_condition, '') = 'תקין'";
+            break;
+        case 'returned_after_not_picked':
+            $sqlDetail .= " AND o.status = 'returned'
+                            AND COALESCE(o.return_equipment_status, '') = 'לא נאסף'";
+            break;
+        case 'returned_after_not_returned_time':
+            $sqlDetail .= " AND o.status = 'returned'
+                            AND COALESCE(o.return_equipment_status, '') = 'לא הוחזר בזמן'";
+            break;
         case 'not_picked':
             $sqlDetail .= " AND o.status = 'approved' AND DATE(o.start_date) < DATE('now')";
             break;
@@ -272,6 +301,9 @@ $ordersChartMax = max(
     $ordersReport['returned'],
     $ordersReport['not_picked'],
     $ordersReport['not_returned_late'],
+    $ordersReport['returned_ok'],
+    $ordersReport['returned_after_not_picked'],
+    $ordersReport['returned_after_not_returned_time'],
     $ordersReport['returned_broken'],
     $ordersReport['returned_missing']
 );
@@ -824,13 +856,12 @@ if ($eqShow) {
                         $bars = [];
                         if ($reportStatus === 'returned') {
                             // עבור סטטוס "עבר" מציגים התפלגות מיוחדת
-                            if ($showTotalBar) {
-                                $bars['כמות הזמנות (סה״כ)'] = $ordersReport['returned'];
-                            }
-                            $bars['הוזמנו ולא נלקחו']      = $ordersReport['not_picked'];
-                            $bars['לא הושבו בזמן']         = $ordersReport['not_returned_late'];
-                            $bars['הוחזר עם ציוד תקול']    = $ordersReport['returned_broken'];
-                            $bars['הוחזר עם ציוד חסר']     = $ordersReport['returned_missing'];
+                            $bars['כל ההזמנות בסטטוס עבר'] = $ordersReport['returned'];
+                            $bars['הוחזרו במצב תקין'] = $ordersReport['returned_ok'];
+                            $bars['הוחזרו לאחר שלא נאספו'] = $ordersReport['returned_after_not_picked'];
+                            $bars['הוחזרו לאחר שלא הוחזרו בזמן'] = $ordersReport['returned_after_not_returned_time'];
+                            $bars['הוחזרו עם ציוד תקול'] = $ordersReport['returned_broken'];
+                            $bars['הוחזרו עם ציוד חסר'] = $ordersReport['returned_missing'];
                         } else {
                             if ($showTotalBar) {
                                 $bars['כמות הזמנות (סה״כ)'] = $ordersReport['total'];
@@ -893,10 +924,24 @@ if ($eqShow) {
                             case 'לא הושבו בזמן':
                                 $detailKey = 'not_returned_late';
                                 break;
-                            case 'הוחזר עם ציוד תקול':
+
+                            // פילוח סטטוס "עבר"
+                            case 'כל ההזמנות בסטטוס עבר':
+                                $detailKey = 'returned';
+                                break;
+                            case 'הוחזרו במצב תקין':
+                                $detailKey = 'returned_ok';
+                                break;
+                            case 'הוחזרו לאחר שלא נאספו':
+                                $detailKey = 'returned_after_not_picked';
+                                break;
+                            case 'הוחזרו לאחר שלא הוחזרו בזמן':
+                                $detailKey = 'returned_after_not_returned_time';
+                                break;
+                            case 'הוחזרו עם ציוד תקול':
                                 $detailKey = 'returned_broken';
                                 break;
-                            case 'הוחזר עם ציוד חסר':
+                            case 'הוחזרו עם ציוד חסר':
                                 $detailKey = 'returned_missing';
                                 break;
                         }
