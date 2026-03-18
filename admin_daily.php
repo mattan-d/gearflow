@@ -19,6 +19,50 @@ if (!in_array($role, ['admin', 'warehouse_manager'], true)) {
 
 $pdo = get_db();
 
+$action = isset($_GET['action']) ? trim((string)$_GET['action']) : '';
+if ($action === 'order_json') {
+    header('Content-Type: application/json; charset=UTF-8');
+    $orderId = isset($_GET['order_id']) ? (int)$_GET['order_id'] : 0;
+    if ($orderId <= 0) {
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'error' => 'Bad request'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT
+                o.id,
+                o.status,
+                o.borrower_name,
+                o.borrower_contact,
+                o.start_date,
+                o.end_date,
+                o.start_time,
+                o.end_time,
+                o.notes,
+                e.name AS equipment_name,
+                e.code AS equipment_code
+             FROM orders o
+             JOIN equipment e ON e.id = o.equipment_id
+             WHERE o.id = :id
+             LIMIT 1"
+        );
+        $stmt->execute([':id' => $orderId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        if (!$row) {
+            http_response_code(404);
+            echo json_encode(['ok' => false, 'error' => 'Not found'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        echo json_encode(['ok' => true, 'order' => $row], JSON_UNESCAPED_UNICODE);
+        exit;
+    } catch (Throwable $e) {
+        http_response_code(500);
+        echo json_encode(['ok' => false, 'error' => 'Server error'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
 $todayYmd = date('Y-m-d');
 $day = isset($_GET['day']) ? trim((string)$_GET['day']) : '';
 if ($day === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) {
@@ -242,6 +286,27 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
         .order-cell-link { display:block; text-decoration:none; }
         .order-cell-link .cell { cursor: pointer; }
         .order-cell-link:hover .cell { filter: brightness(0.98); }
+        .order-details {
+            margin-top: 0.9rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 0.85rem 1rem;
+            background: #f9fafb;
+            display: none;
+        }
+        .order-details .row {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .order-details h3 { margin:0; font-size:1rem; color:#111827; }
+        .order-details .kv { display:flex; gap:0.5rem; flex-wrap:wrap; font-size:0.85rem; color:#374151; }
+        .order-details .kv b { color:#111827; }
+        .order-details .actions { display:flex; gap:0.4rem; align-items:center; }
+        .order-details .close-x { border:none; background:transparent; cursor:pointer; padding:0.25rem; border-radius:8px; }
+        .order-details .close-x:hover { background:#eef2f7; }
     </style>
 </head>
 <body>
@@ -393,10 +458,9 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                                         $title = 'הזמנה #' . (int)($hit['id'] ?? 0) . ' · ' . $borrower . ' · ' . ($hit['start_time'] ?? '') . '-' . ($hit['end_time'] ?? '') . ' · ' . $c['label'];
                                         ?>
                                         <td colspan="<?= (int)$span ?>" title="<?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?>">
-                                            <a class="order-cell-link"
-                                               href="admin_orders.php?view_id=<?= (int)($hit['id'] ?? 0) ?>"
-                                               target="_blank"
-                                               rel="noopener noreferrer"
+                                            <a class="order-cell-link js-order-open"
+                                               href="#"
+                                               data-order-id="<?= (int)($hit['id'] ?? 0) ?>"
                                                aria-label="צפייה בהזמנה #<?= (int)($hit['id'] ?? 0) ?>">
                                                 <div class="cell occupied" style="background:<?= htmlspecialchars($c['bg'], ENT_QUOTES, 'UTF-8') ?>; color:<?= htmlspecialchars($c['fg'], ENT_QUOTES, 'UTF-8') ?>;">
                                                     <span class="tiny">#<?= (int)($hit['id'] ?? 0) ?> <?= htmlspecialchars($borrower, ENT_QUOTES, 'UTF-8') ?></span>
@@ -413,6 +477,21 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                         </tbody>
                     </table>
                 </div>
+
+                <div class="order-details" id="daily_order_details" aria-live="polite">
+                    <div class="row" style="margin-bottom:0.5rem;">
+                        <h3 id="daily_order_title">פרטי הזמנה</h3>
+                        <div class="actions">
+                            <a class="icon-btn" id="daily_order_open_full" href="#" target="_blank" rel="noopener noreferrer" title="פתיחה במנהל הזמנות" aria-label="פתיחה במנהל הזמנות">
+                                <i data-lucide="external-link" aria-hidden="true"></i>
+                            </a>
+                            <button type="button" class="close-x" id="daily_order_close" title="סגירה" aria-label="סגירה">
+                                <i data-lucide="x" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="kv" id="daily_order_kv"></div>
+                </div>
     </div>
 </main>
 <?php include __DIR__ . '/admin_footer.php'; ?>
@@ -428,6 +507,69 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                 form.submit();
             }, 350);
         });
+    })();
+</script>
+<script>
+    (function () {
+        var panel = document.getElementById('daily_order_details');
+        var kv = document.getElementById('daily_order_kv');
+        var title = document.getElementById('daily_order_title');
+        var closeBtn = document.getElementById('daily_order_close');
+        var openFull = document.getElementById('daily_order_open_full');
+        if (!panel || !kv || !title || !closeBtn || !openFull) return;
+
+        function hide() {
+            panel.style.display = 'none';
+        }
+        closeBtn.addEventListener('click', hide);
+
+        document.querySelectorAll('.js-order-open').forEach(function (a) {
+            a.addEventListener('click', function (e) {
+                e.preventDefault();
+                var id = this.getAttribute('data-order-id') || '';
+                if (!id) return;
+                title.textContent = 'הזמנה #' + id;
+                kv.textContent = 'טוען...';
+                panel.style.display = 'block';
+                if (window.lucide) lucide.createIcons();
+
+                openFull.href = 'admin_orders.php?view_id=' + encodeURIComponent(id);
+
+                fetch('admin_daily.php?action=order_json&order_id=' + encodeURIComponent(id), {
+                    credentials: 'same-origin'
+                }).then(function (r) { return r.json(); })
+                  .then(function (data) {
+                      if (!data || !data.ok || !data.order) {
+                          kv.textContent = 'לא ניתן לטעון פרטי הזמנה.';
+                          return;
+                      }
+                      var o = data.order;
+                      var parts = [];
+                      parts.push('<b>ציוד:</b> ' + escapeHtml((o.equipment_name || '') + ' (' + (o.equipment_code || '') + ')'));
+                      parts.push('<b>סטטוס:</b> ' + escapeHtml(o.status || ''));
+                      parts.push('<b>שואל:</b> ' + escapeHtml(o.borrower_name || ''));
+                      if (o.borrower_contact) parts.push('<b>טלפון/מייל:</b> ' + escapeHtml(o.borrower_contact));
+                      parts.push('<b>תאריך/שעה:</b> ' + escapeHtml((o.start_date || '') + ' ' + (o.start_time || '') + ' → ' + (o.end_date || '') + ' ' + (o.end_time || '')));
+                      if (o.notes) parts.push('<b>הערות:</b> ' + escapeHtml(o.notes));
+                      kv.innerHTML = parts.map(function (p) { return '<span>' + p + '</span>'; }).join(' · ');
+                  })
+                  .catch(function () {
+                      kv.textContent = 'לא ניתן לטעון פרטי הזמנה.';
+                  });
+
+                panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        });
+
+        function escapeHtml(s) {
+            s = String(s == null ? '' : s);
+            return s
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
     })();
 </script>
 </body>
