@@ -228,7 +228,7 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
         .legend-item { display:flex; align-items:center; gap:0.35rem; font-size:0.82rem; color:#374151; }
         .swatch { width:12px; height:12px; border-radius:4px; border:1px solid rgba(0,0,0,0.12); }
         .muted { color:#6b7280; font-size:0.85rem; }
-        .filters-row { display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap; margin: 0.5rem 0 0.75rem; }
+        .filters-row { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; margin: 0.65rem 0 0.85rem; }
         .filter-block { min-width: 160px; }
         .filter-block label { display:block; font-size:0.8rem; color:#374151; margin-bottom:0.25rem; }
         .filter-block input[type="date"],
@@ -372,7 +372,7 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                 <label for="day_input">בחירת תאריך</label>
                 <input id="day_input" type="date" name="day" value="<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>" onchange="this.form.submit()">
             </div>
-            <div class="filter-block" style="min-width:200px;">
+            <div class="filter-block" style="min-width:190px;">
                 <label for="cat_input">בחירת קטגוריה</label>
                 <select id="cat_input" name="category" onchange="this.form.submit()">
                     <option value="all" <?= ($selectedCategory === 'all' || $selectedCategory === '') ? 'selected' : '' ?>>הכל</option>
@@ -383,11 +383,11 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="filter-block" style="flex:1; min-width:220px;">
+            <div class="filter-block" style="max-width:360px; min-width:220px;">
                 <label for="q_input">חיפוש פריט ציוד לפי שם</label>
                 <input id="q_input" type="text" name="q" value="<?= htmlspecialchars($searchQ, ENT_QUOTES, 'UTF-8') ?>" placeholder="הקלד שם פריט...">
             </div>
-            <div style="display:flex; gap:0.25rem; align-items:flex-end;">
+            <div style="display:flex; gap:0.4rem; align-items:flex-end;">
                 <a class="nav-arrow"
                    href="admin_daily.php?<?= htmlspecialchars(http_build_query(['day' => $prevDay, 'category' => $selectedCategory, 'q' => $searchQ]), ENT_QUOTES, 'UTF-8') ?>"
                    title="יום קודם"
@@ -400,9 +400,6 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                    aria-label="יום הבא">
                     <i data-lucide="chevron-left" aria-hidden="true"></i>
                 </a>
-                <button type="submit" class="icon-btn" title="סינון" aria-label="סינון">
-                    <i data-lucide="search" aria-hidden="true"></i>
-                </button>
             </div>
         </form>
 
