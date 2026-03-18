@@ -1206,6 +1206,14 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         .main-nav-item-wrapper {
             position: relative;
         }
+        .equipment-components-link {
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .equipment-components-link:hover {
+            text-decoration: underline;
+        }
         /* .main-nav-sub מוגדר ב־admin_header.php */
         main {
             max-width: 1150px;
