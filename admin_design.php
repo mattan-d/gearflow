@@ -17,6 +17,16 @@ $defaultDesign = [
     'header_link' => '#e5e7eb',
     'header_muted' => '#9ca3af',
     'logo_path' => '',
+    // כותרות
+    'title_student' => 'מערכת הזמנות',
+    'title_admin'   => 'מערכת הזמנות ומלאי',
+    // כותרות תפריט ראשי (מנהל/מנהל מחסן)
+    'nav_equipment' => 'ניהול ציוד',
+    'nav_orders'    => 'ניהול הזמנות',
+    'nav_users'     => 'ניהול משתמשים',
+    'nav_suppliers' => 'ספקים',
+    'nav_reports'   => 'דוחות',
+    'nav_system'    => 'ניהול מערכת',
 ];
 $design = $defaultDesign;
 if (is_file($designFile)) {
@@ -97,6 +107,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $error = 'שגיאה בהעלאת הקובץ.';
         }
+    }
+
+    // כותרות (שם מערכת + תפריט ראשי)
+    if (isset($_POST['save_titles']) && (string)$_POST['save_titles'] === '1') {
+        $design['title_student'] = trim((string)($_POST['title_student'] ?? $defaultDesign['title_student']));
+        $design['title_admin']   = trim((string)($_POST['title_admin'] ?? $defaultDesign['title_admin']));
+
+        $design['nav_equipment'] = trim((string)($_POST['nav_equipment'] ?? $defaultDesign['nav_equipment']));
+        $design['nav_orders']    = trim((string)($_POST['nav_orders'] ?? $defaultDesign['nav_orders']));
+        $design['nav_users']     = trim((string)($_POST['nav_users'] ?? $defaultDesign['nav_users']));
+        $design['nav_suppliers'] = trim((string)($_POST['nav_suppliers'] ?? $defaultDesign['nav_suppliers']));
+        $design['nav_reports']   = trim((string)($_POST['nav_reports'] ?? $defaultDesign['nav_reports']));
+        $design['nav_system']    = trim((string)($_POST['nav_system'] ?? $defaultDesign['nav_system']));
+
+        // לא משאירים ריקים – חוזרים לברירת מחדל
+        foreach ([
+            'title_student' => $defaultDesign['title_student'],
+            'title_admin'   => $defaultDesign['title_admin'],
+            'nav_equipment' => $defaultDesign['nav_equipment'],
+            'nav_orders'    => $defaultDesign['nav_orders'],
+            'nav_users'     => $defaultDesign['nav_users'],
+            'nav_suppliers' => $defaultDesign['nav_suppliers'],
+            'nav_reports'   => $defaultDesign['nav_reports'],
+            'nav_system'    => $defaultDesign['nav_system'],
+        ] as $k => $fallback) {
+            if (trim((string)($design[$k] ?? '')) === '') {
+                $design[$k] = $fallback;
+            }
+        }
+
+        file_put_contents($designFile, json_encode($design, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+        $success = 'הכותרות נשמרו בהצלחה.';
     }
 }
 
@@ -358,6 +400,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <?php endforeach; ?>
                 </div>
                 <div class="color-label muted-small">לחץ על תבנית כדי להחיל אותה על כל המערכת.</div>
+            </form>
+        </div>
+
+        <div class="logo-section" style="border-top:none;margin-top:0;padding-top:0;">
+            <h2 style="margin-top:0;">כותרות</h2>
+            <p class="muted-small" style="margin-top:-0.5rem;">
+                שינוי שם המערכת בכותרת העליונה ושמות קישורי התפריט הראשי.
+            </p>
+
+            <form method="post" action="admin_design.php" style="margin-top:0.75rem;">
+                <input type="hidden" name="save_titles" value="1">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;align-items:end;flex-wrap:wrap;">
+                    <div>
+                        <label class="muted-small" for="title_student" style="display:block;margin-bottom:0.25rem;">כותרת מערכת (סטודנט)</label>
+                        <input id="title_student" name="title_student" type="text"
+                               value="<?= htmlspecialchars((string)($design['title_student'] ?? $defaultDesign['title_student']), ENT_QUOTES, 'UTF-8') ?>"
+                               style="width:100%;padding:0.5rem 0.65rem;border:1px solid #d1d5db;border-radius:10px;font-size:0.9rem;">
+                    </div>
+                    <div>
+                        <label class="muted-small" for="title_admin" style="display:block;margin-bottom:0.25rem;">כותרת מערכת (מנהל/מנהל מחסן)</label>
+                        <input id="title_admin" name="title_admin" type="text"
+                               value="<?= htmlspecialchars((string)($design['title_admin'] ?? $defaultDesign['title_admin']), ENT_QUOTES, 'UTF-8') ?>"
+                               style="width:100%;padding:0.5rem 0.65rem;border:1px solid #d1d5db;border-radius:10px;font-size:0.9rem;">
+                    </div>
+                </div>
+
+                <div style="margin-top:1rem;">
+                    <div class="muted-small" style="margin-bottom:0.5rem;font-weight:600;color:#111827;">תפריט ראשי (מנהל/מנהל מחסן)</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;align-items:end;">
+                        <div>
+                            <label class="muted-small" for="nav_equipment" style="display:block;margin-bottom:0.25rem;">ניהול ציוד</label>
+                            <input id="nav_equipment" name="nav_equipment" type="text"
+                                   value="<?= htmlspecialchars((string)($design['nav_equipment'] ?? $defaultDesign['nav_equipment']), ENT_QUOTES, 'UTF-8') ?>"
+                                   style="width:100%;padding:0.5rem 0.65rem;border:1px solid #d1d5db;border-radius:10px;font-size:0.9rem;">
+                        </div>
+                        <div>
+                            <label class="muted-small" for="nav_orders" style="display:block;margin-bottom:0.25rem;">ניהול הזמנות</label>
+                            <input id="nav_orders" name="nav_orders" type="text"
+                                   value="<?= htmlspecialchars((string)($design['nav_orders'] ?? $defaultDesign['nav_orders']), ENT_QUOTES, 'UTF-8') ?>"
+                                   style="width:100%;padding:0.5rem 0.65rem;border:1px solid #d1d5db;border-radius:10px;font-size:0.9rem;">
+                        </div>
+                        <div>
+                            <label class="muted-small" for="nav_users" style="display:block;margin-bottom:0.25rem;">ניהול משתמשים</label>
+                            <input id="nav_users" name="nav_users" type="text"
+                                   value="<?= htmlspecialchars((string)($design['nav_users'] ?? $defaultDesign['nav_users']), ENT_QUOTES, 'UTF-8') ?>"
+                                   style="width:100%;padding:0.5rem 0.65rem;border:1px solid #d1d5db;border-radius:10px;font-size:0.9rem;">
+                        </div>
+                        <div>
+                            <label class="muted-small" for="nav_suppliers" style="display:block;margin-bottom:0.25rem;">ספקים</label>
+                            <input id="nav_suppliers" name="nav_suppliers" type="text"
+                                   value="<?= htmlspecialchars((string)($design['nav_suppliers'] ?? $defaultDesign['nav_suppliers']), ENT_QUOTES, 'UTF-8') ?>"
+                                   style="width:100%;padding:0.5rem 0.65rem;border:1px solid #d1d5db;border-radius:10px;font-size:0.9rem;">
+                        </div>
+                        <div>
+                            <label class="muted-small" for="nav_reports" style="display:block;margin-bottom:0.25rem;">דוחות</label>
+                            <input id="nav_reports" name="nav_reports" type="text"
+                                   value="<?= htmlspecialchars((string)($design['nav_reports'] ?? $defaultDesign['nav_reports']), ENT_QUOTES, 'UTF-8') ?>"
+                                   style="width:100%;padding:0.5rem 0.65rem;border:1px solid #d1d5db;border-radius:10px;font-size:0.9rem;">
+                        </div>
+                        <div>
+                            <label class="muted-small" for="nav_system" style="display:block;margin-bottom:0.25rem;">ניהול מערכת</label>
+                            <input id="nav_system" name="nav_system" type="text"
+                                   value="<?= htmlspecialchars((string)($design['nav_system'] ?? $defaultDesign['nav_system']), ENT_QUOTES, 'UTF-8') ?>"
+                                   style="width:100%;padding:0.5rem 0.65rem;border:1px solid #d1d5db;border-radius:10px;font-size:0.9rem;">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top:0.9rem;">
+                    <button type="submit" class="btn" style="background:#111827;color:#f9fafb;">שמירה</button>
+                </div>
             </form>
         </div>
 

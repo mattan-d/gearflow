@@ -21,6 +21,16 @@ $headerMuted = '#9ca3af';
 $footerText = '#f9fafb';
 $footerMuted = '#9ca3af';
 $logoPath = '';
+$titleStudent = 'מערכת הזמנות';
+$titleAdmin = 'מערכת הזמנות ומלאי';
+$navLabels = [
+    'equipment' => 'ניהול ציוד',
+    'orders'    => 'ניהול הזמנות',
+    'users'     => 'ניהול משתמשים',
+    'suppliers' => 'ספקים',
+    'reports'   => 'דוחות',
+    'system'    => 'ניהול מערכת',
+];
 if (is_file($designFile)) {
     $json = file_get_contents($designFile);
     $data = json_decode($json, true);
@@ -52,6 +62,30 @@ if (is_file($designFile)) {
         }
         if (!empty($data['logo_path'])) {
             $logoPath = (string)$data['logo_path'];
+        }
+        if (!empty($data['title_student'])) {
+            $titleStudent = (string)$data['title_student'];
+        }
+        if (!empty($data['title_admin'])) {
+            $titleAdmin = (string)$data['title_admin'];
+        }
+        if (!empty($data['nav_equipment'])) {
+            $navLabels['equipment'] = (string)$data['nav_equipment'];
+        }
+        if (!empty($data['nav_orders'])) {
+            $navLabels['orders'] = (string)$data['nav_orders'];
+        }
+        if (!empty($data['nav_users'])) {
+            $navLabels['users'] = (string)$data['nav_users'];
+        }
+        if (!empty($data['nav_suppliers'])) {
+            $navLabels['suppliers'] = (string)$data['nav_suppliers'];
+        }
+        if (!empty($data['nav_reports'])) {
+            $navLabels['reports'] = (string)$data['nav_reports'];
+        }
+        if (!empty($data['nav_system'])) {
+            $navLabels['system'] = (string)$data['nav_system'];
         }
     }
 }
@@ -404,7 +438,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <div>
                 <?php
                 $userWarehouse = trim((string)($me['warehouse'] ?? ''));
-                $headerTitle = ($role === 'admin' || $role === 'warehouse_manager') ? 'מערכת הזמנות ומלאי' : 'מערכת הזמנות';
+                $headerTitle = ($role === 'admin' || $role === 'warehouse_manager') ? $titleAdmin : $titleStudent;
                 ?>
                 <h1 style="margin:0;font-size:1.3rem;">
                     <?= htmlspecialchars($headerTitle, ENT_QUOTES, 'UTF-8') ?>
@@ -420,13 +454,13 @@ document.addEventListener('DOMContentLoaded', function() {
         <nav class="main-nav">
             <div class="main-nav-primary">
                 <?php if ($role === 'admin' || $role === 'warehouse_manager'): ?>
-                    <a href="admin_equipment.php">ניהול ציוד</a>
-                    <a href="admin_orders.php">ניהול הזמנות</a>
-                    <a href="admin_users.php">ניהול משתמשים</a>
-                    <a href="admin_suppliers.php">ספקים</a>
-                    <a href="admin_reports.php">דוחות</a>
+                    <a href="admin_equipment.php"><?= htmlspecialchars($navLabels['equipment'], ENT_QUOTES, 'UTF-8') ?></a>
+                    <a href="admin_orders.php"><?= htmlspecialchars($navLabels['orders'], ENT_QUOTES, 'UTF-8') ?></a>
+                    <a href="admin_users.php"><?= htmlspecialchars($navLabels['users'], ENT_QUOTES, 'UTF-8') ?></a>
+                    <a href="admin_suppliers.php"><?= htmlspecialchars($navLabels['suppliers'], ENT_QUOTES, 'UTF-8') ?></a>
+                    <a href="admin_reports.php"><?= htmlspecialchars($navLabels['reports'], ENT_QUOTES, 'UTF-8') ?></a>
                     <div class="main-nav-item-wrapper">
-                        <a href="admin.php">ניהול מערכת</a>
+                        <a href="admin.php"><?= htmlspecialchars($navLabels['system'], ENT_QUOTES, 'UTF-8') ?></a>
                         <div class="main-nav-sub">
                             <a href="admin_settings.php">הגדרות</a>
                             <a href="admin_documents.php">מסמכים</a>
@@ -435,7 +469,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     </div>
                 <?php else: ?>
-                    <a href="admin_orders.php">ניהול הזמנות</a>
+                    <a href="admin_orders.php"><?= htmlspecialchars($navLabels['orders'], ENT_QUOTES, 'UTF-8') ?></a>
                 <?php endif; ?>
                 <div class="main-nav-item-wrapper">
                     <a href="#">נהלים</a>
