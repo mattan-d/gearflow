@@ -434,17 +434,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         if (empty($occurrences)) {
                             $error = 'לא נוצר אף מופע בהזמנה המחזורית. בדוק תאריך סיום או כמות.';
                         } else {
-                            $initialStatus = ($role === 'student') ? 'pending' : 'approved';
+                            // בדרישת מערכת: בהזמנה מחזורית נוצרת הזמנה בודדת מאושרת לכל מופע
+                            $initialStatus = 'approved';
                             $insertRecurring = $pdo->prepare(
                                 'INSERT INTO orders (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, created_at, creator_username, return_equipment_status)
                                  VALUES (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :created_at, :creator_username, :return_equipment_status)'
                             );
                             $createdCount = 0;
+                            $occurrenceIndex = 0;
                             foreach ($equipmentIds as $equipmentId) {
                                 foreach ($occurrences as $occ) {
+                                    $occurrenceIndex++;
                                     $insertRecurring->execute([
                                         ':equipment_id'           => $equipmentId,
-                                        ':borrower_name'          => $borrowerName,
+                                        // "שם ההזמנה": שומרים מספור עוקב לכל מופע מחזורי
+                                        ':borrower_name'          => trim($borrowerName . ' ' . $occurrenceIndex),
                                         ':borrower_contact'       => $borrowerContact,
                                         ':start_date'             => $occ[0],
                                         ':end_date'               => $occ[2],
