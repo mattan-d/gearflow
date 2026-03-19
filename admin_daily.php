@@ -288,6 +288,10 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
         .order-cell-link { display:block; text-decoration:none; }
         .order-cell-link .cell { cursor: pointer; }
         .order-cell-link:hover .cell { filter: brightness(0.98); }
+        td.js-daily-slot { cursor: pointer; }
+        td.js-daily-slot:hover { background: #f9fafb; }
+        td.js-daily-slot.selected { background: #eef2ff; }
+        td.js-daily-slot.selected .cell { box-shadow: inset 0 0 0 1px rgba(79,70,229,0.35); }
         .order-details {
             margin-top: 0.9rem;
             border: 1px solid #e5e7eb;
@@ -470,7 +474,7 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                                         }
 
                                         if (!$hit) {
-                                            echo '<td class="js-daily-slot" data-hour="' . (int)$h . '"><div class="cell"></div></td>';
+                                            echo '<td class="js-daily-slot" data-hour="' . (int)$h . '" data-equipment-id="' . (int)$eid . '"><div class="cell"></div></td>';
                                             $i++;
                                             continue;
                                         }
@@ -491,7 +495,7 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
 
                                         // אם ההזמנה התחילה לפני התא הנוכחי – זה "המשך" שכבר הוצג, אז נדלג
                                         if ($i > $startIdx) {
-                                            echo '<td class="js-daily-slot" data-hour="' . (int)$h . '"><div class="cell"></div></td>';
+                                            echo '<td class="js-daily-slot" data-hour="' . (int)$h . '" data-equipment-id="' . (int)$eid . '"><div class="cell"></div></td>';
                                             $i++;
                                             continue;
                                         }
@@ -592,10 +596,15 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
             if (window.lucide) lucide.createIcons();
         }
 
-        function openNewOrderModal(day, hour) {
-            var hh = String(hour).padStart(2, '0') + ':00';
-            modalTitle.textContent = 'הזמנה חדשה · ' + day + ' · ' + hh;
-            modalFrame.src = 'admin_orders.php?mode=new&prefill_day=' + encodeURIComponent(day) + '&prefill_start_time=' + encodeURIComponent(hh);
+        function openNewOrderModal(day, startHour, endHour, equipmentId) {
+            var hh1 = String(startHour).padStart(2, '0') + ':00';
+            var hh2 = String(endHour).padStart(2, '0') + ':00';
+            modalTitle.textContent = 'הזמנה חדשה · ' + day + ' · ' + hh1 + '–' + hh2;
+            modalFrame.src = 'admin_orders.php?mode=new'
+                + '&prefill_day=' + encodeURIComponent(day)
+                + '&prefill_start_time=' + encodeURIComponent(hh1)
+                + '&prefill_end_time=' + encodeURIComponent(hh2)
+                + '&prefill_equipment_id=' + encodeURIComponent(String(equipmentId || ''));
             modal.style.display = 'flex';
             modal.setAttribute('aria-hidden', 'false');
             if (window.lucide) lucide.createIcons();
@@ -621,12 +630,51 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
             });
         });
 
-        // דאבל קליק על תא שעה ריק – פתיחת הזמנה חדשה עם שעת התחלה לפי התא שנבחר
+        // בחירת שעות ע"י קליקים: קליק ראשון מסמן שעה, קליק שני פותח הזמנה חדשה עם טווח + פריט
+        var sel = { equipmentId: null, startHour: null };
+        function clearSelection() {
+            sel.equipmentId = null;
+            sel.startHour = null;
+            document.querySelectorAll('td.js-daily-slot.selected').forEach(function (x) {
+                x.classList.remove('selected');
+            });
+        }
         document.querySelectorAll('td.js-daily-slot').forEach(function (td) {
-            td.addEventListener('dblclick', function () {
+            td.addEventListener('click', function () {
                 var hour = parseInt(td.getAttribute('data-hour') || '0', 10);
-                if (!hour || hour < 9 || hour > 17) return;
-                openNewOrderModal('<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>', hour);
+                var eqId = parseInt(td.getAttribute('data-equipment-id') || '0', 10);
+                if (!hour || hour < 9 || hour > 17 || !eqId) return;
+
+                // התחלה חדשה בשורה אחרת
+                if (sel.equipmentId && sel.equipmentId !== eqId) {
+                    clearSelection();
+                }
+
+                // קליק ראשון
+                if (!sel.startHour) {
+                    sel.equipmentId = eqId;
+                    sel.startHour = hour;
+                    td.classList.add('selected');
+                    return;
+                }
+
+                // קליק שני – חייב להיות באותה שורה
+                if (sel.equipmentId !== eqId) {
+                    clearSelection();
+                    sel.equipmentId = eqId;
+                    sel.startHour = hour;
+                    td.classList.add('selected');
+                    return;
+                }
+
+                var start = Math.min(sel.startHour, hour);
+                var end = Math.max(sel.startHour, hour);
+                if (end === start) {
+                    end = Math.min(17, start + 1);
+                }
+
+                clearSelection();
+                openNewOrderModal('<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>', start, end, eqId);
             });
         });
 
