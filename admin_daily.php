@@ -133,8 +133,7 @@ try {
     $equipmentRows = [];
 }
 
-// הזמנות ביום הנבחר (לפי שעות השאלה)
-// הערה: הדף הזה מציג הזמנות לפי start_date (יום השאלה)
+// הזמנות החופפות ליום הנבחר (כולל הזמנות רב-יומיות)
 $ordersByEquipment = [];
 try {
     $sql = "SELECT
@@ -147,26 +146,20 @@ try {
                 COALESCE(o.end_time,   '17:00') AS end_time,
                 o.status
             FROM orders o
-            WHERE DATE(o.start_date) = :d";
-    $params = [':d' => $day];
+            WHERE o.start_date <= ? AND o.end_date >= ?";
+    $params = [$day, $day];
 
     if (!empty($equipmentRows)) {
         $ids = array_map(static fn($r) => (int)($r['id'] ?? 0), $equipmentRows);
         $ids = array_values(array_filter($ids, static fn($v) => $v > 0));
         if (!empty($ids)) {
             $ph = implode(',', array_fill(0, count($ids), '?'));
-            // עוברים לפרמטרים positional כדי לתמוך ב-IN דינמי
-            $sql = str_replace(':d', '?', $sql) . " AND o.equipment_id IN ($ph)";
-            $stmtO = $pdo->prepare($sql);
-            $stmtO->execute(array_merge([$day], $ids));
-        } else {
-            $stmtO = $pdo->prepare($sql);
-            $stmtO->execute($params);
+            $sql .= " AND o.equipment_id IN ($ph)";
+            $params = array_merge($params, $ids);
         }
-    } else {
-        $stmtO = $pdo->prepare($sql);
-        $stmtO->execute($params);
     }
+    $stmtO = $pdo->prepare($sql);
+    $stmtO->execute($params);
     $orders = $stmtO->fetchAll(PDO::FETCH_ASSOC) ?: [];
     foreach ($orders as $o) {
         $eid = (int)($o['equipment_id'] ?? 0);
@@ -178,10 +171,77 @@ try {
     $ordersByEquipment = [];
 }
 
-// שעות הטבלה: 09:00–17:00 במרווח שעה
-$hours = [];
-for ($h = 9; $h <= 17; $h++) {
-    $hours[] = $h;
+// לוח זמנים: 07:00–22:00 במרווחי חצי שעה
+$GRID_START_MIN = 7 * 60;
+$GRID_END_MIN   = 22 * 60;
+$SLOT_MINUTES   = 30;
+$SLOT_COUNT     = (int)(($GRID_END_MIN - $GRID_START_MIN) / $SLOT_MINUTES);
+
+/**
+ * מקטע תצוגה של הזמנה ביום הנבחר בתוך הגריד (כולל חצים למשך מחוץ ליום).
+ *
+ * @return array{startIdx:int,endIdxExcl:int,hasBefore:bool,hasAfter:bool,order:array}|null
+ */
+function gf_daily_order_segment(array $o, string $day, int $gridStartMin, int $gridEndMin, int $slotMinutes): ?array
+{
+    $start_date = (string)($o['start_date'] ?? '');
+    $end_date   = (string)($o['end_date'] ?? '');
+    $start_time = trim((string)($o['start_time'] ?? '09:00'));
+    $end_time   = trim((string)($o['end_time'] ?? '17:00'));
+    if ($start_time === '') {
+        $start_time = '09:00';
+    }
+    if ($end_time === '') {
+        $end_time = '17:00';
+    }
+
+    $os = strtotime($start_date . ' ' . $start_time);
+    $oe = strtotime($end_date . ' ' . $end_time);
+    if ($os === false || $oe === false || $oe <= $os) {
+        return null;
+    }
+
+    $dayVisStart = strtotime($day . ' 07:00:00');
+    $dayVisEnd   = strtotime($day . ' 22:00:00');
+    if ($dayVisStart === false || $dayVisEnd === false) {
+        return null;
+    }
+
+    $visStart = max($os, $dayVisStart);
+    $visEnd   = min($oe, $dayVisEnd);
+    if ($visEnd <= $visStart) {
+        return null;
+    }
+
+    $day0 = strtotime($day . ' 00:00:00');
+    if ($day0 === false) {
+        return null;
+    }
+
+    $sMin = (int)floor(($visStart - $day0) / 60);
+    $eMin = (int)ceil(($visEnd - $day0) / 60);
+    $sMin = max($gridStartMin, min($gridEndMin, $sMin));
+    $eMin = max($gridStartMin, min($gridEndMin, $eMin));
+    if ($eMin <= $sMin) {
+        return null;
+    }
+
+    $hasBefore = $os < $dayVisStart;
+    $hasAfter  = $oe > $dayVisEnd;
+
+    $startIdx     = (int)floor(($sMin - $gridStartMin) / $slotMinutes);
+    $endIdxExcl   = (int)ceil(($eMin - $gridStartMin) / $slotMinutes);
+    $slotCount    = (int)(($gridEndMin - $gridStartMin) / $slotMinutes);
+    $startIdx     = max(0, min($slotCount - 1, $startIdx));
+    $endIdxExcl   = max($startIdx + 1, min($slotCount, $endIdxExcl));
+
+    return [
+        'startIdx'   => $startIdx,
+        'endIdxExcl' => $endIdxExcl,
+        'hasBefore'  => $hasBefore,
+        'hasAfter'   => $hasAfter,
+        'order'      => $o,
+    ];
 }
 
 function gf_time_to_minutes(string $t): int {
@@ -277,14 +337,19 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
         table.daily { border-collapse: collapse; width: 100%; min-width: 0; background:#fff; table-layout: fixed; }
         table.daily th, table.daily td { border-bottom:1px solid #eef2f7; border-left:1px solid #eef2f7; padding:0.18rem 0.22rem; text-align:center; font-size:0.74rem; }
         table.daily th:first-child, table.daily td:first-child { position: sticky; right: 0; background:#fff; z-index: 2; text-align:right; width: 190px; }
-        table.daily th:not(:first-child), table.daily td:not(:first-child) { width: 64px; }
+        table.daily th:not(:first-child), table.daily td:not(:first-child) { width: 28px; max-width: 32px; }
+        table.daily th.slot-sub { font-weight: 600; color: #6b7280; font-size: 0.62rem; padding: 0.08rem 0.1rem; }
         table.daily thead th { position: sticky; top: 0; background:#f9fafb; z-index: 3; font-weight:700; }
         table.daily thead th:first-child { z-index: 4; }
         .eq-name { font-weight:600; color:#111827; }
         .eq-code { font-size:0.75rem; color:#6b7280; }
-        .cell { height: 24px; border-radius: 8px; display:flex; align-items:center; justify-content:center; }
-        .cell.occupied { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06); }
-        .cell .tiny { font-size:0.7rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; display:inline-block; vertical-align:middle; }
+        .cell { height: 22px; border-radius: 6px; display:flex; align-items:center; justify-content:center; }
+        .cell-inner { display:flex; align-items:center; justify-content:space-between; width:100%; min-height:100%; gap:1px; direction: rtl; }
+        .daily-edge-arrow { flex:0 0 11px; display:flex; align-items:center; justify-content:center; opacity:0.9; color: inherit; }
+        .daily-edge-arrow i { width:11px; height:11px; }
+        .daily-edge-spacer { flex:0 0 11px; width:11px; }
+        .cell.occupied { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06); padding: 0 1px; }
+        .cell .tiny { font-size:0.62rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; text-align:center; }
         .order-cell-link { display:block; text-decoration:none; }
         .order-cell-link .cell { cursor: pointer; }
         .order-cell-link:hover .cell { filter: brightness(0.98); }
@@ -368,7 +433,7 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
         <div class="topbar">
             <div>
                 <h2 style="margin:0 0 0.15rem;font-size:1.25rem;">ניהול יומי</h2>
-                <div class="muted">תצוגת הזמנות לפי יום ושעות השאלה (09:00–17:00)</div>
+                <div class="muted">תצוגת הזמנות לפי יום ושעות השאלה (07:00–22:00, חצי שעה)</div>
             </div>
         </div>
 
@@ -427,16 +492,21 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                     <table class="daily">
                         <thead>
                         <tr>
-                            <th>פריט ציוד</th>
-                            <?php foreach ($hours as $h): ?>
-                                <th><?= sprintf('%02d:00', $h) ?></th>
-                            <?php endforeach; ?>
+                            <th rowspan="2">פריט ציוד</th>
+                            <?php for ($h = 7; $h <= 21; $h++): ?>
+                                <th colspan="2"><?= sprintf('%02d:00', $h) ?></th>
+                            <?php endfor; ?>
+                        </tr>
+                        <tr>
+                            <?php for ($s = 0; $s < $SLOT_COUNT; $s++): ?>
+                                <th class="slot-sub"><?= ($s % 2 === 0) ? '00' : '30' ?></th>
+                            <?php endfor; ?>
                         </tr>
                         </thead>
                         <tbody>
                         <?php if (empty($equipmentRows)): ?>
                             <tr>
-                                <td colspan="<?= 1 + count($hours) ?>" class="muted" style="text-align:center;padding:1rem;">
+                                <td colspan="<?= 1 + $SLOT_COUNT ?>" class="muted" style="text-align:center;padding:1rem;">
                                     אין ציוד להצגה בקטגוריה זו.
                                 </td>
                             </tr>
@@ -447,6 +517,28 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                                 $eqName = (string)($eq['name'] ?? '');
                                 $eqCode = (string)($eq['code'] ?? '');
                                 $ordersForEq = $ordersByEquipment[$eid] ?? [];
+                                $segments = [];
+                                foreach ($ordersForEq as $o) {
+                                    $seg = gf_daily_order_segment($o, $day, $GRID_START_MIN, $GRID_END_MIN, $SLOT_MINUTES);
+                                    if ($seg !== null) {
+                                        $segments[] = $seg;
+                                    }
+                                }
+                                $win = array_fill(0, $SLOT_COUNT, null);
+                                foreach ($segments as $seg) {
+                                    $oid = (int)($seg['order']['id'] ?? 0);
+                                    for ($sj = $seg['startIdx']; $sj < $seg['endIdxExcl']; $sj++) {
+                                        $cur = $win[$sj];
+                                        if ($cur === null) {
+                                            $win[$sj] = $seg;
+                                            continue;
+                                        }
+                                        $curId = (int)($cur['order']['id'] ?? 0);
+                                        if ($oid < $curId) {
+                                            $win[$sj] = $seg;
+                                        }
+                                    }
+                                }
                                 ?>
                                 <tr>
                                     <td>
@@ -454,57 +546,28 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                                         <div class="eq-code"><?= htmlspecialchars($eqCode, ENT_QUOTES, 'UTF-8') ?></div>
                                     </td>
                                     <?php
-                                    $colCount = count($hours);
                                     $i = 0;
-                                    while ($i < $colCount) {
-                                        $h = $hours[$i];
-                                        $cellStart = $h * 60;
-                                        $cellEnd   = ($h + 1) * 60;
-
-                                        // מוצאים הזמנה שמתחילה/נמשכת בתא הנוכחי
-                                        $hit = null;
-                                        foreach ($ordersForEq as $o) {
-                                            $sMin = gf_time_to_minutes((string)($o['start_time'] ?? '09:00'));
-                                            $eMin = gf_time_to_minutes((string)($o['end_time'] ?? '17:00'));
-                                            if ($eMin <= $cellStart || $sMin >= $cellEnd) {
-                                                continue;
-                                            }
-                                            $hit = $o;
-                                            break;
-                                        }
-
-                                        if (!$hit) {
-                                            echo '<td class="js-daily-slot" data-hour="' . (int)$h . '" data-equipment-id="' . (int)$eid . '"><div class="cell"></div></td>';
+                                    while ($i < $SLOT_COUNT) {
+                                        $w = $win[$i];
+                                        if ($w === null) {
+                                            $slotStartMin = $GRID_START_MIN + $i * $SLOT_MINUTES;
+                                            echo '<td class="js-daily-slot" data-slot-min="' . (int)$slotStartMin . '" data-equipment-id="' . (int)$eid . '"><div class="cell"></div></td>';
                                             $i++;
                                             continue;
                                         }
-
-                                        $sMin = gf_time_to_minutes((string)($hit['start_time'] ?? '09:00'));
-                                        $eMin = gf_time_to_minutes((string)($hit['end_time'] ?? '17:00'));
-                                        // גבולות התצוגה (09:00–18:00 בקצה העליון כדי לחשב colspan)
-                                        $gridStart = 9 * 60;
-                                        $gridEnd   = 18 * 60;
-                                        $sMin = max($gridStart, min($gridEnd, $sMin));
-                                        $eMin = max($gridStart, min($gridEnd, $eMin));
-                                        if ($eMin <= $sMin) $eMin = min($gridEnd, $sMin + 60);
-
-                                        $startIdx = (int)floor(($sMin - $gridStart) / 60);
-                                        $endIdxExcl = (int)ceil(($eMin - $gridStart) / 60);
-                                        $startIdx = max(0, min($colCount - 1, $startIdx));
-                                        $endIdxExcl = max($startIdx + 1, min($colCount, $endIdxExcl));
-
-                                        // אם ההזמנה התחילה לפני התא הנוכחי – זה "המשך" שכבר הוצג, אז נדלג
-                                        if ($i > $startIdx) {
-                                            echo '<td class="js-daily-slot" data-hour="' . (int)$h . '" data-equipment-id="' . (int)$eid . '"><div class="cell"></div></td>';
+                                        $oid = (int)($w['order']['id']);
+                                        $blockStart = $i;
+                                        while ($i < $SLOT_COUNT && $win[$i] !== null && (int)($win[$i]['order']['id']) === $oid) {
                                             $i++;
-                                            continue;
                                         }
-
-                                        $span = max(1, $endIdxExcl - $startIdx);
+                                        $span = $i - $blockStart;
+                                        $hit = $w['order'];
+                                        $hasBefore = $w['hasBefore'];
+                                        $hasAfter = $w['hasAfter'];
                                         $st = (string)($hit['status'] ?? '');
                                         $c = gf_status_color($st);
                                         $borrower = trim((string)($hit['borrower_name'] ?? ''));
-                                        $title = 'הזמנה #' . (int)($hit['id'] ?? 0) . ' · ' . $borrower . ' · ' . ($hit['start_time'] ?? '') . '-' . ($hit['end_time'] ?? '') . ' · ' . $c['label'];
+                                        $title = 'הזמנה #' . (int)($hit['id'] ?? 0) . ' · ' . $borrower . ' · ' . ($hit['start_date'] ?? '') . ' ' . ($hit['start_time'] ?? '') . ' – ' . ($hit['end_date'] ?? '') . ' ' . ($hit['end_time'] ?? '') . ' · ' . $c['label'];
                                         ?>
                                         <td colspan="<?= (int)$span ?>" title="<?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?>">
                                             <a class="order-cell-link js-order-open"
@@ -512,12 +575,23 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                                                data-order-id="<?= (int)($hit['id'] ?? 0) ?>"
                                                aria-label="צפייה בהזמנה #<?= (int)($hit['id'] ?? 0) ?>">
                                                 <div class="cell occupied" style="background:<?= htmlspecialchars($c['bg'], ENT_QUOTES, 'UTF-8') ?>; color:<?= htmlspecialchars($c['fg'], ENT_QUOTES, 'UTF-8') ?>;">
-                                                    <span class="tiny">#<?= (int)($hit['id'] ?? 0) ?> <?= htmlspecialchars($borrower, ENT_QUOTES, 'UTF-8') ?></span>
+                                                    <div class="cell-inner">
+                                                        <?php if ($hasBefore): ?>
+                                                            <span class="daily-edge-arrow" title="המשך מהיום הקודם" aria-hidden="true"><i data-lucide="chevron-right"></i></span>
+                                                        <?php else: ?>
+                                                            <span class="daily-edge-spacer" aria-hidden="true"></span>
+                                                        <?php endif; ?>
+                                                        <span class="tiny">#<?= (int)($hit['id'] ?? 0) ?> <?= htmlspecialchars($borrower, ENT_QUOTES, 'UTF-8') ?></span>
+                                                        <?php if ($hasAfter): ?>
+                                                            <span class="daily-edge-arrow" title="המשך ביום הבא" aria-hidden="true"><i data-lucide="chevron-left"></i></span>
+                                                        <?php else: ?>
+                                                            <span class="daily-edge-spacer" aria-hidden="true"></span>
+                                                        <?php endif; ?>
+                                                    </div>
                                                 </div>
                                             </a>
                                         </td>
                                         <?php
-                                        $i += $span;
                                     }
                                     ?>
                                 </tr>
@@ -588,6 +662,13 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
         }
         closeBtn.addEventListener('click', hide);
 
+        function fmtHm(totalMin) {
+            var m = Math.max(0, Math.min(24 * 60 - 1, parseInt(totalMin, 10) || 0));
+            var h = Math.floor(m / 60);
+            var mm = m % 60;
+            return String(h).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+        }
+
         function openModal(orderId) {
             modalTitle.textContent = 'עריכת הזמנה #' + orderId;
             modalFrame.src = 'admin_orders.php?edit_id=' + encodeURIComponent(orderId);
@@ -596,14 +677,27 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
             if (window.lucide) lucide.createIcons();
         }
 
-        function openNewOrderModal(day, startHour, endHour, equipmentId) {
-            var hh1 = String(startHour).padStart(2, '0') + ':00';
-            var hh2 = String(endHour).padStart(2, '0') + ':00';
+        function openNewOrderModal(day, startMin, endMin, equipmentId) {
+            var hh1 = fmtHm(startMin);
+            var hh2 = fmtHm(endMin);
             modalTitle.textContent = 'הזמנה חדשה · ' + day + ' · ' + hh1 + '–' + hh2;
             modalFrame.src = 'admin_orders.php?mode=new'
                 + '&prefill_day=' + encodeURIComponent(day)
                 + '&prefill_start_time=' + encodeURIComponent(hh1)
                 + '&prefill_end_time=' + encodeURIComponent(hh2)
+                + '&prefill_equipment_id=' + encodeURIComponent(String(equipmentId || ''));
+            modal.style.display = 'flex';
+            modal.setAttribute('aria-hidden', 'false');
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function openNewOrderModalStartOnly(day, startMin, equipmentId) {
+            var hh1 = fmtHm(startMin);
+            modalTitle.textContent = 'הזמנה חדשה · ' + day + ' · ' + hh1;
+            modalFrame.src = 'admin_orders.php?mode=new'
+                + '&prefill_day=' + encodeURIComponent(day)
+                + '&prefill_start_time=' + encodeURIComponent(hh1)
+                + '&prefill_no_end=1'
                 + '&prefill_equipment_id=' + encodeURIComponent(String(equipmentId || ''));
             modal.style.display = 'flex';
             modal.setAttribute('aria-hidden', 'false');
@@ -628,53 +722,78 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                 // הצגה בחלון קופץ במצב עריכה
                 openModal(id);
             });
+            a.addEventListener('dblclick', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            });
         });
 
-        // בחירת שעות ע"י קליקים: קליק ראשון מסמן שעה, קליק שני פותח הזמנה חדשה עם טווח + פריט
-        var sel = { equipmentId: null, startHour: null };
+        var GRID_MIN = 420;
+        var GRID_MAX = 1320;
+        var SLOT_LEN = 30;
+
+        // בחירת משבצות: קליק ראשון מסמן, קליק שני פותח טווח; דאבל־קליק פותח הזמנה עם שעת התחלה בלבד (prefill_no_end)
+        var sel = { equipmentId: null, startMin: null };
+        var clickTimer = null;
+
         function clearSelection() {
             sel.equipmentId = null;
-            sel.startHour = null;
+            sel.startMin = null;
             document.querySelectorAll('td.js-daily-slot.selected').forEach(function (x) {
                 x.classList.remove('selected');
             });
         }
+
+        function handleSlotClick(td) {
+            var slotMin = parseInt(td.getAttribute('data-slot-min') || '-1', 10);
+            var eqId = parseInt(td.getAttribute('data-equipment-id') || '0', 10);
+            if (slotMin < GRID_MIN || slotMin >= GRID_MAX || !eqId) return;
+
+            if (sel.equipmentId && sel.equipmentId !== eqId) {
+                clearSelection();
+            }
+
+            if (sel.startMin === null) {
+                sel.equipmentId = eqId;
+                sel.startMin = slotMin;
+                td.classList.add('selected');
+                return;
+            }
+
+            if (sel.equipmentId !== eqId) {
+                clearSelection();
+                sel.equipmentId = eqId;
+                sel.startMin = slotMin;
+                td.classList.add('selected');
+                return;
+            }
+
+            var start = Math.min(sel.startMin, slotMin);
+            var end = Math.max(sel.startMin, slotMin) + SLOT_LEN;
+
+            clearSelection();
+            openNewOrderModal('<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>', start, end, eqId);
+        }
+
         document.querySelectorAll('td.js-daily-slot').forEach(function (td) {
             td.addEventListener('click', function () {
-                var hour = parseInt(td.getAttribute('data-hour') || '0', 10);
-                var eqId = parseInt(td.getAttribute('data-equipment-id') || '0', 10);
-                if (!hour || hour < 9 || hour > 17 || !eqId) return;
-
-                // התחלה חדשה בשורה אחרת
-                if (sel.equipmentId && sel.equipmentId !== eqId) {
-                    clearSelection();
+                if (clickTimer) window.clearTimeout(clickTimer);
+                clickTimer = window.setTimeout(function () {
+                    clickTimer = null;
+                    handleSlotClick(td);
+                }, 280);
+            });
+            td.addEventListener('dblclick', function (e) {
+                e.preventDefault();
+                if (clickTimer) {
+                    window.clearTimeout(clickTimer);
+                    clickTimer = null;
                 }
-
-                // קליק ראשון
-                if (!sel.startHour) {
-                    sel.equipmentId = eqId;
-                    sel.startHour = hour;
-                    td.classList.add('selected');
-                    return;
-                }
-
-                // קליק שני – חייב להיות באותה שורה
-                if (sel.equipmentId !== eqId) {
-                    clearSelection();
-                    sel.equipmentId = eqId;
-                    sel.startHour = hour;
-                    td.classList.add('selected');
-                    return;
-                }
-
-                var start = Math.min(sel.startHour, hour);
-                var end = Math.max(sel.startHour, hour);
-                if (end === start) {
-                    end = Math.min(17, start + 1);
-                }
-
                 clearSelection();
-                openNewOrderModal('<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>', start, end, eqId);
+                var slotMin = parseInt(td.getAttribute('data-slot-min') || '-1', 10);
+                var eqId = parseInt(td.getAttribute('data-equipment-id') || '0', 10);
+                if (slotMin < GRID_MIN || slotMin >= GRID_MAX || !eqId) return;
+                openNewOrderModalStartOnly('<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>', slotMin, eqId);
             });
         });
 

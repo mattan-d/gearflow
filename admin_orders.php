@@ -17,6 +17,7 @@ $prefillDay = trim((string)($_GET['prefill_day'] ?? ''));
 $prefillStartTime = trim((string)($_GET['prefill_start_time'] ?? ''));
 $prefillEndTimeParam = trim((string)($_GET['prefill_end_time'] ?? ''));
 $prefillEquipmentId = (int)($_GET['prefill_equipment_id'] ?? 0);
+$prefillNoEnd = isset($_GET['prefill_no_end']) && (string)$_GET['prefill_no_end'] === '1';
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $prefillDay)) {
     $prefillDay = '';
 }
@@ -30,9 +31,9 @@ if ($prefillEquipmentId < 1) {
     $prefillEquipmentId = 0;
 }
 
-// end_time ברירת מחדל: שעה אחרי start_time (עם תקרה 17:00) או הפרמטר שהגיע
+// end_time ברירת מחדל: שעה אחרי start_time (עם תקרה 22:00) או הפרמטר שהגיע; prefill_no_end=1 משאיר ריק (למשל לבחירת יום החזרה אחר)
 $prefillEndTime = '';
-if ($prefillStartTime !== '') {
+if ($prefillStartTime !== '' && !$prefillNoEnd) {
     [$ph, $pm] = array_map('intval', explode(':', $prefillStartTime));
     $mins = max(0, min(23, $ph)) * 60 + max(0, min(59, $pm));
     $mins2 = null;
@@ -44,7 +45,7 @@ if ($prefillStartTime !== '') {
         }
     }
     if ($mins2 === null) {
-        $mins2 = min(17 * 60, $mins + 60);
+        $mins2 = min(22 * 60, $mins + 60);
     }
     $prefillEndTime = sprintf('%02d:%02d', intdiv((int)$mins2, 60), ((int)$mins2) % 60);
 }
