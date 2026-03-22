@@ -187,6 +187,12 @@ function initialize_database(PDO $pdo): void
         if (!in_array('equipment_return_condition', $orderNames, true)) {
             $pdo->exec("ALTER TABLE orders ADD COLUMN equipment_return_condition TEXT");
         }
+        if (!in_array('purpose', $orderNames, true)) {
+            $pdo->exec("ALTER TABLE orders ADD COLUMN purpose TEXT");
+        }
+        if (!in_array('admin_notes', $orderNames, true)) {
+            $pdo->exec("ALTER TABLE orders ADD COLUMN admin_notes TEXT");
+        }
     } catch (PDOException $e) {
         // מתעלמים משגיאות מיגרציה כדי לא להפיל את הטעינה
     }

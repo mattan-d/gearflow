@@ -318,6 +318,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $startTime       = trim($_POST['start_time'] ?? '');
         $endTime         = trim($_POST['end_time'] ?? '');
         $notes           = trim($_POST['notes'] ?? '');
+        $adminNotesPost  = trim($_POST['admin_notes'] ?? '');
+        $purpose         = trim($_POST['purpose'] ?? '');
         $orderStatus     = $_POST['order_status'] ?? null; // מצב הזמנה (למנהל בעריכה)
         $rejectionReason = trim($_POST['rejection_reason'] ?? '');
         $returnEquipStatusInput = trim($_POST['return_equipment_status'] ?? '');
@@ -386,6 +388,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!$isSpecialStatusUpdate && $action === 'create' && !$isRecurringCreate && $originalStart !== '' && $originalEnd !== '' && $originalStart === $startDate && $originalEnd === $endDate) {
             // שכפול: חייבים לשנות לפחות אחד מהתאריכים לפני שמירה
             $error = 'בשכפול הזמנה יש לשנות את תאריכי ההשאלה ו/או ההחזרה לפני שמירה.';
+        } elseif (!$isSpecialStatusUpdate && !$isRecurringCreate && $startDate !== '' && $endDate !== '' && strcmp($endDate, $startDate) < 0) {
+            $error = 'תאריך החזרה לא יכול להיות מוקדם מתאריך ההשאלה.';
+        } elseif (!$isSpecialStatusUpdate && !$isRecurringCreate && $startDate !== '' && $endDate !== '' && $startDate === $endDate && $startTime !== '' && $endTime !== '' && strcmp($endTime, $startTime) <= 0) {
+            $error = 'באותו יום, שעת החזרה חייבת להיות מאוחרת משעת ההשאלה.';
         } else {
             $conflicted = [];
             if (!$isSpecialStatusUpdate && !$isRecurringCreate && count($equipmentIds) > 0) {
@@ -438,8 +444,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             // בדרישת מערכת: בהזמנה מחזורית נוצרת הזמנה בודדת מאושרת לכל מופע
                             $initialStatus = 'approved';
                             $insertRecurring = $pdo->prepare(
-                                'INSERT INTO orders (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, created_at, creator_username, return_equipment_status)
-                                 VALUES (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :created_at, :creator_username, :return_equipment_status)'
+                                'INSERT INTO orders (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, purpose, admin_notes, created_at, creator_username, return_equipment_status)
+                                 VALUES (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :purpose, :admin_notes, :created_at, :creator_username, :return_equipment_status)'
                             );
                             $createdCount = 0;
                             $occurrenceIndex = 0;
@@ -457,6 +463,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         ':end_time'               => $occ[3],
                                         ':status'                 => $initialStatus,
                                         ':notes'                  => $notes,
+                                        ':purpose'                => $purpose !== '' ? $purpose : null,
+                                        ':admin_notes'            => $adminNotesPost !== '' ? $adminNotesPost : null,
                                         ':created_at'             => date('Y-m-d H:i:s'),
                                         ':creator_username'       => (string)($me['username'] ?? ''),
                                         ':return_equipment_status'=> 'תקין',
@@ -488,9 +496,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $initialStatus = ($role === 'student') ? 'pending' : 'approved';
                     $stmt = $pdo->prepare(
                         'INSERT INTO orders
-                         (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, created_at, creator_username, return_equipment_status)
+                         (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, purpose, admin_notes, created_at, creator_username, return_equipment_status)
                          VALUES
-                         (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :created_at, :creator_username, :return_equipment_status)'
+                         (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :purpose, :admin_notes, :created_at, :creator_username, :return_equipment_status)'
                     );
                     $createdCount = 0;
                     foreach ($equipmentIds as $equipmentId) {
@@ -504,6 +512,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':end_time'               => $endTime !== '' ? $endTime : null,
                             ':status'                 => $initialStatus,
                             ':notes'                  => $notes,
+                            ':purpose'                => $purpose !== '' ? $purpose : null,
+                            ':admin_notes'            => $adminNotesPost !== '' ? $adminNotesPost : null,
                             ':created_at'             => date('Y-m-d H:i:s'),
                             ':creator_username'       => (string)($me['username'] ?? ''),
                             ':return_equipment_status'=> 'תקין',
@@ -548,8 +558,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $endDate         = (string)($orderRow['end_date'] ?? '');
                         $startTime       = (string)($orderRow['start_time'] ?? '');
                         $endTime         = (string)($orderRow['end_time'] ?? '');
+                        $notes           = (string)($orderRow['notes'] ?? '');
+                        $purpose         = (string)($orderRow['purpose'] ?? '');
+                        $adminNotesToSave = (string)($orderRow['admin_notes'] ?? '');
                     } else {
                         $equipmentId = $equipmentIds[0] ?? (int)($orderRow['equipment_id'] ?? 0);
+                        $adminNotesToSave = $adminNotesPost;
+                        if ($role === 'student') {
+                            $adminNotesToSave = (string)($orderRow['admin_notes'] ?? '');
+                        }
+                    }
+                    // טאב "היום / החזרה": שדות מנוטרלים – לא לדרוס מטרה/הערות מה-DB
+                    $todayModePost = (string)($_POST['current_today_mode'] ?? '');
+                    if (
+                        $action === 'update'
+                        && ($currentTab ?? '') === 'today'
+                        && $todayModePost === 'return'
+                    ) {
+                        $purpose = (string)($orderRow['purpose'] ?? '');
+                        $notes = (string)($orderRow['notes'] ?? '');
+                        $adminNotesToSave = (string)($orderRow['admin_notes'] ?? '');
                     }
                     $allowedNext = [];
                     if ($currentStatus === 'pending') {
@@ -651,6 +679,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                              end_time                   = :end_time,
                              status                     = :status,
                              notes                      = :notes,
+                             purpose                    = :purpose,
+                             admin_notes                = :admin_notes,
                              updated_at                 = :updated_at,
                              return_equipment_status    = :return_equipment_status,
                              equipment_return_condition = :equipment_return_condition
@@ -666,6 +696,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':end_time'                   => $endTime !== '' ? $endTime : null,
                         ':status'                     => $newStatus,
                         ':notes'                      => $notes,
+                        ':purpose'                    => $purpose !== '' ? $purpose : null,
+                        ':admin_notes'                => $adminNotesToSave !== '' ? $adminNotesToSave : null,
                         ':updated_at'                 => date('Y-m-d H:i:s'),
                         ':return_equipment_status'    => $returnEquipStatusDb,
                         ':equipment_return_condition' => $equipmentReturnConditionDb,
@@ -1715,6 +1747,69 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         .suggestion-item:hover {
             background: #f3f4f6;
         }
+        /* מטרה + הערות מנהל/סטודנט */
+        #order_purpose {
+            width: 100%;
+            max-width: 100%;
+            padding: 0.35rem 0.55rem;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            font-size: 0.9rem;
+        }
+        .notes-combined-box {
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 0.65rem 0.75rem;
+            background: #fafafa;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        .notes-block { margin: 0; }
+        .notes-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.78rem;
+            font-weight: 600;
+            margin-bottom: 0.3rem;
+        }
+        .notes-badge-icon { width: 14px; height: 14px; flex-shrink: 0; }
+        .notes-badge-admin { color: #1e3a8a; }
+        .notes-badge-student { color: #14532d; }
+        .textarea-admin-notes {
+            width: 100%;
+            min-height: 4rem;
+            border-radius: 8px;
+            border: 1px solid #93c5fd;
+            background: #eff6ff;
+            color: #1e3a8a;
+            font-size: 0.88rem;
+            padding: 0.45rem 0.55rem;
+            font-family: inherit;
+        }
+        .textarea-admin-notes::placeholder { color: #3b82f6; opacity: 0.7; }
+        .textarea-admin-notes[readonly] {
+            opacity: 0.92;
+            cursor: default;
+            background: #f0f9ff;
+        }
+        .textarea-student-notes {
+            width: 100%;
+            min-height: 4rem;
+            border-radius: 8px;
+            border: 1px solid #86efac;
+            background: #f0fdf4;
+            color: #14532d;
+            font-size: 0.88rem;
+            padding: 0.45rem 0.55rem;
+            font-family: inherit;
+        }
+        .textarea-student-notes::placeholder { color: #15803d; opacity: 0.65; }
+        .textarea-student-notes[readonly] {
+            opacity: 0.92;
+            cursor: default;
+        }
     </style>
 </head>
 <body>
@@ -1947,6 +2042,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         }
                         $isStudent = ($role === 'student');
                         $isNotPickedContext = ($editingOrder && ($tab === 'not_picked' || $tab === 'not_returned') && !$isStudent);
+                        $canEditAdminNotes = ($role === 'admin' || $role === 'warehouse_manager');
+                        $purposeVal = $editingOrder ? (string)($editingOrder['purpose'] ?? '') : '';
+                        $adminNotesVal = $editingOrder ? (string)($editingOrder['admin_notes'] ?? '') : '';
+                        $purposeReadonly = $isViewModeOrder || $isNotPickedContext;
                         ?>
                         <input
                             type="text"
@@ -2014,6 +2113,17 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                         <input type="hidden" id="borrower_contact" name="borrower_contact"
                                value="<?= htmlspecialchars($editingOrder ? (string)($editingOrder['borrower_contact'] ?? '') : '', ENT_QUOTES, 'UTF-8') ?>">
+
+                        <label for="order_purpose">מטרה</label>
+                        <input
+                            type="text"
+                            id="order_purpose"
+                            name="purpose"
+                            maxlength="500"
+                            placeholder="למשל: צילומי סרט גמר, הרצאה..."
+                            value="<?= htmlspecialchars($purposeVal, ENT_QUOTES, 'UTF-8') ?>"
+                            <?= $purposeReadonly ? 'readonly' : '' ?>
+                        >
 
                         <?php
                         if ($editingOrder && $role !== 'student') {
@@ -2141,11 +2251,33 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <?php } ?>
 
                         <label for="notes">הערות</label>
-                        <textarea
-                            id="notes"
-                            name="notes"
-                            placeholder="שעות איסוף / החזרה, שימוש מיוחד וכו׳"
-                        ><?= $editingOrder ? htmlspecialchars($editingOrder['notes'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
+                        <div class="notes-combined-box">
+                            <div class="notes-block notes-block-admin">
+                                <div class="notes-badge notes-badge-admin">
+                                    <i data-lucide="shield" class="notes-badge-icon" aria-hidden="true"></i>
+                                    <span>הערות מנהל</span>
+                                </div>
+                                <textarea
+                                    id="admin_notes"
+                                    name="admin_notes"
+                                    class="textarea-admin-notes"
+                                    rows="3"
+                                    placeholder="הערות פנימיות למנהלים..."
+                                    <?= ($isViewModeOrder || !$canEditAdminNotes) ? 'readonly' : '' ?>
+                                ><?= htmlspecialchars($adminNotesVal, ENT_QUOTES, 'UTF-8') ?></textarea>
+                            </div>
+                            <div class="notes-block notes-block-student">
+                                <div class="notes-badge notes-badge-student">הערות סטודנט</div>
+                                <textarea
+                                    id="notes"
+                                    name="notes"
+                                    class="textarea-student-notes"
+                                    rows="3"
+                                    placeholder="שעות איסוף / החזרה, שימוש מיוחד וכו׳"
+                                    <?= $isViewModeOrder ? 'readonly' : '' ?>
+                                ><?= $editingOrder ? htmlspecialchars($editingOrder['notes'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
+                            </div>
+                        </div>
 
                         <?php
                         $todayYmd = date('Y-m-d');
@@ -2982,6 +3114,32 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         });
     }
 
+    // ולידציית תאריכים/שעות (התאמה לשרת)
+    if (orderModal) {
+        const orderFormValidate = orderModal.querySelector('form');
+        if (orderFormValidate && startInput && endInput) {
+            orderFormValidate.addEventListener('submit', function (e) {
+                if (recurringToggle && recurringToggle.checked) return;
+                var sd = startInput.value || '';
+                var ed = endInput.value || '';
+                if (sd && ed && ed < sd) {
+                    e.preventDefault();
+                    alert('תאריך החזרה לא יכול להיות מוקדם מתאריך ההשאלה.');
+                    return false;
+                }
+                if (sd && ed && sd === ed) {
+                    var st = startTimeInput ? startTimeInput.value : '';
+                    var et = endTimeInput ? endTimeInput.value : '';
+                    if (st && et && et <= st) {
+                        e.preventDefault();
+                        alert('באותו יום, שעת החזרה חייבת להיות מאוחרת משעת ההשאלה.');
+                        return false;
+                    }
+                }
+            });
+        }
+    }
+
     function updateEquipmentState() {
         const recurringOn = recurringToggle && recurringToggle.checked;
         const hasStart = !!startInput.value;
@@ -3070,23 +3228,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 cell.className = 'date-day selectable';
                 cell.addEventListener('click', function () {
                     selectDate(cellDate);
-                });
-                cell.addEventListener('dblclick', function () {
-                    const isoVal = cell.dataset.date;
-                    const isStartDate = startInput.value === isoVal;
-                    const isEndDate = endInput.value === isoVal;
-                    let target = null;
-                    if (isStartDate && isEndDate) {
-                        // אם שני התאריכים שווים – נחליט לפי המצב הנוכחי
-                        target = (mode === 'end') ? 'end' : 'start';
-                    } else if (isStartDate) {
-                        target = 'start';
-                    } else if (isEndDate) {
-                        target = 'end';
-                    }
-                    if (target) {
-                        openTimePicker(target, isoVal);
-                    }
+                    const isoVal = toIso(cellDate);
+                    openTimePicker(mode, isoVal);
                 });
             }
 
@@ -3119,7 +3262,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             if (end && end < date) {
                 endInput.value = '';
             }
-            // לא עוברים אוטומטית למצב "תאריך החזרה" – נעבור רק אחרי בחירת שעת השאלה
+            // ברירת מחדל: תאריך החזרה = תאריך ההשאלה (אם עדיין לא נקבע)
+            if (!endInput.value) {
+                endInput.value = toIso(date);
+            }
         } else {
             const start = parseDate(startInput.value);
             if (!start) {
@@ -3142,6 +3288,25 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         // בוטלה הסגירה האוטומטית של לוח השנה; המשתמש יסגור ידנית עם כפתור הסגירה
     }
 
+    function timeStrToMinutes(t) {
+        if (!t) return -1;
+        const m = /^(\d{1,2}):(\d{2})$/.exec(String(t).trim());
+        if (!m) return -1;
+        return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    }
+
+    function closeTimeModalAndSync() {
+        if (!timeModalBackdrop) return;
+        timeModalBackdrop.style.display = 'none';
+        // סגירה בלי שעה: עדיין נשמר תאריך החזרה שנקבע ב-selectDate
+        if (currentTimeTarget === 'start' && startInput && endInput && startInput.value && !endInput.value) {
+            endInput.value = startInput.value;
+        }
+        currentTimeTarget = null;
+        updateLabels();
+        updateEquipmentState();
+    }
+
     function openTimePicker(target, isoDate) {
         if (!timeModalBackdrop || !timeModalTitle || !timeOptionsContainer) {
             return;
@@ -3154,7 +3319,25 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         // ניקוי אופציות קודמות
         timeOptionsContainer.innerHTML = '';
 
-        const hours = [9, 10, 11, 12, 13, 14, 15];
+        let hours = [];
+        for (let h = 7; h <= 22; h++) {
+            hours.push(h);
+        }
+        if (!isStart && startInput && endInput && startTimeInput
+            && startInput.value === endInput.value && isoDate === startInput.value) {
+            const sm = timeStrToMinutes(startTimeInput.value);
+            if (sm >= 0) {
+                hours = hours.filter(function (h) {
+                    return h * 60 > sm;
+                });
+            }
+        }
+        if (hours.length === 0) {
+            alert('אין שעת החזרה חוקית באותו יום אחרי שעת ההשאלה. בחר תאריך החזרה מאוחר יותר.');
+            currentTimeTarget = null;
+            return;
+        }
+
         const currentValue = isStart && startTimeInput ? startTimeInput.value :
             (!isStart && endTimeInput ? endTimeInput.value : '');
 
@@ -3170,7 +3353,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             btn.addEventListener('click', function () {
                 if (isStart && startTimeInput) {
                     startTimeInput.value = label;
-                    // לאחר בחירת שעת השאלה – נעבור אוטומטית למצב "תאריך החזרה"
+                    if (endInput && startInput && (!endInput.value || endInput.value === startInput.value)) {
+                        endInput.value = startInput.value;
+                    }
+                    // לאחר בחירת שעת השאלה – מעבר למצב תאריך/שעת החזרה
                     setMode('end');
                 } else if (!isStart && endTimeInput) {
                     endTimeInput.value = label;
@@ -3178,6 +3364,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 updateLabels();
                 updateEquipmentState();
                 timeModalBackdrop.style.display = 'none';
+                currentTimeTarget = null;
             });
             timeOptionsContainer.appendChild(btn);
         });
@@ -3188,11 +3375,11 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     // סגירת חלון השעות בלחיצה על "ביטול" או מחוץ לחלון
     if (timeModalBackdrop && timeModalCancel) {
         timeModalCancel.addEventListener('click', function () {
-            timeModalBackdrop.style.display = 'none';
+            closeTimeModalAndSync();
         });
         timeModalBackdrop.addEventListener('click', function (e) {
             if (e.target === timeModalBackdrop) {
-                timeModalBackdrop.style.display = 'none';
+                closeTimeModalAndSync();
             }
         });
     }
