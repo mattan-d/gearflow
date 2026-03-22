@@ -132,7 +132,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'available_equipment') {
             $sql = "
                 SELECT DISTINCT equipment_id
                 FROM orders
-                WHERE status IN ('pending', 'approved', 'on_loan')
+                WHERE status IN ('pending', 'approved', 'ready', 'on_loan')
                   AND (
                         (start_date || ' ' || COALESCE(start_time, '00:00')) <= :req_end
                     AND (end_date   || ' ' || COALESCE(end_time,   '23:59')) >= :req_start
@@ -182,7 +182,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'available_equipment') {
     $sql = "
         SELECT DISTINCT equipment_id
         FROM orders
-        WHERE status IN ('pending', 'approved', 'on_loan')
+        WHERE status IN ('pending', 'approved', 'ready', 'on_loan')
           AND (
                 (start_date || ' ' || COALESCE(start_time, '00:00')) <= :req_end
             AND (end_date   || ' ' || COALESCE(end_time,   '23:59')) >= :req_start
@@ -320,6 +320,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $notes           = trim($_POST['notes'] ?? '');
         $adminNotesPost  = trim($_POST['admin_notes'] ?? '');
         $purpose         = trim($_POST['purpose'] ?? '');
+        $equipmentPreparedPost = !empty($_POST['equipment_prepared']);
         $orderStatus     = $_POST['order_status'] ?? null; // מצב הזמנה (למנהל בעריכה)
         $rejectionReason = trim($_POST['rejection_reason'] ?? '');
         $returnEquipStatusInput = trim($_POST['return_equipment_status'] ?? '');
@@ -401,7 +402,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $placeholders = implode(',', array_fill(0, count($equipmentIds), '?'));
                 $sql = "SELECT DISTINCT equipment_id FROM orders
                         WHERE equipment_id IN ($placeholders)
-                        AND status IN ('pending', 'approved', 'on_loan')
+                        AND status IN ('pending', 'approved', 'ready', 'on_loan')
                         AND (start_date || ' ' || COALESCE(start_time, '00:00')) <= ?
                         AND (end_date || ' ' || COALESCE(end_time, '23:59')) >= ?
                         AND id != ?";
@@ -444,8 +445,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             // בדרישת מערכת: בהזמנה מחזורית נוצרת הזמנה בודדת מאושרת לכל מופע
                             $initialStatus = 'approved';
                             $insertRecurring = $pdo->prepare(
-                                'INSERT INTO orders (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, purpose, admin_notes, created_at, creator_username, return_equipment_status)
-                                 VALUES (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :purpose, :admin_notes, :created_at, :creator_username, :return_equipment_status)'
+                                'INSERT INTO orders (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, purpose, admin_notes, equipment_prepared, created_at, creator_username, return_equipment_status)
+                                 VALUES (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :purpose, :admin_notes, :equipment_prepared, :created_at, :creator_username, :return_equipment_status)'
                             );
                             $createdCount = 0;
                             $occurrenceIndex = 0;
@@ -465,6 +466,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         ':notes'                  => $notes,
                                         ':purpose'                => $purpose !== '' ? $purpose : null,
                                         ':admin_notes'            => $adminNotesPost !== '' ? $adminNotesPost : null,
+                                        ':equipment_prepared'     => 0,
                                         ':created_at'             => date('Y-m-d H:i:s'),
                                         ':creator_username'       => (string)($me['username'] ?? ''),
                                         ':return_equipment_status'=> 'תקין',
@@ -496,9 +498,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $initialStatus = ($role === 'student') ? 'pending' : 'approved';
                     $stmt = $pdo->prepare(
                         'INSERT INTO orders
-                         (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, purpose, admin_notes, created_at, creator_username, return_equipment_status)
+                         (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, purpose, admin_notes, equipment_prepared, created_at, creator_username, return_equipment_status)
                          VALUES
-                         (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :purpose, :admin_notes, :created_at, :creator_username, :return_equipment_status)'
+                         (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :purpose, :admin_notes, :equipment_prepared, :created_at, :creator_username, :return_equipment_status)'
                     );
                     $createdCount = 0;
                     foreach ($equipmentIds as $equipmentId) {
@@ -514,6 +516,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':notes'                  => $notes,
                             ':purpose'                => $purpose !== '' ? $purpose : null,
                             ':admin_notes'            => $adminNotesPost !== '' ? $adminNotesPost : null,
+                            ':equipment_prepared'     => 0,
                             ':created_at'             => date('Y-m-d H:i:s'),
                             ':creator_username'       => (string)($me['username'] ?? ''),
                             ':return_equipment_status'=> 'תקין',
@@ -547,6 +550,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $orderRow = $currentStatusRow->fetch(PDO::FETCH_ASSOC) ?: [];
                     $currentStatus = (string)($orderRow['status'] ?? '');
                     $creatorUsername = (string)($orderRow['creator_username'] ?? '');
+                    $todayModePost = (string)($_POST['current_today_mode'] ?? '');
 
                     // במצב עדכון מיוחד מטאבים "לא נלקח"/"לא הוחזר" – שומרים על פרטי ההזמנה המקוריים
                     // כדי לא לדרוס תאריכים וציוד בשדות שלא נשלחים מהטופס (inputs במצב disabled).
@@ -561,15 +565,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $notes           = (string)($orderRow['notes'] ?? '');
                         $purpose         = (string)($orderRow['purpose'] ?? '');
                         $adminNotesToSave = (string)($orderRow['admin_notes'] ?? '');
+                        $equipmentPreparedSave = (int)($orderRow['equipment_prepared'] ?? 0);
+                    } elseif (
+                        $action === 'update'
+                        && ($currentTab ?? '') === 'today'
+                        && $todayModePost === 'prepare'
+                    ) {
+                        // טאב "היום / הכנת ציוד" – שדות מנוטרלים בצד הלקוח; נשמרים ערכי DB למעט סטטוס וציוד מוכן
+                        $equipmentId     = (int)($orderRow['equipment_id'] ?? 0);
+                        $borrowerName    = (string)($orderRow['borrower_name'] ?? '');
+                        $borrowerContact = (string)($orderRow['borrower_contact'] ?? '');
+                        $startDate       = (string)($orderRow['start_date'] ?? '');
+                        $endDate         = (string)($orderRow['end_date'] ?? '');
+                        $startTime       = (string)($orderRow['start_time'] ?? '');
+                        $endTime         = (string)($orderRow['end_time'] ?? '');
+                        $notes           = (string)($orderRow['notes'] ?? '');
+                        $purpose         = (string)($orderRow['purpose'] ?? '');
+                        $adminNotesToSave = $adminNotesPost;
+                        if ($role === 'student') {
+                            $adminNotesToSave = (string)($orderRow['admin_notes'] ?? '');
+                        }
+                        $equipmentPreparedSave = $equipmentPreparedPost ? 1 : 0;
                     } else {
                         $equipmentId = $equipmentIds[0] ?? (int)($orderRow['equipment_id'] ?? 0);
                         $adminNotesToSave = $adminNotesPost;
                         if ($role === 'student') {
                             $adminNotesToSave = (string)($orderRow['admin_notes'] ?? '');
                         }
+                        $equipmentPreparedSave = $equipmentPreparedPost ? 1 : 0;
                     }
                     // טאב "היום / החזרה": שדות מנוטרלים – לא לדרוס מטרה/הערות מה-DB
-                    $todayModePost = (string)($_POST['current_today_mode'] ?? '');
                     if (
                         $action === 'update'
                         && ($currentTab ?? '') === 'today'
@@ -578,18 +603,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $purpose = (string)($orderRow['purpose'] ?? '');
                         $notes = (string)($orderRow['notes'] ?? '');
                         $adminNotesToSave = (string)($orderRow['admin_notes'] ?? '');
+                        $equipmentPreparedSave = (int)($orderRow['equipment_prepared'] ?? 0);
                     }
                     $allowedNext = [];
                     if ($currentStatus === 'pending') {
-                        $allowedNext = ['approved', 'rejected'];
+                        $allowedNext = ['approved', 'rejected', 'deleted', 'ready'];
                     } elseif ($currentStatus === 'approved') {
-                        $allowedNext = ['on_loan'];
-                        // בטאב "לא נלקח" מאפשרים סגירה ישירה ל"עבר"
                         if ($currentTab === 'not_picked') {
-                            $allowedNext[] = 'returned';
+                            $allowedNext = ['returned'];
+                        } else {
+                            $allowedNext = ['on_loan', 'ready', 'rejected', 'deleted'];
                         }
+                    } elseif ($currentStatus === 'ready') {
+                        $allowedNext = ['on_loan', 'approved', 'deleted'];
                     } elseif ($currentStatus === 'on_loan') {
                         $allowedNext = ['returned'];
+                    } elseif ($currentStatus === 'rejected' || $currentStatus === 'deleted') {
+                        $allowedNext = [];
                     }
                     $newStatus = $currentStatus;
                     if ($orderStatus !== null && $orderStatus !== '') {
@@ -668,120 +698,145 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
 
-                    $stmt = $pdo->prepare(
-                        'UPDATE orders
-                         SET equipment_id               = :equipment_id,
-                             borrower_name              = :borrower_name,
-                             borrower_contact           = :borrower_contact,
-                             start_date                 = :start_date,
-                             end_date                   = :end_date,
-                             start_time                 = :start_time,
-                             end_time                   = :end_time,
-                             status                     = :status,
-                             notes                      = :notes,
-                             purpose                    = :purpose,
-                             admin_notes                = :admin_notes,
-                             updated_at                 = :updated_at,
-                             return_equipment_status    = :return_equipment_status,
-                             equipment_return_condition = :equipment_return_condition
-                         WHERE id = :id'
-                    );
-                    $stmt->execute([
-                        ':equipment_id'               => $equipmentId,
-                        ':borrower_name'              => $borrowerName,
-                        ':borrower_contact'           => $borrowerContact,
-                        ':start_date'                 => $startDate,
-                        ':end_date'                   => $endDate,
-                        ':start_time'                 => $startTime !== '' ? $startTime : null,
-                        ':end_time'                   => $endTime !== '' ? $endTime : null,
-                        ':status'                     => $newStatus,
-                        ':notes'                      => $notes,
-                        ':purpose'                    => $purpose !== '' ? $purpose : null,
-                        ':admin_notes'                => $adminNotesToSave !== '' ? $adminNotesToSave : null,
-                        ':updated_at'                 => date('Y-m-d H:i:s'),
-                        ':return_equipment_status'    => $returnEquipStatusDb,
-                        ':equipment_return_condition' => $equipmentReturnConditionDb,
-                        ':id'                         => $id,
-                    ]);
-
-                    $success = 'הזמנה עודכנה בהצלחה.';
-
-                    // התראה לסטודנט על שינוי סטטוס הזמנה
-                    if ($creatorUsername !== '' && $newStatus !== $currentStatus) {
-                        $userStmt = $pdo->prepare('SELECT id, role FROM users WHERE username = :username LIMIT 1');
-                        $userStmt->execute([':username' => $creatorUsername]);
-                        $creatorUser = $userStmt->fetch(PDO::FETCH_ASSOC);
-                        if ($creatorUser && (int)$creatorUser['id'] > 0) {
-                            $studentId = (int)$creatorUser['id'];
-                            $statusMsg = '';
-                            if ($newStatus === 'approved') {
-                                $statusMsg = 'הבקשה להזמנה אושרה.';
-                            } elseif ($newStatus === 'rejected') {
-                                $statusMsg = 'הבקשה להזמנה נדחתה.';
-                            } elseif ($newStatus === 'on_loan') {
-                                $statusMsg = 'הציוד יצא להשאלה.';
-                            } elseif ($newStatus === 'returned') {
-                                $statusMsg = 'הציוד הוחזר ונקלט במערכת.';
+                    if ($error === '' && $newStatus === 'ready' && $currentStatus !== 'ready') {
+                        if (($currentTab ?? '') === 'today' && $todayModePost === 'prepare') {
+                            if ($equipmentPreparedSave !== 1) {
+                                $error = 'יש לסמן שהציוד מוכן לפני מעבר לסטטוס "מוכנה".';
                             }
-                            if ($statusMsg !== '') {
-                                create_notification(
-                                    $pdo,
-                                    $studentId,
-                                    null,
-                                    $statusMsg,
-                                    'admin_orders.php'
-                                );
-                            }
+                        } else {
+                            // מחוץ לטאב "הכנת ציוד" – מעבר ל"מוכנה" ללא צ'קבוקס (למשל מטאב אחר או עדכון מרובה)
+                            $equipmentPreparedSave = 1;
                         }
                     }
 
-                    // ניווט לאחר שמירה:
-                    // אם התקבל current_tab בטופס – נשארים בטאב שממנו נפתחה העריכה.
-                    $allowedTabsForRedirect = ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history'];
-                    $currentTodayMode = $_POST['current_today_mode'] ?? null;
-                    if ($currentTab && in_array($currentTab, $allowedTabsForRedirect, true)) {
-                        // במעבר מ"טאב לא הוחזר" לסטטוס "עבר" – עוברים לטאב היסטוריה
-                        if ($currentTab === 'not_returned' && $newStatus === 'returned') {
-                            header('Location: admin_orders.php?tab=history');
+                    if ($error === '') {
+                        $stmt = $pdo->prepare(
+                            'UPDATE orders
+                             SET equipment_id               = :equipment_id,
+                                 borrower_name              = :borrower_name,
+                                 borrower_contact           = :borrower_contact,
+                                 start_date                 = :start_date,
+                                 end_date                   = :end_date,
+                                 start_time                 = :start_time,
+                                 end_time                   = :end_time,
+                                 status                     = :status,
+                                 notes                      = :notes,
+                                 purpose                    = :purpose,
+                                 admin_notes                = :admin_notes,
+                                 equipment_prepared         = :equipment_prepared,
+                                 updated_at                 = :updated_at,
+                                 return_equipment_status    = :return_equipment_status,
+                                 equipment_return_condition = :equipment_return_condition
+                             WHERE id = :id'
+                        );
+                        $stmt->execute([
+                            ':equipment_id'               => $equipmentId,
+                            ':borrower_name'              => $borrowerName,
+                            ':borrower_contact'           => $borrowerContact,
+                            ':start_date'                 => $startDate,
+                            ':end_date'                   => $endDate,
+                            ':start_time'                 => $startTime !== '' ? $startTime : null,
+                            ':end_time'                   => $endTime !== '' ? $endTime : null,
+                            ':status'                     => $newStatus,
+                            ':notes'                      => $notes,
+                            ':purpose'                    => $purpose !== '' ? $purpose : null,
+                            ':admin_notes'                => $adminNotesToSave !== '' ? $adminNotesToSave : null,
+                            ':equipment_prepared'         => $equipmentPreparedSave,
+                            ':updated_at'                 => date('Y-m-d H:i:s'),
+                            ':return_equipment_status'    => $returnEquipStatusDb,
+                            ':equipment_return_condition' => $equipmentReturnConditionDb,
+                            ':id'                         => $id,
+                        ]);
+
+                        $success = 'הזמנה עודכנה בהצלחה.';
+                    }
+
+                    if ($error === '') {
+                        // התראה לסטודנט על שינוי סטטוס הזמנה
+                        if ($creatorUsername !== '' && $newStatus !== $currentStatus) {
+                            $userStmt = $pdo->prepare('SELECT id, role FROM users WHERE username = :username LIMIT 1');
+                            $userStmt->execute([':username' => $creatorUsername]);
+                            $creatorUser = $userStmt->fetch(PDO::FETCH_ASSOC);
+                            if ($creatorUser && (int)$creatorUser['id'] > 0) {
+                                $studentId = (int)$creatorUser['id'];
+                                $statusMsg = '';
+                                if ($newStatus === 'approved') {
+                                    $statusMsg = 'הבקשה להזמנה אושרה.';
+                                } elseif ($newStatus === 'rejected') {
+                                    $statusMsg = 'הבקשה להזמנה נדחתה.';
+                                } elseif ($newStatus === 'ready') {
+                                    $statusMsg = 'הציוד להזמנה מוכן לאיסוף.';
+                                } elseif ($newStatus === 'on_loan') {
+                                    $statusMsg = 'הציוד יצא להשאלה.';
+                                } elseif ($newStatus === 'returned') {
+                                    $statusMsg = 'הציוד הוחזר ונקלט במערכת.';
+                                } elseif ($newStatus === 'deleted') {
+                                    $statusMsg = 'ההזמנה בוטלה על ידי המערכת.';
+                                }
+                                if ($statusMsg !== '') {
+                                    create_notification(
+                                        $pdo,
+                                        $studentId,
+                                        null,
+                                        $statusMsg,
+                                        'admin_orders.php'
+                                    );
+                                }
+                            }
+                        }
+
+                        // ניווט לאחר שמירה:
+                        // אם התקבל current_tab בטופס – נשארים בטאב שממנו נפתחה העריכה.
+                        $allowedTabsForRedirect = ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history', 'rejected_deleted'];
+                        $currentTodayMode = $_POST['current_today_mode'] ?? null;
+                        if ($currentTab && in_array($currentTab, $allowedTabsForRedirect, true)) {
+                            // במעבר מ"טאב לא הוחזר" לסטטוס "עבר" – עוברים לטאב היסטוריה
+                            if ($currentTab === 'not_returned' && $newStatus === 'returned') {
+                                header('Location: admin_orders.php?tab=history');
+                                exit;
+                            }
+
+                            $redirectUrl = 'admin_orders.php?tab=' . urlencode($currentTab);
+                            if ($currentTab === 'today' && $currentTodayMode) {
+                                $redirectUrl .= '&today_mode=' . urlencode($currentTodayMode);
+                            }
+                            header('Location: ' . $redirectUrl);
                             exit;
                         }
 
-                        $redirectUrl = 'admin_orders.php?tab=' . urlencode($currentTab);
-                        if ($currentTab === 'today' && $currentTodayMode) {
-                            $redirectUrl .= '&today_mode=' . urlencode($currentTodayMode);
+                        // אחרת – שומרים את הלוגיקה הקיימת לפי סטטוס
+                        $today = date('Y-m-d');
+                        $targetTab = 'pending';
+                        if ($newStatus === 'approved') {
+                            if ($startDate > $today) {
+                                $targetTab = 'future';
+                            } elseif ($startDate <= $today && $endDate >= $today) {
+                                $targetTab = 'today';
+                            } else {
+                                $targetTab = 'not_picked'; // עבר מועד ההשאלה – לא נלקח
+                            }
+                            header('Location: admin_orders.php?tab=' . $targetTab);
+                            exit;
                         }
-                        header('Location: ' . $redirectUrl);
-                        exit;
-                    }
-
-                    // אחרת – שומרים את הלוגיקה הקיימת לפי סטטוס
-                    $today = date('Y-m-d');
-                    $targetTab = 'pending';
-                    if ($newStatus === 'approved') {
-                        if ($startDate > $today) {
-                            $targetTab = 'future';
-                        } elseif ($startDate <= $today && $endDate >= $today) {
-                            $targetTab = 'today';
-                        } else {
-                            $targetTab = 'not_picked'; // עבר מועד ההשאלה – לא נלקח
+                        if ($newStatus === 'rejected' || $newStatus === 'deleted') {
+                            header('Location: admin_orders.php?tab=rejected_deleted');
+                            exit;
                         }
-                        header('Location: admin_orders.php?tab=' . $targetTab);
+                        if ($newStatus === 'on_loan') {
+                            header('Location: admin_orders.php?tab=active');
+                            exit;
+                        }
+                        if ($newStatus === 'returned') {
+                            header('Location: admin_orders.php?tab=history');
+                            exit;
+                        }
+                        if ($newStatus === 'ready') {
+                            header('Location: admin_orders.php?tab=today&today_mode=borrow');
+                            exit;
+                        }
+                        header('Location: admin_orders.php');
                         exit;
                     }
-                    if ($newStatus === 'rejected') {
-                        header('Location: admin_orders.php?tab=pending');
-                        exit;
-                    }
-                    if ($newStatus === 'on_loan') {
-                        header('Location: admin_orders.php?tab=active');
-                        exit;
-                    }
-                    if ($newStatus === 'returned') {
-                        header('Location: admin_orders.php?tab=history');
-                        exit;
-                    }
-                    header('Location: admin_orders.php');
-                    exit;
                 }
             } catch (PDOException $e) {
                 $error = 'שגיאה בשמירת ההזמנה.';
@@ -802,9 +857,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $allowedNext = [];
             if ($currentStatus === 'pending') {
-                $allowedNext = ['approved', 'rejected'];
+                $allowedNext = ['approved', 'rejected', 'deleted', 'ready'];
             } elseif ($currentStatus === 'approved') {
-                $allowedNext = ['on_loan'];
+                $allowedNext = ['on_loan', 'ready', 'rejected', 'deleted'];
+            } elseif ($currentStatus === 'ready') {
+                $allowedNext = ['on_loan', 'approved', 'deleted'];
             } elseif ($currentStatus === 'on_loan') {
                 $allowedNext = ['returned'];
             } else {
@@ -819,6 +876,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare(
                     'UPDATE orders
                      SET status = :status,
+                         equipment_prepared = CASE
+                             WHEN :status = \'ready\' THEN 1
+                             WHEN :status = \'on_loan\' THEN 0
+                             ELSE equipment_prepared
+                         END,
                          updated_at = :updated_at
                      WHERE id = :id'
                 );
@@ -841,10 +903,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $statusMsg = 'הבקשה להזמנה אושרה.';
                         } elseif ($status === 'rejected') {
                             $statusMsg = 'הבקשה להזמנה נדחתה.';
+                        } elseif ($status === 'ready') {
+                            $statusMsg = 'הציוד להזמנה מוכן לאיסוף.';
                         } elseif ($status === 'on_loan') {
                             $statusMsg = 'הציוד יצא להשאלה.';
                         } elseif ($status === 'returned') {
                             $statusMsg = 'הציוד הוחזר ונקלט במערכת.';
+                        } elseif ($status === 'deleted') {
+                            $statusMsg = 'ההזמנה בוטלה על ידי המערכת.';
                         }
                         if ($statusMsg !== '') {
                             create_notification(
@@ -867,6 +933,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // מ"approved" ל"on_loan" – עוברים לטאב "בהשאלה"
                 if ($currentStatus === 'approved' && $status === 'on_loan') {
                     header('Location: admin_orders.php?tab=active');
+                    exit;
+                }
+                if ($status === 'ready') {
+                    header('Location: admin_orders.php?tab=today&today_mode=borrow');
+                    exit;
+                }
+                if ($status === 'rejected' || $status === 'deleted') {
+                    header('Location: admin_orders.php?tab=rejected_deleted');
                     exit;
                 }
             }
@@ -892,11 +966,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $allowedNext = [];
                 if ($currentStatus === 'pending') {
-                    $allowedNext = ['approved', 'rejected'];
+                    $allowedNext = ['approved', 'rejected', 'deleted', 'ready'];
                 } elseif ($currentStatus === 'approved') {
-                    $allowedNext = ['on_loan'];
+                    $allowedNext = ['on_loan', 'ready', 'rejected', 'deleted'];
+                } elseif ($currentStatus === 'ready') {
+                    $allowedNext = ['on_loan', 'approved', 'deleted'];
                 } elseif ($currentStatus === 'on_loan') {
                     $allowedNext = ['returned'];
+                } else {
+                    $allowedNext = [];
                 }
 
                 if ($currentStatus === null || !in_array($status, $allowedNext, true)) {
@@ -906,6 +984,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare(
                     'UPDATE orders
                      SET status = :status,
+                         equipment_prepared = CASE
+                             WHEN :status = \'ready\' THEN 1
+                             WHEN :status = \'on_loan\' THEN 0
+                             ELSE equipment_prepared
+                         END,
                          updated_at = :updated_at
                      WHERE id = :id'
                 );
@@ -927,10 +1010,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $statusMsg = 'הבקשה להזמנה אושרה.';
                         } elseif ($status === 'rejected') {
                             $statusMsg = 'הבקשה להזמנה נדחתה.';
+                        } elseif ($status === 'ready') {
+                            $statusMsg = 'הציוד להזמנה מוכן לאיסוף.';
                         } elseif ($status === 'on_loan') {
                             $statusMsg = 'הציוד יצא להשאלה.';
                         } elseif ($status === 'returned') {
                             $statusMsg = 'הציוד הוחזר ונקלט במערכת.';
+                        } elseif ($status === 'deleted') {
+                            $statusMsg = 'ההזמנה בוטלה על ידי המערכת.';
                         }
                         if ($statusMsg !== '') {
                             create_notification(
@@ -950,13 +1037,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'delete') {
         $id = (int)($_POST['id'] ?? 0);
         if ($id > 0) {
-            $stmt = $pdo->prepare('DELETE FROM orders WHERE id = :id');
-            $stmt->execute([':id' => $id]);
-            $success = 'הזמנה נמחקה.';
+            $stmt = $pdo->prepare("UPDATE orders SET status = 'deleted', updated_at = :u WHERE id = :id");
+            $stmt->execute([':u' => date('Y-m-d H:i:s'), ':id' => $id]);
+            $success = 'ההזמנה סומנה כנמחקה.';
 
             // לאחר מחיקה – נשארים בטאב ממנו בוצעה הפעולה (נשלח בטופס)
-            if ($currentTab && in_array($currentTab, ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history'], true)) {
-                header('Location: admin_orders.php?tab=' . urlencode($currentTab));
+            if ($currentTab && in_array($currentTab, ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history', 'rejected_deleted'], true)) {
+                $redir = 'admin_orders.php?tab=' . urlencode($currentTab);
+                $ctm = $_POST['current_today_mode'] ?? null;
+                if ($currentTab === 'today' && $ctm !== null && $ctm !== '') {
+                    $redir .= '&today_mode=' . urlencode((string)$ctm);
+                }
+                header('Location: ' . $redir);
                 exit;
             }
         }
@@ -1013,18 +1105,19 @@ $tab       = $_GET['tab'] ?? 'today';
 // not_returned – בהשאלה (status = on_loan) שעבר מועד ההחזרה – לא הוחזר
 // not_picked  – מאושר אך עבר מועד ההשאלה ולא נלקח
 // history  – הזמנות שהסתיימו (status = returned)
-$validTabs = ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history'];
+// rejected_deleted – נדחו או נמחקו (רך)
+$validTabs = ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history', 'rejected_deleted'];
 
 if (!in_array($tab, $validTabs, true)) {
     $tab = 'today';
 }
 
-// תתי־טאבים ל"טאב היום": השאלה/החזרה
-$todayMode = 'borrow';
+// תתי־טאבים ל"טאב היום": הכנת ציוד / קבלת ציוד / החזרה
+$todayMode = 'prepare';
 if ($tab === 'today') {
-    $todayMode = $_GET['today_mode'] ?? 'borrow';
-    if (!in_array($todayMode, ['borrow', 'return'], true)) {
-        $todayMode = 'borrow';
+    $todayMode = $_GET['today_mode'] ?? 'prepare';
+    if (!in_array($todayMode, ['prepare', 'borrow', 'return'], true)) {
+        $todayMode = 'prepare';
     }
 }
 
@@ -1092,18 +1185,24 @@ switch ($tab) {
         $where = " WHERE o.status = 'returned'";
         break;
 
+    case 'rejected_deleted':
+        $where = " WHERE o.status IN ('rejected', 'deleted')";
+        break;
+
     case 'today':
     default:
         // היום – מפוצל לתת־מצבים:
-        // השאלה: כל בקשה שהיום הוא יום ההשאלה
-        // החזרה: כל בקשה שהיום הוא יום ההחזרה
-        // הזמנות בסטטוס "בהשאלה" נראות בטאבים "בהשאלה"/"לא הוחזר" בלבד
+        // הכנת ציוד: ממתין/מאושר ביום הלקיחה
+        // קבלת ציוד: מוכנה ביום הלקיחה
+        // החזרה: on_loan עם החזרה היום
         if ($todayMode === 'return') {
-            // החזרה: ניתן להחזיר רק הזמנות שכבר יצאו להשאלה (on_loan) והחזרה שלהן היום
             $where = " WHERE o.status = 'on_loan'
                        AND DATE(o.end_date) = :today";
+        } elseif ($todayMode === 'prepare') {
+            $where = " WHERE o.status IN ('pending', 'approved')
+                       AND DATE(o.start_date) = :today";
         } else {
-            $where = " WHERE o.status = 'approved'
+            $where = " WHERE o.status = 'ready'
                        AND DATE(o.start_date) = :today";
         }
         $params[':today'] = $today;
@@ -1129,6 +1228,11 @@ if ($role === 'student' && $me) {
         }
         $params[':current_student'] = $currentBorrower;
     }
+    if ($where === '') {
+        $where = " WHERE o.status != 'deleted'";
+    } else {
+        $where .= " AND o.status != 'deleted'";
+    }
 }
 
 $ordersSql  = $baseSql . $where . ' ORDER BY o.created_at DESC, o.id DESC';
@@ -1142,6 +1246,12 @@ foreach ($orders as $row) {
     if (isset($row['equipment_code']) && $row['equipment_code'] !== null) {
         // נזהה לפי code, אחר כך נמצא id
         $orderEquipmentIds[] = (string)$row['equipment_code'];
+    }
+}
+if ($editingOrder && !empty($editingOrder['equipment_code'])) {
+    $ecEdit = (string)$editingOrder['equipment_code'];
+    if (!in_array($ecEdit, $orderEquipmentIds, true)) {
+        $orderEquipmentIds[] = $ecEdit;
     }
 }
 $orderEquipmentIds = array_values(array_unique($orderEquipmentIds));
@@ -1177,6 +1287,9 @@ if (!empty($orderEquipmentIds)) {
 $componentChecksByOrderAndCode = [];
 try {
     $orderIdsForChecks = array_column($orders, 'id');
+    if ($loadId > 0) {
+        $orderIdsForChecks[] = $loadId;
+    }
     $orderIdsForChecks = array_values(array_unique(array_map('intval', $orderIdsForChecks)));
     if (!empty($orderIdsForChecks)) {
         $placeholders = implode(',', array_fill(0, count($orderIdsForChecks), '?'));
@@ -1513,6 +1626,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         .badge.status-returned {
             background: #e0f2fe;
             color: #075985;
+        }
+        .badge.status-ready {
+            background: #dbeafe;
+            color: #1e40af;
         }
         /* צביעת שורות להזמנות במצב בקשה (pending) לפי קרבת מועד ההשאלה */
         .row-pending-soon {
@@ -2015,11 +2132,37 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                         <!-- רשימת פריטי הציוד שנבחרו (מתעדכנת אחרי לחיצה על "הוסף") -->
                         <div id="selected_equipment_list" style="margin: 0.5rem 0;">
-                            <?php if ($editingOrder): ?>
-                            <div class="selected-equipment-row" data-equipment-id="<?= (int)$editingOrder['equipment_id'] ?>" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;">
-                                <span><?= htmlspecialchars($editingOrder['equipment_name'] ?? '', ENT_QUOTES, 'UTF-8') ?><?= ($editingOrder['equipment_code'] ?? '') ? ' (' . htmlspecialchars($editingOrder['equipment_code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
+                            <?php if ($editingOrder):
+                                $editCodeForm = (string)($editingOrder['equipment_code'] ?? '');
+                                $formEquipHasComponents = ($editCodeForm !== '' && !empty($equipmentComponentsByCode[$editCodeForm] ?? []));
+                                $showEquipmentPreparedRow = (
+                                    $tab === 'today' && $todayMode === 'prepare'
+                                    && in_array((string)($editingOrder['status'] ?? ''), ['pending', 'approved'], true)
+                                    && !$isViewModeOrder
+                                    && $role !== 'student'
+                                );
+                                ?>
+                            <div class="selected-equipment-row" data-equipment-id="<?= (int)$editingOrder['equipment_id'] ?>" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 4px;">
+                                <span style="flex: 1;"><?= htmlspecialchars($editingOrder['equipment_name'] ?? '', ENT_QUOTES, 'UTF-8') ?><?= ($editingOrder['equipment_code'] ?? '') ? ' (' . htmlspecialchars($editingOrder['equipment_code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
+                                <?php if ($showEquipmentPreparedRow): ?>
+                                    <label class="muted-small" style="display:inline-flex;align-items:center;gap:0.35rem;white-space:nowrap;">
+                                        <input type="checkbox" name="equipment_prepared" id="equipment_prepared" value="1" <?= !empty($editingOrder['equipment_prepared']) ? 'checked' : '' ?>>
+                                        ציוד מוכן
+                                    </label>
+                                <?php endif; ?>
+                                <?php if ($showEquipmentPreparedRow && $formEquipHasComponents): ?>
+                                    <a href="#" class="equipment-components-link" style="font-size:0.85rem;white-space:nowrap;"
+                                       data-equipment-code="<?= htmlspecialchars($editCodeForm, ENT_QUOTES, 'UTF-8') ?>"
+                                       data-order-id="<?= (int)$editingOrder['id'] ?>"
+                                       data-components-context="prepare">רכיבי ציוד</a>
+                                <?php endif; ?>
                                 <button type="button" class="equipment-list-trash" style="border: none; background: transparent; cursor: pointer; font-size: 0.85rem;" title="הסר ציוד" aria-label="הסר ציוד"><i data-lucide="trash-2" aria-hidden="true"></i></button>
                             </div>
+                            <?php if ($formEquipHasComponents): ?>
+                                <script type="application/json" data-components-for="<?= htmlspecialchars($editCodeForm, ENT_QUOTES, 'UTF-8') ?>">
+                                    <?= json_encode($equipmentComponentsByCode[$editCodeForm], JSON_UNESCAPED_UNICODE) ?>
+                                </script>
+                            <?php endif; ?>
                             <?php endif; ?>
                         </div>
                         <?php if ($editingOrder): ?>
@@ -2128,12 +2271,16 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <?php
                         if ($editingOrder && $role !== 'student') {
                             $currentStatus = (string)($editingOrder['status'] ?? '');
+                            $isTodayPrepareCtx = ($tab === 'today' && $todayMode === 'prepare');
+                            $isTodayBorrowCtx = ($tab === 'today' && $todayMode === 'borrow');
                             $orderStatusOptions = [];
                             if ($currentStatus === 'pending') {
                                 $orderStatusOptions = [
                                     'pending'  => 'ממתין (נוכחי)',
                                     'approved' => 'מאושר',
                                     'rejected' => 'נדחה',
+                                    'deleted'  => 'נמחק',
+                                    'ready'    => 'מוכנה',
                                 ];
                             } elseif ($currentStatus === 'approved') {
                                 if ($tab === 'not_picked') {
@@ -2141,12 +2288,38 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     $orderStatusOptions = [
                                         'returned' => 'עבר',
                                     ];
+                                } elseif ($isTodayPrepareCtx) {
+                                    $orderStatusOptions = [
+                                        'approved' => 'מאושר (נוכחי)',
+                                        'ready'    => 'מוכנה',
+                                        'on_loan'  => 'בהשאלה',
+                                        'rejected' => 'נדחה',
+                                        'deleted'  => 'נמחק',
+                                    ];
+                                } elseif ($isTodayBorrowCtx) {
+                                    $orderStatusOptions = [
+                                        'approved' => 'מאושר (נוכחי)',
+                                        'ready'    => 'מוכנה',
+                                        'on_loan'  => 'בהשאלה',
+                                        'rejected' => 'נדחה',
+                                        'deleted'  => 'נמחק',
+                                    ];
                                 } else {
                                     $orderStatusOptions = [
                                         'approved' => 'מאושר (נוכחי)',
                                         'on_loan'  => 'בהשאלה',
+                                        'ready'    => 'מוכנה',
+                                        'rejected' => 'נדחה',
+                                        'deleted'  => 'נמחק',
                                     ];
                                 }
+                            } elseif ($currentStatus === 'ready') {
+                                $orderStatusOptions = [
+                                    'ready'    => 'מוכנה (נוכחי)',
+                                    'on_loan'  => 'בהשאלה',
+                                    'approved' => 'מאושר',
+                                    'deleted'  => 'נמחק',
+                                ];
                             } elseif ($currentStatus === 'on_loan') {
                                 if ($tab === 'not_returned') {
                                     // בטאב "לא הוחזר" מאפשרים רק סגירה ל"עבר"
@@ -2161,6 +2334,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 }
                             } elseif ($currentStatus === 'rejected') {
                                 $orderStatusOptions = ['rejected' => 'נדחה (נוכחי)'];
+                            } elseif ($currentStatus === 'deleted') {
+                                $orderStatusOptions = ['deleted' => 'נמחק (נוכחי)'];
                             } elseif ($currentStatus === 'returned') {
                                 $orderStatusOptions = ['returned' => 'עבר (נוכחי)'];
                             }
@@ -2424,10 +2599,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             <a href="admin_orders.php?tab=active"       class="<?= $tab === 'active'       ? 'active' : '' ?>">בהשאלה</a>
             <a href="admin_orders.php?tab=not_returned" class="<?= $tab === 'not_returned' ? 'active' : '' ?>">לא הוחזר</a>
             <a href="admin_orders.php?tab=history"      class="<?= $tab === 'history'      ? 'active' : '' ?>">היסטוריה</a>
+            <a href="admin_orders.php?tab=rejected_deleted" class="<?= $tab === 'rejected_deleted' ? 'active' : '' ?>">נמחק / נדחה</a>
         </div>
         <?php if ($tab === 'today'): ?>
             <div style="margin-top: 0.5rem;">
                 <div class="tabs" style="display: flex; width: 100%; justify-content: flex-start;">
+                    <a href="admin_orders.php?tab=today&today_mode=prepare"
+                       class="<?= $todayMode === 'prepare' ? 'active' : '' ?>">הכנת ציוד</a>
                     <a href="admin_orders.php?tab=today&today_mode=borrow"
                        class="<?= $todayMode === 'borrow' ? 'active' : '' ?>">קבלת ציוד</a>
                     <a href="admin_orders.php?tab=today&today_mode=return"
@@ -2519,7 +2697,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             if (!empty($componentChecksByOrderAndCode[(int)$order['id']] ?? [])) {
                                 $compChecks = $componentChecksByOrderAndCode[(int)$order['id']][$code] ?? [];
                             }
-                            $componentsContext = ($tab === 'today' && $todayMode === 'return') || $tab === 'not_returned' ? 'return' : 'loan';
+                            if ($tab === 'today' && $todayMode === 'prepare') {
+                                $componentsContext = 'prepare';
+                            } elseif (($tab === 'today' && $todayMode === 'return') || $tab === 'not_returned') {
+                                $componentsContext = 'return';
+                            } else {
+                                $componentsContext = 'loan';
+                            }
                             ?>
                             <?php if ($hasComponents): ?>
                                 <a href="#"
@@ -2572,11 +2756,6 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 $statusLabel = $statusMap[$statusCode];
                             }
 
-                            // בטאב "היום" – כל עוד ההזמנה מאושרת אך הציוד טרם נלקח, מציגים סטטוס "קבלת ציוד"
-                            if ($tab === 'today' && $statusCode === 'approved') {
-                                $statusLabel = 'קבלת ציוד';
-                            }
-
                             if ($statusCode === 'approved') {
                                 $statusClass = 'status-approved';
                             } elseif ($statusCode === 'on_loan') {
@@ -2585,6 +2764,10 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 $statusClass = 'status-returned';
                             } elseif ($statusCode === 'rejected') {
                                 $statusClass = 'status-rejected';
+                            } elseif ($statusCode === 'deleted') {
+                                $statusClass = 'status-rejected';
+                            } elseif ($statusCode === 'ready') {
+                                $statusClass = 'status-ready';
                             }
                             ?>
                             <span class="badge <?= $statusClass ?>"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></span>
@@ -2656,14 +2839,17 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                             <input type="hidden" name="action" value="delete">
                                             <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
                                             <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                            <?php if ($tab === 'today'): ?>
+                                                <input type="hidden" name="current_today_mode" value="<?= htmlspecialchars($todayMode, ENT_QUOTES, 'UTF-8') ?>">
+                                            <?php endif; ?>
                                             <button type="submit" class="icon-btn" title="מחיקה" aria-label="מחיקה"><i data-lucide="trash-2" aria-hidden="true"></i></button>
                                         </form>
                                     </div>
                                 <?php endif;
                             } else {
-                                // למנהל/מנהל מחסן: פעולות בטאבים today, pending, future, active, not_picked, not_returned
+                                // למנהל/מנהל מחסן: פעולות בטאבים today, pending, future, active, not_picked, not_returned, rejected_deleted
                                 // בטאב "לא נלקח" ו"לא הוחזר" אין צורך בשכפול.
-                                $adminTabsAllowed = in_array($tab, ['today', 'pending', 'future', 'active', 'not_picked', 'not_returned'], true);
+                                $adminTabsAllowed = in_array($tab, ['today', 'pending', 'future', 'active', 'not_picked', 'not_returned', 'rejected_deleted'], true);
                                 if ($adminTabsAllowed): ?>
                                     <div class="row-actions">
                                         <?php if ($tab !== 'not_picked' && $tab !== 'not_returned'): ?>
@@ -2681,17 +2867,26 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                                         <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?><?= $tab === 'today' ? '&today_mode=' . urlencode($todayMode) : '' ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
 
+                                        <?php if ($tab === 'today' && $todayMode === 'borrow'): ?>
+                                            <a href="order_print.php?id=<?= (int)$order['id'] ?>"
+                                               class="icon-btn" title="הדפסת טופס הזמנה" aria-label="הדפסת טופס הזמנה"
+                                               target="_blank" rel="noopener noreferrer">
+                                                <i data-lucide="printer" aria-hidden="true"></i>
+                                            </a>
+                                        <?php endif; ?>
+
                                         <?php
-                                        // מנהל יכול למחוק רק הזמנות שהוא יצר בעצמו (creator_username)
-                                        $canDelete = isset($order['creator_username'], $me['username'])
-                                            && $order['creator_username'] === $me['username'];
-                                        if ($canDelete): ?>
+                                        $canDeleteAdmin = ((string)($order['status'] ?? '') !== 'deleted');
+                                        if ($canDeleteAdmin): ?>
                                             <form method="post" action="admin_orders.php"
-                                                  onsubmit="return confirm('למחוק את ההזמנה הזו?');">
+                                                  onsubmit="return confirm('לסמן את ההזמנה כנמחקה? (הרשומה תישאר במערכת)');">
                                                 <input type="hidden" name="action" value="delete">
                                                 <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
                                                 <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                                <button type="submit" class="icon-btn" title="מחיקה" aria-label="מחיקה"><i data-lucide="trash-2" aria-hidden="true"></i></button>
+                                                <?php if ($tab === 'today'): ?>
+                                                    <input type="hidden" name="current_today_mode" value="<?= htmlspecialchars($todayMode, ENT_QUOTES, 'UTF-8') ?>">
+                                                <?php endif; ?>
+                                                <button type="submit" class="icon-btn" title="מחיקה (סטטוס נמחק)" aria-label="מחיקה"><i data-lucide="trash-2" aria-hidden="true"></i></button>
                                             </form>
                                         <?php endif; ?>
 
@@ -2705,11 +2900,23 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                                     'pending'  => 'ממתין (נוכחי)',
                                                     'approved' => 'מאושר',
                                                     'rejected' => 'נדחה',
+                                                    'deleted'  => 'נמחק',
+                                                    'ready'    => 'מוכנה',
                                                 ];
                                             } elseif ($order['status'] === 'approved') {
                                                 $options = [
                                                     'approved' => 'מאושר (נוכחי)',
                                                     'on_loan'  => 'בהשאלה',
+                                                    'ready'    => 'מוכנה',
+                                                    'rejected' => 'נדחה',
+                                                    'deleted'  => 'נמחק',
+                                                ];
+                                            } elseif ($order['status'] === 'ready') {
+                                                $options = [
+                                                    'ready'    => 'מוכנה (נוכחי)',
+                                                    'on_loan'  => 'בהשאלה',
+                                                    'approved' => 'מאושר',
+                                                    'deleted'  => 'נמחק',
                                                 ];
                                             } elseif ($order['status'] === 'on_loan') {
                                                 $options = [
@@ -2868,6 +3075,19 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         fieldsToday.forEach(function (el) {
             if (el.type === 'hidden') return;
             if (allowedIdsTodayReturn.has(el.id)) return;
+            if (el === orderModalClose || el === orderModalCancel || el.id === 'submit_order_btn') return;
+            el.disabled = true;
+        });
+    }
+
+    const isEditFromTodayPrepare = <?= ($editingOrder && $tab === 'today' && $todayMode === 'prepare' && !$isViewModeOrder) ? 'true' : 'false' ?>;
+    if (isEditFromTodayPrepare && orderModal) {
+        const allowedIdsTodayPrepare = new Set(['order_status', 'equipment_prepared', 'rejection_reason', 'admin_notes']);
+        const fieldsPrep = orderModal.querySelectorAll('input, select, textarea, button');
+        fieldsPrep.forEach(function (el) {
+            if (el.type === 'hidden') return;
+            if (allowedIdsTodayPrepare.has(el.id)) return;
+            if (el.classList && el.classList.contains('equipment-components-link')) return;
             if (el === orderModalClose || el === orderModalCancel || el.id === 'submit_order_btn') return;
             el.disabled = true;
         });
@@ -3927,7 +4147,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 return;
                             }
 
-                            if (context === 'loan') {
+                            if (context === 'loan' || context === 'prepare') {
                                 var cbLoan = document.createElement('input');
                                 cbLoan.type = 'checkbox';
                                 cbLoan.style.marginLeft = '0.4rem';
@@ -3989,7 +4209,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 modal._saveBtn.onclick = function () {
                     var payload = [];
                     var mapForCache = {};
-                    if (context === 'loan') {
+                    if (context === 'loan' || context === 'prepare') {
                         var cbLoanList = modal._listContainer.querySelectorAll('input[type="checkbox"][data-component-name]');
                         cbLoanList.forEach(function (cb) {
                             var n = cb.getAttribute('data-component-name') || '';

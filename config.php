@@ -193,6 +193,9 @@ function initialize_database(PDO $pdo): void
         if (!in_array('admin_notes', $orderNames, true)) {
             $pdo->exec("ALTER TABLE orders ADD COLUMN admin_notes TEXT");
         }
+        if (!in_array('equipment_prepared', $orderNames, true)) {
+            $pdo->exec("ALTER TABLE orders ADD COLUMN equipment_prepared INTEGER NOT NULL DEFAULT 0");
+        }
     } catch (PDOException $e) {
         // מתעלמים משגיאות מיגרציה כדי לא להפיל את הטעינה
     }
@@ -385,9 +388,11 @@ function initialize_database(PDO $pdo): void
     $statusDefaults = [
         'pending'      => 'ממתין',
         'approved'     => 'מאושר',
+        'ready'        => 'מוכנה',
         'on_loan'      => 'בהשאלה',
         'returned'     => 'עבר',
         'rejected'     => 'נדחה',
+        'deleted'      => 'נמחק',
         'not_returned' => 'לא הוחזר',  // הזמנה בהשאלה שעבר תאריך ההחזרה
         'not_picked'   => 'לא נלקח',   // הזמנה מאושרת שעבר מועד ההשאלה ולא נלקחה
     ];

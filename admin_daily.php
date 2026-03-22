@@ -146,7 +146,8 @@ try {
                 COALESCE(o.end_time,   '17:00') AS end_time,
                 o.status
             FROM orders o
-            WHERE o.start_date <= ? AND o.end_date >= ?";
+            WHERE o.start_date <= ? AND o.end_date >= ?
+              AND o.status != 'deleted'";
     $params = [$day, $day];
 
     if (!empty($equipmentRows)) {
@@ -265,6 +266,10 @@ function gf_status_color(string $status): array {
             return ['bg' => '#e5e7eb', 'fg' => '#111827', 'label' => 'עבר'];
         case 'rejected':
             return ['bg' => '#fecaca', 'fg' => '#7f1d1d', 'label' => 'נדחה'];
+        case 'ready':
+            return ['bg' => '#bfdbfe', 'fg' => '#1e3a8a', 'label' => 'מוכנה'];
+        case 'deleted':
+            return ['bg' => '#e5e7eb', 'fg' => '#6b7280', 'label' => 'נמחק'];
         default:
             return ['bg' => '#ddd6fe', 'fg' => '#1f2937', 'label' => $status];
     }
@@ -488,7 +493,7 @@ $hrefDailyNext = 'admin_daily.php?' . htmlspecialchars(http_build_query(array_me
         </form>
 
                 <div class="legend">
-                    <?php foreach (['pending','approved','on_loan','returned','rejected'] as $st): ?>
+                    <?php foreach (['pending','approved','ready','on_loan','returned','rejected','deleted'] as $st): ?>
                         <?php $c = gf_status_color($st); ?>
                         <div class="legend-item">
                             <span class="swatch" style="background:<?= htmlspecialchars($c['bg'], ENT_QUOTES, 'UTF-8') ?>;"></span>
