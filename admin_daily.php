@@ -273,6 +273,10 @@ function gf_status_color(string $status): array {
 $prevDay = date('Y-m-d', strtotime($day . ' -1 day'));
 $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
 
+$dailyNavQuery = ['category' => $selectedCategory, 'q' => $searchQ];
+$hrefDailyPrev = 'admin_daily.php?' . htmlspecialchars(http_build_query(array_merge(['day' => $prevDay], $dailyNavQuery)), ENT_QUOTES, 'UTF-8');
+$hrefDailyNext = 'admin_daily.php?' . htmlspecialchars(http_build_query(array_merge(['day' => $nextDay], $dailyNavQuery)), ENT_QUOTES, 'UTF-8');
+
 ?>
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -347,12 +351,22 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
         .cell-inner { display:flex; align-items:center; justify-content:space-between; width:100%; min-height:100%; gap:1px; direction: rtl; }
         .daily-edge-arrow { flex:0 0 11px; display:flex; align-items:center; justify-content:center; opacity:0.9; color: inherit; }
         .daily-edge-arrow i { width:11px; height:11px; }
+        a.daily-edge-arrow-link {
+            display: flex;
+            text-decoration: none;
+            color: inherit;
+            cursor: pointer;
+            border-radius: 4px;
+            align-items: center;
+            justify-content: center;
+        }
+        a.daily-edge-arrow-link:hover { background: rgba(0,0,0,0.1); }
+        a.daily-edge-arrow-link:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
         .daily-edge-spacer { flex:0 0 11px; width:11px; }
         .cell.occupied { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06); padding: 0 1px; }
         .cell .tiny { font-size:0.62rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0; text-align:center; }
-        .order-cell-link { display:block; text-decoration:none; }
-        .order-cell-link .cell { cursor: pointer; }
-        .order-cell-link:hover .cell { filter: brightness(0.98); }
+        .order-cell-link { display:block; text-decoration:none; flex:1; min-width:0; color:inherit; cursor:pointer; }
+        .order-cell-link:hover .tiny { filter: brightness(0.95); }
         td.js-daily-slot { cursor: pointer; }
         td.js-daily-slot:hover { background: #f9fafb; }
         td.js-daily-slot.selected { background: #eef2ff; }
@@ -570,26 +584,36 @@ $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
                                         $title = 'הזמנה #' . (int)($hit['id'] ?? 0) . ' · ' . $borrower . ' · ' . ($hit['start_date'] ?? '') . ' ' . ($hit['start_time'] ?? '') . ' – ' . ($hit['end_date'] ?? '') . ' ' . ($hit['end_time'] ?? '') . ' · ' . $c['label'];
                                         ?>
                                         <td colspan="<?= (int)$span ?>" title="<?= htmlspecialchars($title, ENT_QUOTES, 'UTF-8') ?>">
-                                            <a class="order-cell-link js-order-open"
-                                               href="#"
-                                               data-order-id="<?= (int)($hit['id'] ?? 0) ?>"
-                                               aria-label="צפייה בהזמנה #<?= (int)($hit['id'] ?? 0) ?>">
                                                 <div class="cell occupied" style="background:<?= htmlspecialchars($c['bg'], ENT_QUOTES, 'UTF-8') ?>; color:<?= htmlspecialchars($c['fg'], ENT_QUOTES, 'UTF-8') ?>;">
                                                     <div class="cell-inner">
                                                         <?php if ($hasBefore): ?>
-                                                            <span class="daily-edge-arrow" title="המשך מהיום הקודם" aria-hidden="true"><i data-lucide="chevron-right"></i></span>
+                                                            <a class="daily-edge-arrow daily-edge-arrow-link"
+                                                               href="<?= $hrefDailyPrev ?>"
+                                                               title="עבור ליום הקודם"
+                                                               aria-label="עבור ליום הקודם — המשך ההזמנה מהיום שעבר">
+                                                                <i data-lucide="chevron-right" aria-hidden="true"></i>
+                                                            </a>
                                                         <?php else: ?>
                                                             <span class="daily-edge-spacer" aria-hidden="true"></span>
                                                         <?php endif; ?>
-                                                        <span class="tiny">#<?= (int)($hit['id'] ?? 0) ?> <?= htmlspecialchars($borrower, ENT_QUOTES, 'UTF-8') ?></span>
+                                                        <a class="order-cell-link js-order-open"
+                                                           href="#"
+                                                           data-order-id="<?= (int)($hit['id'] ?? 0) ?>"
+                                                           aria-label="צפייה בהזמנה #<?= (int)($hit['id'] ?? 0) ?>">
+                                                            <span class="tiny">#<?= (int)($hit['id'] ?? 0) ?> <?= htmlspecialchars($borrower, ENT_QUOTES, 'UTF-8') ?></span>
+                                                        </a>
                                                         <?php if ($hasAfter): ?>
-                                                            <span class="daily-edge-arrow" title="המשך ביום הבא" aria-hidden="true"><i data-lucide="chevron-left"></i></span>
+                                                            <a class="daily-edge-arrow daily-edge-arrow-link"
+                                                               href="<?= $hrefDailyNext ?>"
+                                                               title="עבור ליום הבא"
+                                                               aria-label="עבור ליום הבא — המשך ההזמנה">
+                                                                <i data-lucide="chevron-left" aria-hidden="true"></i>
+                                                            </a>
                                                         <?php else: ?>
                                                             <span class="daily-edge-spacer" aria-hidden="true"></span>
                                                         <?php endif; ?>
                                                     </div>
                                                 </div>
-                                            </a>
                                         </td>
                                         <?php
                                     }
