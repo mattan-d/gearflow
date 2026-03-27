@@ -1646,6 +1646,23 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             grid-template-columns: 1.2fr 2fr; /* אזור תאריכים צר יותר, אזור ציוד רחב יותר */
             gap: 1.5rem;
         }
+        .form-section-title {
+            margin: 0.85rem 0 0.35rem;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #111827;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 0.25rem;
+        }
+        .selected-equipment-checklist-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: #111827;
+            white-space: nowrap;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -2119,6 +2136,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                    value="<?= htmlspecialchars((string)($editingOrder['end_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                         <?php endif; ?>
 
+                        <h3 class="form-section-title">תאריך</h3>
                         <?php
                         $showRecurringBlock = !$editingOrder && ($role === 'admin' || $role === 'warehouse_manager');
                         if ($showRecurringBlock): ?>
@@ -2238,27 +2256,30 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         </div>
                         <?php endif; ?>
 
+                        <h3 class="form-section-title">ציוד נבחר</h3>
                         <!-- רשימת פריטי הציוד שנבחרו (מתעדכנת אחרי לחיצה על "הוסף") -->
                         <div id="selected_equipment_list" style="margin: 0.5rem 0;">
                             <?php if ($editingOrder):
                                 $editCodeForm = (string)($editingOrder['equipment_code'] ?? '');
                                 $formEquipHasComponents = ($editCodeForm !== '' && !empty($equipmentComponentsByCode[$editCodeForm] ?? []));
-                                $showEquipmentPreparedRow = (
+                                $showEquipmentPreparedChecklist = (
                                     $tab === 'today' && $todayMode === 'prepare'
-                                    && in_array((string)($editingOrder['status'] ?? ''), ['pending', 'approved'], true)
+                                    && (string)($editingOrder['status'] ?? '') === 'approved'
+                                    && (string)($editingOrder['start_date'] ?? '') === date('Y-m-d')
                                     && !$isViewModeOrder
                                     && $role !== 'student'
                                 );
                                 ?>
                             <div class="selected-equipment-row" data-equipment-id="<?= (int)$editingOrder['equipment_id'] ?>" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 4px;">
-                                <span style="flex: 1;"><?= htmlspecialchars($editingOrder['equipment_name'] ?? '', ENT_QUOTES, 'UTF-8') ?><?= ($editingOrder['equipment_code'] ?? '') ? ' (' . htmlspecialchars($editingOrder['equipment_code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
-                                <?php if ($showEquipmentPreparedRow): ?>
-                                    <label class="muted-small" style="display:inline-flex;align-items:center;gap:0.35rem;white-space:nowrap;">
+                                <?php if ($showEquipmentPreparedChecklist): ?>
+                                    <label class="selected-equipment-checklist-item" style="flex: 1;">
                                         <input type="checkbox" name="equipment_prepared" id="equipment_prepared" value="1" <?= !empty($editingOrder['equipment_prepared']) ? 'checked' : '' ?>>
-                                        ציוד מוכן
+                                        <span><?= htmlspecialchars($editingOrder['equipment_name'] ?? '', ENT_QUOTES, 'UTF-8') ?><?= ($editingOrder['equipment_code'] ?? '') ? ' (' . htmlspecialchars($editingOrder['equipment_code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
                                     </label>
+                                <?php else: ?>
+                                    <span style="flex: 1;"><?= htmlspecialchars($editingOrder['equipment_name'] ?? '', ENT_QUOTES, 'UTF-8') ?><?= ($editingOrder['equipment_code'] ?? '') ? ' (' . htmlspecialchars($editingOrder['equipment_code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
                                 <?php endif; ?>
-                                <?php if ($showEquipmentPreparedRow && $formEquipHasComponents): ?>
+                                <?php if ($showEquipmentPreparedChecklist && $formEquipHasComponents): ?>
                                     <a href="#" class="equipment-components-link" style="font-size:0.85rem;white-space:nowrap;"
                                        data-equipment-code="<?= htmlspecialchars($editCodeForm, ENT_QUOTES, 'UTF-8') ?>"
                                        data-order-id="<?= (int)$editingOrder['id'] ?>"
@@ -2277,6 +2298,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <input type="hidden" name="equipment_id" id="equipment_id_hidden" value="<?= (int)$editingOrder['equipment_id'] ?>">
                         <?php endif; ?>
 
+                        <h3 class="form-section-title">פרטי השואל</h3>
                         <label for="borrower_search">שם שואל</label>
                         <?php
                         $defaultBorrower = '';
@@ -2365,6 +2387,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <input type="hidden" id="borrower_contact" name="borrower_contact"
                                value="<?= htmlspecialchars($editingOrder ? (string)($editingOrder['borrower_contact'] ?? '') : '', ENT_QUOTES, 'UTF-8') ?>">
 
+                        <h3 class="form-section-title">מטרה</h3>
                         <label for="order_purpose">מטרה</label>
                         <input
                             type="text"
@@ -2479,6 +2502,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 || ($tab === 'today' && $todayMode === 'return')
                             );
                             ?>
+                            <h3 class="form-section-title">מצב הזמנה</h3>
                             <label for="order_status">מצב הזמנה</label>
                             <select id="order_status" name="order_status">
                                 <?php foreach ($orderStatusOptions as $val => $label): ?>
@@ -2533,6 +2557,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             </div>
                         <?php } ?>
 
+                        <h3 class="form-section-title">הערות</h3>
                         <label for="notes">הערות</label>
                         <div class="notes-combined-box">
                             <div class="notes-block notes-block-admin">

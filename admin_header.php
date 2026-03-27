@@ -118,6 +118,62 @@ if ($userId > 0) {
     }
 }
 
+// שליחת מייל מה-Header: נמענים מותרים לפי תפקיד ומחסן
+$mailRecipients = [];
+$meWarehouse = trim((string)($me['warehouse'] ?? ''));
+try {
+    if ($role === 'student') {
+        $stmtMailRecipients = $pdo->prepare(
+            "SELECT id, username, first_name, last_name, role, warehouse, email
+             FROM users
+             WHERE is_active = 1
+               AND role = 'warehouse_manager'
+               AND warehouse = :warehouse
+               AND TRIM(COALESCE(email, '')) <> ''
+             ORDER BY first_name ASC, last_name ASC, username ASC"
+        );
+        $stmtMailRecipients->execute([':warehouse' => $meWarehouse]);
+        $mailRecipients = $stmtMailRecipients->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } elseif ($role === 'warehouse_manager') {
+        $stmtMailRecipients = $pdo->prepare(
+            "SELECT id, username, first_name, last_name, role, warehouse, email
+             FROM users
+             WHERE is_active = 1
+               AND role = 'student'
+               AND warehouse = :warehouse
+               AND TRIM(COALESCE(email, '')) <> ''
+             ORDER BY first_name ASC, last_name ASC, username ASC"
+        );
+        $stmtMailRecipients->execute([':warehouse' => $meWarehouse]);
+        $mailRecipients = $stmtMailRecipients->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } elseif ($role === 'admin') {
+        $stmtMailRecipients = $pdo->prepare(
+            "SELECT id, username, first_name, last_name, role, warehouse, email
+             FROM users
+             WHERE is_active = 1
+               AND id != :my_id
+               AND TRIM(COALESCE(email, '')) <> ''
+             ORDER BY role ASC, warehouse ASC, first_name ASC, last_name ASC, username ASC"
+        );
+        $stmtMailRecipients->execute([':my_id' => $userId]);
+        $mailRecipients = $stmtMailRecipients->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+} catch (Throwable $e) {
+    $mailRecipients = [];
+}
+
+// Flash להודעות שליחת מייל
+$mailFlashSuccess = '';
+$mailFlashError = '';
+if (isset($_SESSION['header_mail_success']) && is_string($_SESSION['header_mail_success'])) {
+    $mailFlashSuccess = $_SESSION['header_mail_success'];
+    unset($_SESSION['header_mail_success']);
+}
+if (isset($_SESSION['header_mail_error']) && is_string($_SESSION['header_mail_error'])) {
+    $mailFlashError = $_SESSION['header_mail_error'];
+    unset($_SESSION['header_mail_error']);
+}
+
 ?>
 <style>
     :root {
@@ -221,6 +277,10 @@ if ($userId > 0) {
         position: relative;
         margin-left: 0.75rem;
     }
+    .mail-wrapper {
+        position: relative;
+        margin-left: 0.35rem;
+    }
     .notif-bell-btn {
         border: none;
         background: transparent;
@@ -229,6 +289,19 @@ if ($userId > 0) {
         font-size: 1.1rem;
         position: relative;
         padding: 0;
+    }
+    .mail-btn {
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        color: var(--gf-header-link);
+        font-size: 1.1rem;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+    }
+    .mail-btn:hover {
+        color: var(--gf-header-text);
     }
     .notif-bell-btn.has-unread {
         color:rgb(255, 0, 0);
@@ -309,6 +382,87 @@ if ($userId > 0) {
         color: var(--gf-header-muted);
         cursor: pointer;
         font-size: 0.8rem;
+    }
+    .header-mail-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(17, 24, 39, 0.55);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1200;
+    }
+    .header-mail-modal-backdrop.visible {
+        display: flex;
+    }
+    .header-mail-modal {
+        width: min(520px, calc(100vw - 2rem));
+        background: #ffffff;
+        color: #111827;
+        border-radius: 12px;
+        box-shadow: 0 24px 48px rgba(15, 23, 42, 0.28);
+        padding: 1rem;
+    }
+    .header-mail-modal h3 {
+        margin: 0 0 0.75rem 0;
+        font-size: 1.1rem;
+    }
+    .header-mail-row {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        margin-bottom: 0.7rem;
+    }
+    .header-mail-row label {
+        font-size: 0.85rem;
+        color: #374151;
+    }
+    .header-mail-row input,
+    .header-mail-row textarea {
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 0.45rem 0.6rem;
+        font-size: 0.9rem;
+        font-family: inherit;
+    }
+    .header-mail-row textarea {
+        min-height: 110px;
+        resize: vertical;
+    }
+    .header-mail-actions {
+        display: flex;
+        gap: 0.55rem;
+        justify-content: flex-end;
+        margin-top: 0.9rem;
+    }
+    .header-mail-actions button {
+        border: none;
+        border-radius: 999px;
+        padding: 0.42rem 1rem;
+        cursor: pointer;
+        font-size: 0.85rem;
+    }
+    .header-mail-send {
+        background: #111827;
+        color: #f9fafb;
+    }
+    .header-mail-cancel {
+        background: #e5e7eb;
+        color: #111827;
+    }
+    .header-mail-flash {
+        margin: 0.45rem 0 0.2rem;
+        font-size: 0.8rem;
+        padding: 0.35rem 0.55rem;
+        border-radius: 7px;
+    }
+    .header-mail-flash.success {
+        background: #ecfdf3;
+        color: #166534;
+    }
+    .header-mail-flash.error {
+        background: #fef2f2;
+        color: #b91c1c;
     }
     .btn.btn-file {
         border: 1px solid #d4a5a5;
@@ -423,6 +577,66 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     });
+    var openMailBtn = document.getElementById('header_open_mail_modal');
+    var mailBackdrop = document.getElementById('header_mail_modal_backdrop');
+    var closeMailBtn = document.getElementById('header_mail_close');
+    var cancelMailBtn = document.getElementById('header_mail_cancel');
+    var toInput = document.getElementById('header_mail_to');
+    var toHidden = document.getElementById('header_mail_to_id');
+    var subjectInput = document.getElementById('header_mail_subject');
+    var recipientHint = document.getElementById('header_mail_recipient_hint');
+    var recipientMap = {};
+    document.querySelectorAll('#header_mail_recipients option').forEach(function(opt) {
+        if (!opt || !opt.value) return;
+        recipientMap[opt.value] = opt.getAttribute('data-user-id') || '';
+    });
+    function closeMailModal() {
+        if (mailBackdrop) mailBackdrop.classList.remove('visible');
+    }
+    if (openMailBtn && mailBackdrop) {
+        openMailBtn.addEventListener('click', function() {
+            mailBackdrop.classList.add('visible');
+            if (toInput) toInput.focus();
+        });
+    }
+    if (closeMailBtn) closeMailBtn.addEventListener('click', closeMailModal);
+    if (cancelMailBtn) cancelMailBtn.addEventListener('click', closeMailModal);
+    if (mailBackdrop) {
+        mailBackdrop.addEventListener('click', function(e) {
+            if (e.target === mailBackdrop) closeMailModal();
+        });
+    }
+    if (toInput && toHidden) {
+        toInput.addEventListener('input', function() {
+            var val = (toInput.value || '').trim();
+            toHidden.value = recipientMap[val] || '';
+            if (recipientHint) {
+                recipientHint.textContent = toHidden.value ? '' : 'בחר נמען מהרשימה האוטומטית.';
+            }
+        });
+    }
+    var mailForm = document.getElementById('header_mail_form');
+    if (mailForm && toInput && toHidden && subjectInput) {
+        mailForm.addEventListener('submit', function(e) {
+            var toVal = (toInput.value || '').trim();
+            if (!toHidden.value) {
+                e.preventDefault();
+                if (recipientHint) recipientHint.textContent = 'יש לבחור נמען מהרשימה.';
+                toInput.focus();
+                return;
+            }
+            if (!subjectInput.value.trim()) {
+                e.preventDefault();
+                subjectInput.focus();
+                return;
+            }
+            if (recipientMap[toVal] !== toHidden.value) {
+                e.preventDefault();
+                if (recipientHint) recipientHint.textContent = 'בחר נמען מהרשימה.';
+                toInput.focus();
+            }
+        });
+    }
 });
 </script>
 <header style="background: <?= htmlspecialchars($headerBg, ENT_QUOTES, 'UTF-8') ?>; color: <?= htmlspecialchars($headerText, ENT_QUOTES, 'UTF-8') ?>;">
@@ -489,6 +703,11 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
     <div class="user-info">
         <div style="display:flex;align-items:center;gap:0.5rem;">
+            <div class="mail-wrapper">
+                <button type="button" id="header_open_mail_modal" class="mail-btn" aria-label="שליחת מייל">
+                    <i data-lucide="mail" aria-hidden="true"></i>
+                </button>
+            </div>
             <div class="notif-wrapper">
                 <button type="button"
                         class="notif-bell-btn <?= $unreadCount > 0 ? 'has-unread' : '' ?>"
@@ -545,6 +764,58 @@ document.addEventListener('DOMContentLoaded', function() {
             </span>
             <a href="logout.php">התנתק</a>
         </div>
+        <?php if ($mailFlashSuccess !== ''): ?>
+            <div class="header-mail-flash success"><?= htmlspecialchars($mailFlashSuccess, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php elseif ($mailFlashError !== ''): ?>
+            <div class="header-mail-flash error"><?= htmlspecialchars($mailFlashError, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
     </div>
 </header>
+
+<div id="header_mail_modal_backdrop" class="header-mail-modal-backdrop" aria-hidden="true">
+    <div class="header-mail-modal" role="dialog" aria-modal="true" aria-labelledby="header_mail_title">
+        <h3 id="header_mail_title">שליחת מייל למשתמש</h3>
+        <?php if (empty($mailRecipients)): ?>
+            <div class="header-mail-flash error" style="margin:0;">לא נמצאו נמענים זמינים לשליחה לפי ההרשאות שלך.</div>
+            <div class="header-mail-actions">
+                <button type="button" id="header_mail_close" class="header-mail-cancel">סגירה</button>
+            </div>
+        <?php else: ?>
+            <form id="header_mail_form" method="post" action="mail_action.php">
+                <input type="hidden" name="redirect" value="<?= htmlspecialchars($notifRedirectUri, ENT_QUOTES, 'UTF-8') ?>">
+                <input type="hidden" name="to_user_id" id="header_mail_to_id" value="">
+                <div class="header-mail-row">
+                    <label for="header_mail_to">אל (הקלד/י שם לבחירה אוטומטית)</label>
+                    <input type="text" id="header_mail_to" list="header_mail_recipients" autocomplete="off" placeholder="התחל/י להקליד שם משתמש">
+                    <datalist id="header_mail_recipients">
+                        <?php foreach ($mailRecipients as $r): ?>
+                            <?php
+                            $fullName = trim((string)($r['first_name'] ?? '') . ' ' . (string)($r['last_name'] ?? ''));
+                            $displayName = $fullName !== '' ? $fullName : (string)($r['username'] ?? '');
+                            $label = $displayName . ' (' . (string)($r['username'] ?? '') . ')';
+                            if (trim((string)($r['warehouse'] ?? '')) !== '') {
+                                $label .= ' - ' . (string)$r['warehouse'];
+                            }
+                            ?>
+                            <option value="<?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?>" data-user-id="<?= (int)($r['id'] ?? 0) ?>"></option>
+                        <?php endforeach; ?>
+                    </datalist>
+                    <small id="header_mail_recipient_hint" style="color:#6b7280;font-size:0.78rem;"></small>
+                </div>
+                <div class="header-mail-row">
+                    <label for="header_mail_subject">נושא</label>
+                    <input type="text" id="header_mail_subject" name="subject" maxlength="180" required>
+                </div>
+                <div class="header-mail-row">
+                    <label for="header_mail_body">תוכן ההודעה</label>
+                    <textarea id="header_mail_body" name="body" maxlength="10000" required></textarea>
+                </div>
+                <div class="header-mail-actions">
+                    <button type="button" id="header_mail_cancel" class="header-mail-cancel">ביטול</button>
+                    <button type="submit" class="header-mail-send">שליחת מייל</button>
+                </div>
+            </form>
+        <?php endif; ?>
+    </div>
+</div>
 
