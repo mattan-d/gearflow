@@ -1052,22 +1052,50 @@ if ($eqShow) {
                             $seriesMax = (int)($s['max'] ?? 1);
                             if ($seriesMax < 1) $seriesMax = 1;
                             ?>
+                            <?php
+                            $tickCount = 4;
+                            $ticks = [];
+                            for ($i = 0; $i <= $tickCount; $i++) {
+                                $ticks[] = (int)round(($seriesMax * $i) / $tickCount);
+                            }
+                            $ticks = array_values(array_unique($ticks));
+                            sort($ticks);
+                            ?>
                             <div style="margin-bottom:1rem;border:1px solid #e5e7eb;border-radius:12px;padding:0.75rem;background:#fff;">
                                 <div style="font-weight:700;margin-bottom:0.5rem;"><?= htmlspecialchars($seriesLabel, ENT_QUOTES, 'UTF-8') ?></div>
-                                <div style="display:flex;flex-direction:row-reverse;align-items:flex-end;gap:6px;overflow-x:auto;padding:0.25rem 0.15rem;">
-                                    <?php foreach ($ordersDaily['dates'] as $day): ?>
-                                        <?php
-                                        $v = (int)($seriesData[$day] ?? 0);
-                                        $h = $seriesMax > 0 ? max(2, (int)round(($v / $seriesMax) * 120)) : 2;
-                                        ?>
-                                        <div title="<?= htmlspecialchars($day . ': ' . $v, ENT_QUOTES, 'UTF-8') ?>"
-                                             style="display:flex;flex-direction:column;align-items:center;min-width:18px;">
-                                            <div style="width:14px;height:<?= (int)$h ?>px;border-radius:6px 6px 2px 2px;background:linear-gradient(135deg,#4f46e5,#6366f1);"></div>
-                                            <div style="margin-top:4px;font-size:0.68rem;color:#6b7280;writing-mode:vertical-rl;transform:rotate(180deg);line-height:1;">
-                                                <?= htmlspecialchars(substr($day, 5), ENT_QUOTES, 'UTF-8') ?>
-                                            </div>
+                                <div style="display:flex;gap:10px;align-items:flex-start;">
+                                    <div style="width:48px;flex:0 0 48px;">
+                                        <div style="height:140px;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;">
+                                            <?php for ($i = count($ticks) - 1; $i >= 0; $i--): ?>
+                                                <div style="font-size:0.75rem;color:#6b7280;line-height:1;">
+                                                    <?= (int)$ticks[$i] ?>
+                                                </div>
+                                            <?php endfor; ?>
                                         </div>
-                                    <?php endforeach; ?>
+                                    </div>
+                                    <div style="flex:1;min-width:0;">
+                                        <div style="height:140px;display:flex;flex-direction:row-reverse;align-items:flex-end;gap:6px;width:100%;padding:0.25rem 0;">
+                                            <?php foreach ($ordersDaily['dates'] as $day): ?>
+                                                <?php
+                                                $v = (int)($seriesData[$day] ?? 0);
+                                                $h = $seriesMax > 0 ? max(2, (int)round(($v / $seriesMax) * 120)) : 2;
+                                                ?>
+                                                <div style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;"
+                                                     data-value="<?= (int)$v ?>"
+                                                     title="<?= htmlspecialchars($day . ': ' . $v, ENT_QUOTES, 'UTF-8') ?>">
+                                                    <div class="daily-bar-value"
+                                                         style="opacity:0;transition:opacity .12s ease;margin-bottom:3px;font-size:0.72rem;color:#111827;font-weight:600;">
+                                                        <?= (int)$v ?>
+                                                    </div>
+                                                    <div class="daily-bar"
+                                                         style="width:100%;max-width:22px;height:<?= (int)$h ?>px;border-radius:6px 6px 2px 2px;background:linear-gradient(135deg,#4f46e5,#6366f1);"></div>
+                                                    <div style="margin-top:4px;font-size:0.68rem;color:#6b7280;writing-mode:vertical-rl;transform:rotate(180deg);line-height:1;">
+                                                        <?= htmlspecialchars(substr($day, 5), ENT_QUOTES, 'UTF-8') ?>
+                                                    </div>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="muted-small" style="margin-top:0.35rem;">מוצג לפי תאריך התחלה (Start Date).</div>
                             </div>
@@ -1398,6 +1426,26 @@ if ($eqShow) {
     </div>
 </main>
 <script>
+    // תצוגה יומית – הצגת הערך מעל העמודה בעת hover
+    (function () {
+        try {
+            document.querySelectorAll('.daily-bar').forEach(function (bar) {
+                var wrap = bar.parentElement;
+                if (!wrap) return;
+                wrap.addEventListener('mouseenter', function () {
+                    var v = wrap.querySelector('.daily-bar-value');
+                    if (v) v.style.opacity = '1';
+                });
+                wrap.addEventListener('mouseleave', function () {
+                    var v = wrap.querySelector('.daily-bar-value');
+                    if (v) v.style.opacity = '0';
+                });
+            });
+        } catch (e) {
+            // ignore
+        }
+    })();
+
     // לוח שנה לדוחות הזמנות + הצגת פילטרים לפי סטטוס החזרה
     (function () {
         var form       = document.getElementById('orders_report_form');
