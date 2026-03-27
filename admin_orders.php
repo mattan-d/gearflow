@@ -1718,6 +1718,25 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             color: #111827;
             white-space: nowrap;
         }
+        .equipment-column-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.35rem;
+        }
+        .equipment-column-toggle-btn {
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            color: #111827;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            padding: 0.2rem 0.55rem;
+            cursor: pointer;
+        }
+        .equipment-column-body.hidden {
+            display: none;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -2341,11 +2360,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     && $role !== 'student'
                                 );
                                 ?>
-                            <?php foreach ($editingEquipmentRows as $eqIdx => $eq): ?>
+                                <?php foreach ($editingEquipmentRows as $eqIdx => $eq): ?>
                                 <div class="selected-equipment-row" data-equipment-id="<?= (int)($eq['id'] ?? 0) ?>" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 4px;">
-                                    <?php if ($showEquipmentPreparedChecklist && $eqIdx === 0): ?>
+                                    <?php if ($showEquipmentPreparedChecklist): ?>
                                         <label class="selected-equipment-checklist-item" style="flex: 1;">
-                                            <input type="checkbox" name="equipment_prepared" id="equipment_prepared" value="1" <?= !empty($editingOrder['equipment_prepared']) ? 'checked' : '' ?>>
+                                            <input type="checkbox"
+                                                   <?= $eqIdx === 0 ? 'name="equipment_prepared" id="equipment_prepared" value="1"' : 'class="equipment-prepared-item-check"' ?>
+                                                   <?= !empty($editingOrder['equipment_prepared']) ? 'checked' : '' ?>>
                                             <span><?= htmlspecialchars((string)($eq['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?><?= ((string)($eq['code'] ?? '') !== '') ? ' (' . htmlspecialchars((string)$eq['code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
                                         </label>
                                     <?php else: ?>
@@ -2691,56 +2712,67 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                     <!-- עמודת ציוד (זהה בהזמנה חדשה ובעריכה) -->
                     <?php if (!($editingOrder && ($tab === 'not_picked' || $tab === 'not_returned'))): ?>
                     <div id="equipment_column">
-                        <label for="equipment_category_filter">קטגוריית ציוד</label>
-                        <select id="equipment_category_filter">
-                            <option value="all">כל הקטגוריות</option>
-                            <?php foreach ($equipmentCategories as $cat): ?>
-                                <option value="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>">
-                                    <?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
+                        <?php $isNewOrderMode = !$editingOrder; ?>
+                        <div class="equipment-column-header">
+                            <label style="margin:0;"><?= $isNewOrderMode ? 'בחירת ציוד' : 'החלפת ציוד' ?></label>
+                            <?php if (!$isNewOrderMode): ?>
+                                <button type="button" id="toggle_equipment_column_btn" class="equipment-column-toggle-btn" aria-expanded="false">
+                                    הצג
+                                </button>
+                            <?php endif; ?>
+                        </div>
+                        <div id="equipment_column_body" class="equipment-column-body <?= $isNewOrderMode ? '' : 'hidden' ?>">
+                            <label for="equipment_category_filter">קטגוריית ציוד</label>
+                            <select id="equipment_category_filter">
+                                <option value="all">כל הקטגוריות</option>
+                                <?php foreach ($equipmentCategories as $cat): ?>
+                                    <option value="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>">
+                                        <?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
 
-                        <table>
-                            <thead>
-                            <tr>
-                                <th style="width:40px;">בחר</th>
-                                <th>שם הציוד</th>
-                                <th>קוד</th>
-                                <th>קטגוריה</th>
-                            </tr>
-                            </thead>
-                            <tbody id="equipment_table_body">
-                            <?php foreach ($equipmentOptions as $item): ?>
-                                <?php
-                                $cat = trim((string)($item['category'] ?? ''));
-                                if ($cat === '') {
-                                    $cat = 'ללא קטגוריה';
-                                }
-                                $isChecked = $editingOrder
-                                    ? in_array((int)$item['id'], $editingEquipmentIds, true)
-                                    : false;
-                                ?>
-                                <tr data-category="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>" data-equipment-id="<?= (int)$item['id'] ?>">
-                                    <td>
-                                        <input type="checkbox"
-                                               name="equipment_ids[]"
-                                               value="<?= (int)$item['id'] ?>"
-                                               <?= $isChecked ? 'checked' : '' ?>
-                                               data-name="<?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>"
-                                               data-code="<?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?>">
-                                    </td>
-                                    <td><?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?></td>
-                                    <td class="muted-small"><?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?></td>
-                                    <td class="muted-small"><?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?></td>
+                            <table>
+                                <thead>
+                                <tr>
+                                    <th style="width:40px;">בחר</th>
+                                    <th>שם הציוד</th>
+                                    <th>קוד</th>
+                                    <th>קטגוריה</th>
                                 </tr>
-                            <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                        <button type="button" class="btn secondary" id="add_equipment_btn" style="margin-top:0.5rem;">
-                            הוסף
-                        </button>
-                        <div class="muted-small" id="selected_equipment_summary" style="margin-top:0.3rem;"></div>
+                                </thead>
+                                <tbody id="equipment_table_body">
+                                <?php foreach ($equipmentOptions as $item): ?>
+                                    <?php
+                                    $cat = trim((string)($item['category'] ?? ''));
+                                    if ($cat === '') {
+                                        $cat = 'ללא קטגוריה';
+                                    }
+                                    $isChecked = $editingOrder
+                                        ? in_array((int)$item['id'], $editingEquipmentIds, true)
+                                        : false;
+                                    ?>
+                                    <tr data-category="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>" data-equipment-id="<?= (int)$item['id'] ?>">
+                                        <td>
+                                            <input type="checkbox"
+                                                   name="equipment_ids[]"
+                                                   value="<?= (int)$item['id'] ?>"
+                                                   <?= $isChecked ? 'checked' : '' ?>
+                                                   data-name="<?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?>"
+                                                   data-code="<?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?>">
+                                        </td>
+                                        <td><?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td class="muted-small"><?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td class="muted-small"><?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                            <button type="button" class="btn secondary" id="add_equipment_btn" style="margin-top:0.5rem;">
+                                הוסף
+                            </button>
+                            <div class="muted-small" id="selected_equipment_summary" style="margin-top:0.3rem;"></div>
+                        </div>
                     </div>
                     <?php endif; ?>
                 </div>
@@ -3237,6 +3269,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const addEquipmentBtn = document.getElementById('add_equipment_btn');
     const selectedEquipmentSummary = document.getElementById('selected_equipment_summary');
     const selectedEquipmentList = document.getElementById('selected_equipment_list');
+    const equipmentColumnBody = document.getElementById('equipment_column_body');
+    const toggleEquipmentColumnBtn = document.getElementById('toggle_equipment_column_btn');
     const borrowerEmailInput = document.getElementById('borrower_email');
     const borrowerPhoneInput = document.getElementById('borrower_phone');
     const borrowerContactHidden = document.getElementById('borrower_contact');
@@ -3355,6 +3389,14 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     }
 
     const isEditFromTodayPrepare = <?= ($editingOrder && $tab === 'today' && $todayMode === 'prepare' && !$isViewModeOrder) ? 'true' : 'false' ?>;
+    const showEquipmentPreparedChecklist = <?= ($editingOrder
+        && $tab === 'today'
+        && $todayMode === 'prepare'
+        && (string)($editingOrder['status'] ?? '') === 'approved'
+        && (string)($editingOrder['start_date'] ?? '') === date('Y-m-d')
+        && !$isViewModeOrder
+        && $role !== 'student') ? 'true' : 'false' ?>;
+    const preparedInitiallyChecked = <?= (!empty($editingOrder['equipment_prepared'])) ? 'true' : 'false' ?>;
     if (isEditFromTodayPrepare && orderModal) {
         const allowedIdsTodayPrepare = new Set(['order_status', 'equipment_prepared', 'rejection_reason', 'admin_notes']);
         const fieldsPrep = orderModal.querySelectorAll('input, select, textarea, button');
@@ -3362,8 +3404,24 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             if (el.type === 'hidden') return;
             if (allowedIdsTodayPrepare.has(el.id)) return;
             if (el.classList && el.classList.contains('equipment-components-link')) return;
+            if (el.classList && el.classList.contains('equipment-prepared-item-check')) return;
             if (el === orderModalClose || el === orderModalCancel || el.id === 'submit_order_btn') return;
             el.disabled = true;
+        });
+    }
+
+    if (toggleEquipmentColumnBtn && equipmentColumnBody) {
+        toggleEquipmentColumnBtn.addEventListener('click', function () {
+            const hidden = equipmentColumnBody.classList.contains('hidden');
+            if (hidden) {
+                equipmentColumnBody.classList.remove('hidden');
+                toggleEquipmentColumnBtn.textContent = 'הסתר';
+                toggleEquipmentColumnBtn.setAttribute('aria-expanded', 'true');
+            } else {
+                equipmentColumnBody.classList.add('hidden');
+                toggleEquipmentColumnBtn.textContent = 'הצג';
+                toggleEquipmentColumnBtn.setAttribute('aria-expanded', 'false');
+            }
         });
     }
 
@@ -3443,8 +3501,30 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 row.style.justifyContent = 'space-between';
                 row.style.marginBottom = '4px';
 
-                const label = document.createElement('span');
-                label.textContent = name + (code ? ' (' + code + ')' : '');
+                const labelText = name + (code ? ' (' + code + ')' : '');
+                let label;
+                if (showEquipmentPreparedChecklist) {
+                    label = document.createElement('label');
+                    label.className = 'selected-equipment-checklist-item';
+                    label.style.flex = '1';
+                    const itemCheck = document.createElement('input');
+                    itemCheck.type = 'checkbox';
+                    if (id === (equipmentIdHidden ? equipmentIdHidden.value : '')) {
+                        itemCheck.id = 'equipment_prepared';
+                        itemCheck.name = 'equipment_prepared';
+                        itemCheck.value = '1';
+                    } else {
+                        itemCheck.className = 'equipment-prepared-item-check';
+                    }
+                    if (showEquipmentPreparedChecklist) itemCheck.checked = preparedInitiallyChecked;
+                    const labelSpan = document.createElement('span');
+                    labelSpan.textContent = labelText;
+                    label.appendChild(itemCheck);
+                    label.appendChild(labelSpan);
+                } else {
+                    label = document.createElement('span');
+                    label.textContent = labelText;
+                }
 
                 const removeBtn = document.createElement('button');
                 removeBtn.type = 'button';
@@ -3467,6 +3547,23 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 equipmentIdHidden.value = firstRow ? (firstRow.getAttribute('data-equipment-id') || '') : '';
             }
         }
+    }
+
+    if (selectedEquipmentList) {
+        selectedEquipmentList.addEventListener('change', function (e) {
+            const target = e.target;
+            if (!target || !(target instanceof HTMLInputElement) || target.type !== 'checkbox') return;
+            if (!showEquipmentPreparedChecklist) return;
+            const allChecks = Array.from(selectedEquipmentList.querySelectorAll('input[type="checkbox"]'));
+            if (allChecks.length === 0) return;
+            const master = selectedEquipmentList.querySelector('#equipment_prepared');
+            if (!master || !(master instanceof HTMLInputElement)) return;
+            if (target === master) {
+                allChecks.forEach(function (cb) { cb.checked = master.checked; });
+                return;
+            }
+            master.checked = allChecks.every(function (cb) { return cb.checked; });
+        });
     }
 
     let unavailableEquipmentIds = [];
