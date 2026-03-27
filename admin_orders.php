@@ -2008,6 +2008,11 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             align-items: center;
             margin-bottom: 1rem;
         }
+        .modal-header-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
         .modal-close {
             border: none;
             background: transparent;
@@ -2138,7 +2143,18 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         הזמנה חדשה
                     <?php endif; ?>
                 </h2>
-                <button type="button" class="modal-close" id="order_modal_close" aria-label="סגירת חלון"><i data-lucide="x" aria-hidden="true"></i></button>
+                <div class="modal-header-actions">
+                    <?php if ($editingOrder && (string)($editingOrder['status'] ?? '') === 'ready'): ?>
+                        <a href="order_print.php?id=<?= (int)$editingOrder['id'] ?>"
+                           class="icon-btn"
+                           title="הדפסת טופס השאלה"
+                           aria-label="הדפסת טופס השאלה"
+                           target="_blank" rel="noopener noreferrer">
+                            <i data-lucide="printer" aria-hidden="true"></i>
+                        </a>
+                    <?php endif; ?>
+                    <button type="button" class="modal-close" id="order_modal_close" aria-label="סגירת חלון"><i data-lucide="x" aria-hidden="true"></i></button>
+                </div>
             </div>
             <?php if ($editingOrder && !empty($editingOrder['recurring_series_id'])): ?>
                 <p class="muted-small" style="margin:-0.25rem 0 0.75rem 0;padding:0 0.25rem;">
@@ -2657,7 +2673,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             // או בהקשרים רלוונטיים (בהשאלה / לא הוחזר / עבר), וגם ביום ההשאלה עבור "מאושר".
                             if (
                                 $agreementSigned
-                                || in_array($orderStatus, ['on_loan', 'returned'], true)
+                                || in_array($orderStatus, ['ready', 'on_loan', 'returned'], true)
                                 || (in_array($orderStatus, ['approved', 'on_loan'], true) && $orderStart === $todayYmd)
                             ) {
                                 $canShowAgreementButton = true;
@@ -2999,7 +3015,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             $orderStatusRow = (string)($order['status'] ?? '');
                             $showAgreementLink = (
                                 $hasSignatureRow
-                                || in_array($orderStatusRow, ['on_loan', 'returned'], true)
+                                || in_array($orderStatusRow, ['ready', 'on_loan', 'returned'], true)
                                 || (in_array($orderStatusRow, ['approved', 'on_loan'], true) && (string)($order['start_date'] ?? '') === $todayYmd)
                             );
                             if ($showAgreementLink): ?>
@@ -3082,7 +3098,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                                         <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?><?= $tab === 'today' ? '&today_mode=' . urlencode($todayMode) : '' ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
 
-                                        <?php if ($tab === 'today' && $todayMode === 'borrow'): ?>
+                                        <?php if (($tab === 'today' && $todayMode === 'borrow') || (string)($order['status'] ?? '') === 'ready'): ?>
                                             <a href="order_print.php?id=<?= (int)$order['id'] ?>"
                                                class="icon-btn" title="הדפסת טופס הזמנה" aria-label="הדפסת טופס הזמנה"
                                                target="_blank" rel="noopener noreferrer">
