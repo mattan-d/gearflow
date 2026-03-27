@@ -86,6 +86,46 @@ function create_notification(PDO $pdo, ?int $userId, ?string $role, string $mess
         // לא מפילים את הדף במקרה של שגיאת התראה
     }
 }
+
+/**
+ * איתור מזהה הסטודנט לקבלת התראה על שינוי סטטוס.
+ * קודם לפי creator_username, ואם חסר/לא נמצא – לפי borrower_name (שם משתמש או שם מלא).
+ */
+function resolve_student_user_id_for_notification(PDO $pdo, string $creatorUsername, string $borrowerName): int
+{
+    try {
+        if ($creatorUsername !== '') {
+            $stmt = $pdo->prepare("SELECT id FROM users WHERE username = :u AND role = 'student' LIMIT 1");
+            $stmt->execute([':u' => $creatorUsername]);
+            $id = (int)($stmt->fetchColumn() ?: 0);
+            if ($id > 0) {
+                return $id;
+            }
+        }
+
+        if ($borrowerName !== '') {
+            $stmt = $pdo->prepare(
+                "SELECT id
+                 FROM users
+                 WHERE role = 'student'
+                   AND (
+                       username = :borrower
+                       OR TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) = :borrower
+                   )
+                 LIMIT 1"
+            );
+            $stmt->execute([':borrower' => $borrowerName]);
+            $id = (int)($stmt->fetchColumn() ?: 0);
+            if ($id > 0) {
+                return $id;
+            }
+        }
+    } catch (Throwable $e) {
+        // לא מפילים את הזרימה אם לא מצאנו נמען
+    }
+
+    return 0;
+}
 $error    = '';
 $success  = '';
 $editingOrder = null;
@@ -625,6 +665,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $orderRow = $currentStatusRow->fetch(PDO::FETCH_ASSOC) ?: [];
                     $currentStatus = (string)($orderRow['status'] ?? '');
                     $creatorUsername = (string)($orderRow['creator_username'] ?? '');
+                    $borrowerNameForNotification = (string)($orderRow['borrower_name'] ?? '');
                     $todayModePost = (string)($_POST['current_today_mode'] ?? '');
 
                     // במצב עדכון מיוחד מטאבים "לא נלקח"/"לא הוחזר" – שומרים על פרטי ההזמנה המקוריים
@@ -828,35 +869,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if ($error === '') {
                         // התראה לסטודנט על שינוי סטטוס הזמנה
-                        if ($creatorUsername !== '' && $newStatus !== $currentStatus) {
-                            $userStmt = $pdo->prepare('SELECT id, role FROM users WHERE username = :username LIMIT 1');
-                            $userStmt->execute([':username' => $creatorUsername]);
-                            $creatorUser = $userStmt->fetch(PDO::FETCH_ASSOC);
-                            if ($creatorUser && (int)$creatorUser['id'] > 0) {
-                                $studentId = (int)$creatorUser['id'];
-                                $statusMsg = '';
-                                if ($newStatus === 'approved') {
-                                    $statusMsg = 'הבקשה להזמנה אושרה.';
-                                } elseif ($newStatus === 'rejected') {
-                                    $statusMsg = 'הבקשה להזמנה נדחתה.';
-                                } elseif ($newStatus === 'ready') {
-                                    $statusMsg = 'הציוד להזמנה מוכן לאיסוף.';
-                                } elseif ($newStatus === 'on_loan') {
-                                    $statusMsg = 'הציוד יצא להשאלה.';
-                                } elseif ($newStatus === 'returned') {
-                                    $statusMsg = 'הציוד הוחזר ונקלט במערכת.';
-                                } elseif ($newStatus === 'deleted') {
-                                    $statusMsg = 'ההזמנה בוטלה על ידי המערכת.';
-                                }
-                                if ($statusMsg !== '') {
-                                    create_notification(
-                                        $pdo,
-                                        $studentId,
-                                        null,
-                                        $statusMsg,
-                                        'admin_orders.php'
-                                    );
-                                }
+                        if ($newStatus !== $currentStatus && in_array($newStatus, ['ready', 'returned'], true)) {
+                            $studentId = resolve_student_user_id_for_notification($pdo, $creatorUsername, $borrowerNameForNotification);
+                            if ($studentId > 0) {
+                                $statusMsg = ($newStatus === 'ready')
+                                    ? 'הציוד להזמנה מוכן לאיסוף.'
+                                    : 'הציוד הוחזר ונקלט במערכת.';
+                                create_notification(
+                                    $pdo,
+                                    $studentId,
+                                    null,
+                                    $statusMsg,
+                                    'admin_orders.php'
+                                );
                             }
                         }
 
@@ -924,11 +949,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($id > 0) {
             // מביאים את הסטטוס הנוכחי כדי לבדוק מעבר חוקי + שם יוצר ההזמנה
-            $stmt = $pdo->prepare('SELECT status, creator_username FROM orders WHERE id = :id');
+            $stmt = $pdo->prepare('SELECT status, creator_username, borrower_name FROM orders WHERE id = :id');
             $stmt->execute([':id' => $id]);
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
             $currentStatus   = $row['status'] ?? null;
             $creatorUsername = (string)($row['creator_username'] ?? '');
+            $borrowerNameForNotification = (string)($row['borrower_name'] ?? '');
 
             $allowedNext = [];
             if ($currentStatus === 'pending') {
@@ -967,35 +993,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $success = 'סטטוס ההזמנה עודכן.';
 
                 // התראה לסטודנט על שינוי סטטוס (גם בעדכון מתוך הטבלה)
-                if ($creatorUsername !== '' && $currentStatus !== null && $status !== $currentStatus) {
-                    $userStmt = $pdo->prepare('SELECT id FROM users WHERE username = :u LIMIT 1');
-                    $userStmt->execute([':u' => $creatorUsername]);
-                    $creatorUser = $userStmt->fetch(PDO::FETCH_ASSOC);
-                    if ($creatorUser && (int)$creatorUser['id'] > 0) {
-                        $studentId = (int)$creatorUser['id'];
-                        $statusMsg = '';
-                        if ($status === 'approved') {
-                            $statusMsg = 'הבקשה להזמנה אושרה.';
-                        } elseif ($status === 'rejected') {
-                            $statusMsg = 'הבקשה להזמנה נדחתה.';
-                        } elseif ($status === 'ready') {
-                            $statusMsg = 'הציוד להזמנה מוכן לאיסוף.';
-                        } elseif ($status === 'on_loan') {
-                            $statusMsg = 'הציוד יצא להשאלה.';
-                        } elseif ($status === 'returned') {
-                            $statusMsg = 'הציוד הוחזר ונקלט במערכת.';
-                        } elseif ($status === 'deleted') {
-                            $statusMsg = 'ההזמנה בוטלה על ידי המערכת.';
-                        }
-                        if ($statusMsg !== '') {
-                            create_notification(
-                                $pdo,
-                                $studentId,
-                                null,
-                                $statusMsg,
-                                'admin_orders.php'
-                            );
-                        }
+                if ($currentStatus !== null && $status !== $currentStatus && in_array($status, ['ready', 'returned'], true)) {
+                    $studentId = resolve_student_user_id_for_notification($pdo, $creatorUsername, $borrowerNameForNotification);
+                    if ($studentId > 0) {
+                        $statusMsg = ($status === 'ready')
+                            ? 'הציוד להזמנה מוכן לאיסוף.'
+                            : 'הציוד הוחזר ונקלט במערכת.';
+                        create_notification(
+                            $pdo,
+                            $studentId,
+                            null,
+                            $statusMsg,
+                            'admin_orders.php'
+                        );
                     }
                 }
 
@@ -1033,11 +1043,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     continue;
                 }
 
-                $stmt = $pdo->prepare('SELECT status, creator_username FROM orders WHERE id = :id');
+                $stmt = $pdo->prepare('SELECT status, creator_username, borrower_name FROM orders WHERE id = :id');
                 $stmt->execute([':id' => $id]);
                 $row = $stmt->fetch(PDO::FETCH_ASSOC);
                 $currentStatus   = $row['status'] ?? null;
                 $creatorUsername = (string)($row['creator_username'] ?? '');
+                $borrowerNameForNotification = (string)($row['borrower_name'] ?? '');
 
                 $allowedNext = [];
                 if ($currentStatus === 'pending') {
@@ -1074,35 +1085,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
 
                 // התראה לסטודנט על שינוי סטטוס בעדכון מרובה
-                if ($creatorUsername !== '' && $currentStatus !== null && $status !== $currentStatus) {
-                    $userStmt = $pdo->prepare('SELECT id FROM users WHERE username = :u LIMIT 1');
-                    $userStmt->execute([':u' => $creatorUsername]);
-                    $creatorUser = $userStmt->fetch(PDO::FETCH_ASSOC);
-                    if ($creatorUser && (int)$creatorUser['id'] > 0) {
-                        $studentId = (int)$creatorUser['id'];
-                        $statusMsg = '';
-                        if ($status === 'approved') {
-                            $statusMsg = 'הבקשה להזמנה אושרה.';
-                        } elseif ($status === 'rejected') {
-                            $statusMsg = 'הבקשה להזמנה נדחתה.';
-                        } elseif ($status === 'ready') {
-                            $statusMsg = 'הציוד להזמנה מוכן לאיסוף.';
-                        } elseif ($status === 'on_loan') {
-                            $statusMsg = 'הציוד יצא להשאלה.';
-                        } elseif ($status === 'returned') {
-                            $statusMsg = 'הציוד הוחזר ונקלט במערכת.';
-                        } elseif ($status === 'deleted') {
-                            $statusMsg = 'ההזמנה בוטלה על ידי המערכת.';
-                        }
-                        if ($statusMsg !== '') {
-                            create_notification(
-                                $pdo,
-                                $studentId,
-                                null,
-                                $statusMsg,
-                                'admin_orders.php'
-                            );
-                        }
+                if ($currentStatus !== null && $status !== $currentStatus && in_array($status, ['ready', 'returned'], true)) {
+                    $studentId = resolve_student_user_id_for_notification($pdo, $creatorUsername, $borrowerNameForNotification);
+                    if ($studentId > 0) {
+                        $statusMsg = ($status === 'ready')
+                            ? 'הציוד להזמנה מוכן לאיסוף.'
+                            : 'הציוד הוחזר ונקלט במערכת.';
+                        create_notification(
+                            $pdo,
+                            $studentId,
+                            null,
+                            $statusMsg,
+                            'admin_orders.php'
+                        );
                     }
                 }
             }
