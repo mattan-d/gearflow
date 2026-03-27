@@ -11,6 +11,15 @@ $role = $me['role'] ?? 'student';
 
 $pdo      = get_db();
 $nowTs    = time();
+$warehouseAlwaysOpen = false;
+try {
+    $stmtAlwaysOpen = $pdo->prepare("SELECT value FROM app_settings WHERE key = :k LIMIT 1");
+    $stmtAlwaysOpen->execute([':k' => 'warehouse_always_open']);
+    $valAlwaysOpen = $stmtAlwaysOpen->fetchColumn();
+    $warehouseAlwaysOpen = trim((string)$valAlwaysOpen) === '1';
+} catch (Throwable $e) {
+    $warehouseAlwaysOpen = false;
+}
 
 // Prefill עבור פתיחה דרך "ניהול יומי"
 $prefillDay = trim((string)($_GET['prefill_day'] ?? ''));
@@ -444,9 +453,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         } else {
                             // בדרישת מערכת: בהזמנה מחזורית נוצרת הזמנה בודדת מאושרת לכל מופע
                             $initialStatus = 'approved';
+                            // מספר סידורי אחד לכל רצף ההזמנות שנוצר בבת אחת (איתור רצף מחזורי)
+                            $seriesRow = $pdo->query('SELECT COALESCE(MAX(recurring_series_id), 0) + 1 AS n FROM orders')->fetch(PDO::FETCH_ASSOC);
+                            $recurringSeriesId = (int)($seriesRow['n'] ?? 1);
+
                             $insertRecurring = $pdo->prepare(
-                                'INSERT INTO orders (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, purpose, admin_notes, equipment_prepared, created_at, creator_username, return_equipment_status)
-                                 VALUES (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :purpose, :admin_notes, :equipment_prepared, :created_at, :creator_username, :return_equipment_status)'
+                                'INSERT INTO orders (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, purpose, admin_notes, equipment_prepared, recurring_series_id, created_at, creator_username, return_equipment_status)
+                                 VALUES (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :purpose, :admin_notes, :equipment_prepared, :recurring_series_id, :created_at, :creator_username, :return_equipment_status)'
                             );
                             $createdCount = 0;
                             $occurrenceIndex = 0;
@@ -467,6 +480,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                         ':purpose'                => $purpose !== '' ? $purpose : null,
                                         ':admin_notes'            => $adminNotesPost !== '' ? $adminNotesPost : null,
                                         ':equipment_prepared'     => 0,
+                                        ':recurring_series_id'    => $recurringSeriesId,
                                         ':created_at'             => date('Y-m-d H:i:s'),
                                         ':creator_username'       => (string)($me['username'] ?? ''),
                                         ':return_equipment_status'=> 'תקין',
@@ -498,9 +512,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $initialStatus = ($role === 'student') ? 'pending' : 'approved';
                     $stmt = $pdo->prepare(
                         'INSERT INTO orders
-                         (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, purpose, admin_notes, equipment_prepared, created_at, creator_username, return_equipment_status)
+                         (equipment_id, borrower_name, borrower_contact, start_date, end_date, start_time, end_time, status, notes, purpose, admin_notes, equipment_prepared, recurring_series_id, created_at, creator_username, return_equipment_status)
                          VALUES
-                         (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :purpose, :admin_notes, :equipment_prepared, :created_at, :creator_username, :return_equipment_status)'
+                         (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :purpose, :admin_notes, :equipment_prepared, :recurring_series_id, :created_at, :creator_username, :return_equipment_status)'
                     );
                     $createdCount = 0;
                     foreach ($equipmentIds as $equipmentId) {
@@ -517,6 +531,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':purpose'                => $purpose !== '' ? $purpose : null,
                             ':admin_notes'            => $adminNotesPost !== '' ? $adminNotesPost : null,
                             ':equipment_prepared'     => 0,
+                            ':recurring_series_id'     => null,
                             ':created_at'             => date('Y-m-d H:i:s'),
                             ':creator_username'       => (string)($me['username'] ?? ''),
                             ':return_equipment_status'=> 'תקין',
@@ -1036,10 +1051,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'delete') {
         $id = (int)($_POST['id'] ?? 0);
+        $deleteScope = (string)($_POST['delete_scope'] ?? 'single');
+        if (!in_array($deleteScope, ['single', 'series', 'future'], true)) {
+            $deleteScope = 'single';
+        }
+        // מחיקת רצף / עתידיות – למנהלים בלבד
+        if (($deleteScope === 'series' || $deleteScope === 'future') && !in_array($role, ['admin', 'warehouse_manager'], true)) {
+            $deleteScope = 'single';
+        }
         if ($id > 0) {
-            $stmt = $pdo->prepare("UPDATE orders SET status = 'deleted', updated_at = :u WHERE id = :id");
-            $stmt->execute([':u' => date('Y-m-d H:i:s'), ':id' => $id]);
-            $success = 'ההזמנה סומנה כנמחקה.';
+            $now = date('Y-m-d H:i:s');
+            $todayYmd = date('Y-m-d');
+
+            if ($deleteScope === 'single') {
+                $stmt = $pdo->prepare("UPDATE orders SET status = 'deleted', updated_at = :u WHERE id = :id AND status != 'deleted'");
+                $stmt->execute([':u' => $now, ':id' => $id]);
+                $success = 'ההזמנה סומנה כנמחקה.';
+            } else {
+                $q = $pdo->prepare('SELECT recurring_series_id FROM orders WHERE id = :id LIMIT 1');
+                $q->execute([':id' => $id]);
+                $sid = $q->fetchColumn();
+                $seriesId = ($sid !== false && $sid !== null) ? (int)$sid : 0;
+                if ($seriesId <= 0) {
+                    $stmt = $pdo->prepare("UPDATE orders SET status = 'deleted', updated_at = :u WHERE id = :id AND status != 'deleted'");
+                    $stmt->execute([':u' => $now, ':id' => $id]);
+                    $success = 'ההזמנה סומנה כנמחקה.';
+                } elseif ($deleteScope === 'series') {
+                    $stmt = $pdo->prepare(
+                        "UPDATE orders SET status = 'deleted', updated_at = :u
+                         WHERE recurring_series_id = :sid AND status != 'deleted'"
+                    );
+                    $stmt->execute([':u' => $now, ':sid' => $seriesId]);
+                    $n = $stmt->rowCount();
+                    $success = $n > 1
+                        ? "סומנו {$n} הזמנות ברצף מחזורי #{$seriesId} כנמחקות."
+                        : 'ההזמנה סומנה כנמחקה.';
+                } else {
+                    // עתידיות: תאריך התחלה אחרי היום (באותו רצף)
+                    $stmt = $pdo->prepare(
+                        "UPDATE orders SET status = 'deleted', updated_at = :u
+                         WHERE recurring_series_id = :sid
+                           AND status != 'deleted'
+                           AND date(start_date) > :today"
+                    );
+                    $stmt->execute([':u' => $now, ':sid' => $seriesId, ':today' => $todayYmd]);
+                    $n = $stmt->rowCount();
+                    $success = $n > 0
+                        ? "סומנו {$n} הזמנות עתידיות ברצף #{$seriesId} כנמחקות."
+                        : 'לא נמצאו הזמנות עתידיות למחיקה ברצף זה.';
+                }
+            }
 
             // לאחר מחיקה – נשארים בטאב ממנו בוצעה הפעולה (נשלח בטופס)
             if ($currentTab && in_array($currentTab, ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history', 'rejected_deleted'], true)) {
@@ -1130,6 +1191,7 @@ $baseSql = 'SELECT o.id,
                    o.start_time,
                    o.end_time,
                    o.status,
+                   o.recurring_series_id,
                    u.id AS borrower_user_id,
                    o.notes,
                    o.created_at,
@@ -1631,6 +1693,40 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             background: #dbeafe;
             color: #1e40af;
         }
+        .recurring-delete-wrap {
+            position: relative;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .recurring-delete-popover {
+            position: absolute;
+            right: 0;
+            top: 100%;
+            margin-top: 4px;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+            z-index: 60;
+            min-width: 220px;
+            padding: 0.25rem 0;
+        }
+        .recurring-delete-popover form {
+            margin: 0;
+        }
+        .recurring-delete-popover button[type="submit"] {
+            width: 100%;
+            text-align: right;
+            padding: 0.45rem 0.75rem;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font: inherit;
+            color: #111827;
+        }
+        .recurring-delete-popover button[type="submit"]:hover {
+            background: #f3f4f6;
+        }
         /* צביעת שורות להזמנות במצב בקשה (pending) לפי קרבת מועד ההשאלה */
         .row-pending-soon {
             background-color: #fffbea; /* צהוב בהיר – יום עבודה לפני */
@@ -1972,6 +2068,11 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 </h2>
                 <button type="button" class="modal-close" id="order_modal_close" aria-label="סגירת חלון"><i data-lucide="x" aria-hidden="true"></i></button>
             </div>
+            <?php if ($editingOrder && !empty($editingOrder['recurring_series_id'])): ?>
+                <p class="muted-small" style="margin:-0.25rem 0 0.75rem 0;padding:0 0.25rem;">
+                    רצף הזמנות מחזוריות מספר <strong><?= (int)$editingOrder['recurring_series_id'] ?></strong>
+                </p>
+            <?php endif; ?>
 
             <form method="post" action="admin_orders.php<?= $editingOrder && !$isViewModeOrder ? '?edit_id=' . (int)$editingOrder['id'] : '' ?>">
                 <input type="hidden" name="action" value="<?= $editingOrder && !$isViewModeOrder ? 'update' : 'create' ?>">
@@ -2041,9 +2142,12 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <input type="text" id="recurring_start_date" readonly placeholder="תאריך" style="max-width: 7rem;" title="לחץ לבחירת תאריך">
                                     <select id="recurring_start_time" name="recurring_start_time">
                                         <option value="">שעה</option>
-                                        <?php for ($h = 9; $h <= 15; $h++): ?>
+                                        <?php
+                                        $recurringStartHourFrom = $warehouseAlwaysOpen ? 0 : 9;
+                                        $recurringStartHourTo = $warehouseAlwaysOpen ? 23 : 15;
+                                        for ($h = $recurringStartHourFrom; $h <= $recurringStartHourTo; $h++): ?>
                                             <option value="<?= sprintf('%02d:00', $h) ?>"><?= sprintf('%02d:00', $h) ?></option>
-                                            <?php if ($h < 15): ?>
+                                            <?php if ($h < $recurringStartHourTo): ?>
                                             <option value="<?= sprintf('%02d:30', $h) ?>"><?= sprintf('%02d:30', $h) ?></option>
                                             <?php endif; ?>
                                         <?php endfor; ?>
@@ -2122,7 +2226,11 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     <div class="date-calendar-grid" id="cal_grid"></div>
                                 </div>
                                 <div class="muted-small" style="margin-top: 0.5rem;">
+                                    <?php if ($warehouseAlwaysOpen): ?>
+                                    מצב "מחסן פתוח תמיד" פעיל: כל התאריכים זמינים לבחירה.
+                                    <?php else: ?>
                                     ימים שעברו וימי שישי/שבת מסומנים כלא זמינים.
+                                    <?php endif; ?>
                                 </div>
                             </div>
                         </div>
@@ -2621,6 +2729,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                     <thead>
                     <tr>
                         <th>#</th>
+                        <th>רצף מחזורי</th>
                         <th>שם המזמין</th>
                         <th>שם הפריט</th>
                         <th>סטטוס</th>
@@ -2668,6 +2777,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         ?>
                         <tr data-order-id="<?= (int)$order['id'] ?>" class="<?= htmlspecialchars($rowHighlightClass, ENT_QUOTES, 'UTF-8') ?>">
                             <td><?= (int)$order['id'] ?></td>
+                            <td class="muted-small"><?= !empty($order['recurring_series_id']) ? (int)$order['recurring_series_id'] : '—' ?></td>
                         <td>
                             <?php
                             $borrowerUserId = (int)($order['borrower_user_id'] ?? 0);
@@ -2834,9 +2944,29 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                             <i data-lucide="eye" aria-hidden="true"></i>
                                         </a>
                                         <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?><?= $tab === 'today' ? '&today_mode=' . urlencode($todayMode) : '' ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
+                                        <?php if (!empty($order['recurring_series_id'])): ?>
+                                            <div class="recurring-delete-wrap">
+                                                <button type="button" class="icon-btn recurring-delete-btn" aria-expanded="false" aria-haspopup="true" title="מחיקה" aria-label="מחיקה">
+                                                    <i data-lucide="trash-2" aria-hidden="true"></i>
+                                                </button>
+                                                <div class="recurring-delete-popover" hidden role="menu">
+                                                    <form method="post" action="admin_orders.php" onsubmit="return confirm('לסמן את ההזמנה כנמחקה?');">
+                                                        <input type="hidden" name="action" value="delete">
+                                                        <input type="hidden" name="delete_scope" value="single">
+                                                        <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                                        <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                                        <?php if ($tab === 'today'): ?>
+                                                            <input type="hidden" name="current_today_mode" value="<?= htmlspecialchars($todayMode, ENT_QUOTES, 'UTF-8') ?>">
+                                                        <?php endif; ?>
+                                                        <button type="submit">מחק הזמנה זו</button>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        <?php else: ?>
                                         <form method="post" action="admin_orders.php"
                                               onsubmit="return confirm('למחוק את ההזמנה הזו?');">
                                             <input type="hidden" name="action" value="delete">
+                                            <input type="hidden" name="delete_scope" value="single">
                                             <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
                                             <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
                                             <?php if ($tab === 'today'): ?>
@@ -2844,6 +2974,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                             <?php endif; ?>
                                             <button type="submit" class="icon-btn" title="מחיקה" aria-label="מחיקה"><i data-lucide="trash-2" aria-hidden="true"></i></button>
                                         </form>
+                                        <?php endif; ?>
                                     </div>
                                 <?php endif;
                             } else {
@@ -2877,10 +3008,52 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                                         <?php
                                         $canDeleteAdmin = ((string)($order['status'] ?? '') !== 'deleted');
-                                        if ($canDeleteAdmin): ?>
+                                        if ($canDeleteAdmin):
+                                            $recSeries = isset($order['recurring_series_id']) ? (int)$order['recurring_series_id'] : 0;
+                                            ?>
+                                            <?php if ($recSeries > 0): ?>
+                                                <div class="recurring-delete-wrap">
+                                                    <button type="button" class="icon-btn recurring-delete-btn" aria-expanded="false" aria-haspopup="true" title="מחיקה (הזמנה מחזורית)" aria-label="מחיקה">
+                                                        <i data-lucide="trash-2" aria-hidden="true"></i>
+                                                    </button>
+                                                    <div class="recurring-delete-popover" hidden role="menu">
+                                                        <form method="post" action="admin_orders.php" onsubmit="return confirm('לסמן רק את ההזמנה הנוכחית כנמחקה?');">
+                                                            <input type="hidden" name="action" value="delete">
+                                                            <input type="hidden" name="delete_scope" value="single">
+                                                            <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                                            <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                                            <?php if ($tab === 'today'): ?>
+                                                                <input type="hidden" name="current_today_mode" value="<?= htmlspecialchars($todayMode, ENT_QUOTES, 'UTF-8') ?>">
+                                                            <?php endif; ?>
+                                                            <button type="submit">מחק הזמנה זו</button>
+                                                        </form>
+                                                        <form method="post" action="admin_orders.php" onsubmit="return confirm('לסמן את כל ההזמנות ברצף המחזורי (מספר <?= (int)$recSeries ?>) כנמחקות?');">
+                                                            <input type="hidden" name="action" value="delete">
+                                                            <input type="hidden" name="delete_scope" value="series">
+                                                            <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                                            <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                                            <?php if ($tab === 'today'): ?>
+                                                                <input type="hidden" name="current_today_mode" value="<?= htmlspecialchars($todayMode, ENT_QUOTES, 'UTF-8') ?>">
+                                                            <?php endif; ?>
+                                                            <button type="submit">מחק את רצף ההזמנות</button>
+                                                        </form>
+                                                        <form method="post" action="admin_orders.php" onsubmit="return confirm('לסמן כנמחקות רק הזמנות ברצף <?= (int)$recSeries ?> שתאריך ההשאלה שלהן אחרי היום?');">
+                                                            <input type="hidden" name="action" value="delete">
+                                                            <input type="hidden" name="delete_scope" value="future">
+                                                            <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                                            <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                                            <?php if ($tab === 'today'): ?>
+                                                                <input type="hidden" name="current_today_mode" value="<?= htmlspecialchars($todayMode, ENT_QUOTES, 'UTF-8') ?>">
+                                                            <?php endif; ?>
+                                                            <button type="submit">מחק ההזמנות העתידיות</button>
+                                                        </form>
+                                                    </div>
+                                                </div>
+                                            <?php else: ?>
                                             <form method="post" action="admin_orders.php"
                                                   onsubmit="return confirm('לסמן את ההזמנה כנמחקה? (הרשומה תישאר במערכת)');">
                                                 <input type="hidden" name="action" value="delete">
+                                                <input type="hidden" name="delete_scope" value="single">
                                                 <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
                                                 <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
                                                 <?php if ($tab === 'today'): ?>
@@ -2888,6 +3061,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                                 <?php endif; ?>
                                                 <button type="submit" class="icon-btn" title="מחיקה (סטטוס נמחק)" aria-label="מחיקה"><i data-lucide="trash-2" aria-hidden="true"></i></button>
                                             </form>
+                                            <?php endif; ?>
                                         <?php endif; ?>
 
                                         <?php
@@ -3119,7 +3293,12 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         return isNaN(d.getTime()) ? null : d;
     }
 
+    const warehouseAlwaysOpen = <?= $warehouseAlwaysOpen ? 'true' : 'false' ?>;
+
     function isDisabledDay(date) {
+        if (warehouseAlwaysOpen) {
+            return false;
+        }
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
@@ -3540,7 +3719,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         timeOptionsContainer.innerHTML = '';
 
         let hours = [];
-        for (let h = 7; h <= 22; h++) {
+        const startHour = warehouseAlwaysOpen ? 0 : 7;
+        const endHour = warehouseAlwaysOpen ? 23 : 22;
+        for (let h = startHour; h <= endHour; h++) {
             hours.push(h);
         }
         if (!isStart && startInput && endInput && startTimeInput
@@ -3737,7 +3918,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         for (let i = 0; i < firstDay; i++) html += '<span style="width:2rem;height:2rem;"></span>';
         for (let d = 1; d <= daysInMonth; d++) {
             const cellDate = new Date(year, month, d);
-            const disabled = cellDate.getDay() === 5 || cellDate.getDay() === 6 || cellDate < today;
+            const disabled = warehouseAlwaysOpen ? false : (cellDate.getDay() === 5 || cellDate.getDay() === 6 || cellDate < today);
             const ymd = year + '-' + (month + 1 < 10 ? '0' : '') + (month + 1) + '-' + (d < 10 ? '0' : '') + d;
             const sel = ymd === currentYmd ? ' selected' : '';
             const dis = disabled ? ' disabled' : '';
@@ -4278,6 +4459,40 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             });
         });
     })();
+</script>
+<script>
+(function () {
+    document.querySelectorAll('.recurring-delete-popover').forEach(function (pop) {
+        pop.addEventListener('click', function (e) { e.stopPropagation(); });
+    });
+    document.querySelectorAll('.recurring-delete-btn').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            var wrap = btn.closest('.recurring-delete-wrap');
+            var pop = wrap ? wrap.querySelector('.recurring-delete-popover') : null;
+            if (!pop) return;
+            var wasHidden = pop.hasAttribute('hidden');
+            document.querySelectorAll('.recurring-delete-popover').forEach(function (p) {
+                p.setAttribute('hidden', 'hidden');
+            });
+            document.querySelectorAll('.recurring-delete-btn').forEach(function (b) {
+                b.setAttribute('aria-expanded', 'false');
+            });
+            if (wasHidden) {
+                pop.removeAttribute('hidden');
+                btn.setAttribute('aria-expanded', 'true');
+            }
+        });
+    });
+    document.addEventListener('click', function () {
+        document.querySelectorAll('.recurring-delete-popover').forEach(function (p) {
+            p.setAttribute('hidden', 'hidden');
+        });
+        document.querySelectorAll('.recurring-delete-btn').forEach(function (b) {
+            b.setAttribute('aria-expanded', 'false');
+        });
+    });
+})();
 </script>
 <?php include __DIR__ . '/admin_footer.php'; ?>
 </body>

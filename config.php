@@ -196,6 +196,9 @@ function initialize_database(PDO $pdo): void
         if (!in_array('equipment_prepared', $orderNames, true)) {
             $pdo->exec("ALTER TABLE orders ADD COLUMN equipment_prepared INTEGER NOT NULL DEFAULT 0");
         }
+        if (!in_array('recurring_series_id', $orderNames, true)) {
+            $pdo->exec("ALTER TABLE orders ADD COLUMN recurring_series_id INTEGER");
+        }
     } catch (PDOException $e) {
         // מתעלמים משגיאות מיגרציה כדי לא להפיל את הטעינה
     }
@@ -372,6 +375,8 @@ function initialize_database(PDO $pdo): void
         'home_student' => 'admin_orders.php',
         // מנהל – ברירת מחדל מנהל הזמנות, ניתן לשנות למנהל ציוד
         'home_admin'   => 'admin_orders.php',
+        // מצב בדיקות: כאשר פעיל ניתן לנהל הזמנות בכל תאריך ושעה
+        'warehouse_always_open' => '0',
     ];
     foreach ($defaultSettings as $k => $v) {
         $stmt = $pdo->prepare('INSERT OR IGNORE INTO app_settings (key, value) VALUES (:k, :v)');

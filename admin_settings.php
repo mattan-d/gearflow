@@ -178,16 +178,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['homepage_submit'])) {
     }
 }
 
+// מצב בדיקות: מחסן פתוח תמיד (עקיפת שעות פעילות)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['always_open_submit'])) {
+    $alwaysOpenEnabled = isset($_POST['warehouse_always_open']) ? '1' : '0';
+    try {
+        $stmtAlwaysOpen = $pdo->prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (:k, :v)');
+        $stmtAlwaysOpen->execute([':k' => 'warehouse_always_open', ':v' => $alwaysOpenEnabled]);
+        $success = 'הגדרת "מחסן פתוח תמיד" עודכנה בהצלחה.';
+    } catch (Throwable $e) {
+        $error = 'שגיאה בעדכון ההגדרה "מחסן פתוח תמיד".';
+    }
+}
+
 // קריאת דפי בית נוכחיים
 $homeStudentCurrent = 'admin_orders.php';
 $homeAdminCurrent   = 'admin_orders.php';
+$warehouseAlwaysOpen = false;
 try {
-    $stmtHomeRead = $pdo->query("SELECT key, value FROM app_settings WHERE key IN ('home_student','home_admin')");
+    $stmtHomeRead = $pdo->query("SELECT key, value FROM app_settings WHERE key IN ('home_student','home_admin','warehouse_always_open')");
     foreach ($stmtHomeRead->fetchAll(PDO::FETCH_ASSOC) as $row) {
         if (($row['key'] ?? '') === 'home_student' && is_string($row['value'] ?? null)) {
             $homeStudentCurrent = (string)$row['value'];
         } elseif (($row['key'] ?? '') === 'home_admin' && is_string($row['value'] ?? null)) {
             $homeAdminCurrent = (string)$row['value'];
+        } elseif (($row['key'] ?? '') === 'warehouse_always_open') {
+            $warehouseAlwaysOpen = trim((string)($row['value'] ?? '0')) === '1';
         }
     }
 } catch (Throwable $e) {
@@ -405,6 +420,20 @@ try {
             </table>
             <button type="submit" class="btn" name="default_hours_submit" value="1">שמירת שעות ברירת מחדל</button>
         </form>
+
+        <div class="status-section">
+            <h3 style="margin-top:1.5rem;margin-bottom:0.5rem;font-size:1.05rem;">מצב בדיקות מערכת</h3>
+            <p class="muted-small">
+                כאשר האפשרות פעילה ניתן לנהל הזמנות בכל תאריך ובכל שעה, ללא קשר לשעות הפעילות.
+            </p>
+            <form method="post" action="admin_settings.php" style="max-width:520px;margin-top:0.75rem;">
+                <label style="display:flex;align-items:center;gap:0.5rem;">
+                    <input type="checkbox" name="warehouse_always_open" value="1" <?= $warehouseAlwaysOpen ? 'checked' : '' ?>>
+                    <span>מחסן פתוח תמיד</span>
+                </label>
+                <button type="submit" name="always_open_submit" value="1" class="btn">שמירת הגדרה</button>
+            </form>
+        </div>
 
         <div class="category-section">
             <h3 style="margin-top:1.5rem;margin-bottom:0.5rem;font-size:1.05rem;">קטגוריות ציוד</h3>
