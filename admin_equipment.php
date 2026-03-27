@@ -971,8 +971,13 @@ if ($searchTerm !== '') {
     $params[':search']   = $searchTerm . '%';
 }
 if ($filterStatus !== '') {
-    $conditions[]        = 'status = :st';
-    $params[':st']       = $filterStatus;
+    if ($filterStatus === 'out') {
+        // "לא זמין" = כל הסטטוסים שאינם פעילים אך לא מושבתים
+        $conditions[] = "status IN ('out_of_service','missing','out_of_stock')";
+    } else {
+        $conditions[]        = 'status = :st';
+        $params[':st']       = $filterStatus;
+    }
 }
 
 // $me יוגדר מיד אחרי הבלוק הזה – אבל כאן עדיין לא נגיש, לכן נשתמש ב-role דרך session אם קיים
@@ -1931,6 +1936,7 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                             <option value="active" <?= $statusValue === 'active' ? 'selected' : '' ?>>תקין</option>
                             <option value="out_of_service" <?= $statusValue === 'out_of_service' ? 'selected' : '' ?>>תקול</option>
                             <option value="missing" <?= $statusValue === 'missing' ? 'selected' : '' ?>>חסר</option>
+                            <option value="out_of_stock" <?= $statusValue === 'out_of_stock' ? 'selected' : '' ?>>יצא מהמלאי</option>
                             <option value="disabled" <?= $statusValue === 'disabled' ? 'selected' : '' ?>>מושבת</option>
                         </select>
                     </div>
@@ -2451,6 +2457,9 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                                 } elseif ($item['status'] === 'missing') {
                                     $statusClass = 'status-out';
                                     $statusLabel = 'חסר';
+                                } elseif ($item['status'] === 'out_of_stock') {
+                                    $statusClass = 'status-out';
+                                    $statusLabel = 'יצא מהמלאי';
                                 } elseif ($item['status'] === 'disabled') {
                                     $statusClass = 'status-disabled';
                                     $statusLabel = 'מושבת';
