@@ -292,6 +292,23 @@ function initialize_database(PDO $pdo): void
         // דילוג בשקט אם העמודה כבר קיימת / טבלה לא קיימת
     }
 
+    // טבלת קישור בין הזמנה לפריטי ציוד (לתמיכה בהזמנה אחת עם כמה פריטים)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS order_equipment (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            equipment_id INTEGER NOT NULL
+        )
+    ");
+    $pdo->exec("
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_order_equipment_unique
+        ON order_equipment (order_id, equipment_id)
+    ");
+    $pdo->exec("
+        CREATE INDEX IF NOT EXISTS idx_order_equipment_equipment_id
+        ON order_equipment (equipment_id)
+    ");
+
     // טבלת שעות פתיחת מחסנים – שורות מייצגות שעות פתוחות בלבד
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS warehouse_hours (

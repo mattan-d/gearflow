@@ -139,12 +139,19 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'available_equipment') {
             $occEnd   = date('Y-m-d H:i', $endOccTs);
 
             $sql = "
-                SELECT DISTINCT equipment_id
-                FROM orders
-                WHERE status IN ('pending', 'approved', 'ready', 'on_loan')
+                SELECT DISTINCT t.equipment_id
+                FROM (
+                    SELECT o.id, o.equipment_id, o.status, o.start_date, o.start_time, o.end_date, o.end_time
+                    FROM orders o
+                    UNION ALL
+                    SELECT o.id, oe.equipment_id, o.status, o.start_date, o.start_time, o.end_date, o.end_time
+                    FROM orders o
+                    JOIN order_equipment oe ON oe.order_id = o.id
+                ) t
+                WHERE t.status IN ('pending', 'approved', 'ready', 'on_loan')
                   AND (
-                        (start_date || ' ' || COALESCE(start_time, '00:00')) <= :req_end
-                    AND (end_date   || ' ' || COALESCE(end_time,   '23:59')) >= :req_start
+                        (t.start_date || ' ' || COALESCE(t.start_time, '00:00')) <= :req_end
+                    AND (t.end_date   || ' ' || COALESCE(t.end_time,   '23:59')) >= :req_start
                   )
             ";
             $params = [
@@ -152,7 +159,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'available_equipment') {
                 ':req_end'   => $occEnd,
             ];
             if ($excludeId > 0) {
-                $sql .= " AND id != :exclude_id";
+                $sql .= " AND t.id != :exclude_id";
                 $params[':exclude_id'] = $excludeId;
             }
 
@@ -189,12 +196,19 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'available_equipment') {
     $reqEnd   = $endDate . ' ' . ($endTime !== '' ? $endTime : '23:59');
 
     $sql = "
-        SELECT DISTINCT equipment_id
-        FROM orders
-        WHERE status IN ('pending', 'approved', 'ready', 'on_loan')
+        SELECT DISTINCT t.equipment_id
+        FROM (
+            SELECT o.id, o.equipment_id, o.status, o.start_date, o.start_time, o.end_date, o.end_time
+            FROM orders o
+            UNION ALL
+            SELECT o.id, oe.equipment_id, o.status, o.start_date, o.start_time, o.end_date, o.end_time
+            FROM orders o
+            JOIN order_equipment oe ON oe.order_id = o.id
+        ) t
+        WHERE t.status IN ('pending', 'approved', 'ready', 'on_loan')
           AND (
-                (start_date || ' ' || COALESCE(start_time, '00:00')) <= :req_end
-            AND (end_date   || ' ' || COALESCE(end_time,   '23:59')) >= :req_start
+                (t.start_date || ' ' || COALESCE(t.start_time, '00:00')) <= :req_end
+            AND (t.end_date   || ' ' || COALESCE(t.end_time,   '23:59')) >= :req_start
           )
     ";
     $params = [
@@ -202,7 +216,7 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'available_equipment') {
         ':req_end'   => $reqEnd,
     ];
     if ($excludeId > 0) {
-        $sql .= " AND id != :exclude_id";
+        $sql .= " AND t.id != :exclude_id";
         $params[':exclude_id'] = $excludeId;
     }
 
@@ -233,6 +247,36 @@ if ($loadId > 0) {
     );
     $stmt->execute([':id' => $loadId]);
     $editingOrder = $stmt->fetch() ?: null;
+}
+$editingEquipmentRows = [];
+$editingEquipmentIds = [];
+if ($editingOrder) {
+    try {
+        $stmtEditEquip = $pdo->prepare(
+            'SELECT e.id, e.name, e.code
+             FROM order_equipment oe
+             JOIN equipment e ON e.id = oe.equipment_id
+             WHERE oe.order_id = :oid
+             ORDER BY e.name ASC'
+        );
+        $stmtEditEquip->execute([':oid' => (int)$editingOrder['id']]);
+        $editingEquipmentRows = $stmtEditEquip->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        $editingEquipmentRows = [];
+    }
+    if (empty($editingEquipmentRows) && (int)($editingOrder['equipment_id'] ?? 0) > 0) {
+        $editingEquipmentRows[] = [
+            'id'   => (int)$editingOrder['equipment_id'],
+            'name' => (string)($editingOrder['equipment_name'] ?? ''),
+            'code' => (string)($editingOrder['equipment_code'] ?? ''),
+        ];
+    }
+    foreach ($editingEquipmentRows as $eqRow) {
+        $eid = (int)($eqRow['id'] ?? 0);
+        if ($eid > 0 && !in_array($eid, $editingEquipmentIds, true)) {
+            $editingEquipmentIds[] = $eid;
+        }
+    }
 }
 $isDuplicateMode = false;
 if (isset($_GET['duplicate_id']) && !$editingOrder) {
@@ -409,12 +453,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $reqEnd   = $endDate . ' ' . ($endTime !== '' ? $endTime : '23:59');
                 $excludeId = ($action === 'update' && $id > 0) ? $id : 0;
                 $placeholders = implode(',', array_fill(0, count($equipmentIds), '?'));
-                $sql = "SELECT DISTINCT equipment_id FROM orders
-                        WHERE equipment_id IN ($placeholders)
-                        AND status IN ('pending', 'approved', 'ready', 'on_loan')
-                        AND (start_date || ' ' || COALESCE(start_time, '00:00')) <= ?
-                        AND (end_date || ' ' || COALESCE(end_time, '23:59')) >= ?
-                        AND id != ?";
+                $sql = "SELECT DISTINCT t.equipment_id
+                        FROM (
+                            SELECT o.id, o.equipment_id, o.status, o.start_date, o.start_time, o.end_date, o.end_time
+                            FROM orders o
+                            UNION ALL
+                            SELECT o.id, oe.equipment_id, o.status, o.start_date, o.start_time, o.end_date, o.end_time
+                            FROM orders o
+                            JOIN order_equipment oe ON oe.order_id = o.id
+                        ) t
+                        WHERE t.equipment_id IN ($placeholders)
+                        AND t.status IN ('pending', 'approved', 'ready', 'on_loan')
+                        AND (t.start_date || ' ' || COALESCE(t.start_time, '00:00')) <= ?
+                        AND (t.end_date || ' ' || COALESCE(t.end_time, '23:59')) >= ?
+                        AND t.id != ?";
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute(array_merge($equipmentIds, [$reqEnd, $reqStart, $excludeId]));
                 $conflicted = $stmt->fetchAll(PDO::FETCH_COLUMN);
@@ -425,7 +477,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($error === '') {
             try {
                 if ($action === 'create' && $isRecurringCreate) {
-                    // יצירת הזמנות מחזוריות: חישוב מופעים והכנסה לכל (מופע × ציוד)
+                    // יצירת הזמנות מחזוריות: הזמנה אחת לכל מופע (תאריך/שעה) עם כל פריטי הציוד שנבחרו
                     $occurrences = [];
                     $startTs = strtotime($recurringStartDate . ' ' . $recurringStartTime);
                     if ($startTs === false) {
@@ -463,30 +515,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             );
                             $createdCount = 0;
                             $occurrenceIndex = 0;
-                            foreach ($equipmentIds as $equipmentId) {
-                                foreach ($occurrences as $occ) {
-                                    $occurrenceIndex++;
-                                    $insertRecurring->execute([
-                                        ':equipment_id'           => $equipmentId,
-                                        // "שם ההזמנה": שומרים מספור עוקב לכל מופע מחזורי
-                                        ':borrower_name'          => trim($borrowerName . ' ' . $occurrenceIndex),
-                                        ':borrower_contact'       => $borrowerContact,
-                                        ':start_date'             => $occ[0],
-                                        ':end_date'               => $occ[2],
-                                        ':start_time'             => $occ[1],
-                                        ':end_time'               => $occ[3],
-                                        ':status'                 => $initialStatus,
-                                        ':notes'                  => $notes,
-                                        ':purpose'                => $purpose !== '' ? $purpose : null,
-                                        ':admin_notes'            => $adminNotesPost !== '' ? $adminNotesPost : null,
-                                        ':equipment_prepared'     => 0,
-                                        ':recurring_series_id'    => $recurringSeriesId,
-                                        ':created_at'             => date('Y-m-d H:i:s'),
-                                        ':creator_username'       => (string)($me['username'] ?? ''),
-                                        ':return_equipment_status'=> 'תקין',
+                            $insertOrderEquipment = $pdo->prepare(
+                                'INSERT OR IGNORE INTO order_equipment (order_id, equipment_id) VALUES (:order_id, :equipment_id)'
+                            );
+                            foreach ($occurrences as $occ) {
+                                $occurrenceIndex++;
+                                $insertRecurring->execute([
+                                    ':equipment_id'           => (int)$equipmentIds[0],
+                                    // "שם ההזמנה": שומרים מספור עוקב לכל מופע מחזורי
+                                    ':borrower_name'          => trim($borrowerName . ' ' . $occurrenceIndex),
+                                    ':borrower_contact'       => $borrowerContact,
+                                    ':start_date'             => $occ[0],
+                                    ':end_date'               => $occ[2],
+                                    ':start_time'             => $occ[1],
+                                    ':end_time'               => $occ[3],
+                                    ':status'                 => $initialStatus,
+                                    ':notes'                  => $notes,
+                                    ':purpose'                => $purpose !== '' ? $purpose : null,
+                                    ':admin_notes'            => $adminNotesPost !== '' ? $adminNotesPost : null,
+                                    ':equipment_prepared'     => 0,
+                                    ':recurring_series_id'    => $recurringSeriesId,
+                                    ':created_at'             => date('Y-m-d H:i:s'),
+                                    ':creator_username'       => (string)($me['username'] ?? ''),
+                                    ':return_equipment_status'=> 'תקין',
+                                ]);
+                                $newOrderId = (int)$pdo->lastInsertId();
+                                foreach ($equipmentIds as $equipmentId) {
+                                    $insertOrderEquipment->execute([
+                                        ':order_id' => $newOrderId,
+                                        ':equipment_id' => (int)$equipmentId,
                                     ]);
-                                    $createdCount++;
                                 }
+                                $createdCount++;
                             }
                             $success = $createdCount > 1 ? "נוצרו {$createdCount} הזמנות בהצלחה." : 'הזמנה נוצרה בהצלחה.';
 
@@ -2270,23 +2330,25 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     && $role !== 'student'
                                 );
                                 ?>
-                            <div class="selected-equipment-row" data-equipment-id="<?= (int)$editingOrder['equipment_id'] ?>" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 4px;">
-                                <?php if ($showEquipmentPreparedChecklist): ?>
-                                    <label class="selected-equipment-checklist-item" style="flex: 1;">
-                                        <input type="checkbox" name="equipment_prepared" id="equipment_prepared" value="1" <?= !empty($editingOrder['equipment_prepared']) ? 'checked' : '' ?>>
-                                        <span><?= htmlspecialchars($editingOrder['equipment_name'] ?? '', ENT_QUOTES, 'UTF-8') ?><?= ($editingOrder['equipment_code'] ?? '') ? ' (' . htmlspecialchars($editingOrder['equipment_code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
-                                    </label>
-                                <?php else: ?>
-                                    <span style="flex: 1;"><?= htmlspecialchars($editingOrder['equipment_name'] ?? '', ENT_QUOTES, 'UTF-8') ?><?= ($editingOrder['equipment_code'] ?? '') ? ' (' . htmlspecialchars($editingOrder['equipment_code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
-                                <?php endif; ?>
-                                <?php if ($showEquipmentPreparedChecklist && $formEquipHasComponents): ?>
-                                    <a href="#" class="equipment-components-link" style="font-size:0.85rem;white-space:nowrap;"
-                                       data-equipment-code="<?= htmlspecialchars($editCodeForm, ENT_QUOTES, 'UTF-8') ?>"
-                                       data-order-id="<?= (int)$editingOrder['id'] ?>"
-                                       data-components-context="prepare">רכיבי ציוד</a>
-                                <?php endif; ?>
-                                <button type="button" class="equipment-list-trash" style="border: none; background: transparent; cursor: pointer; font-size: 0.85rem;" title="הסר ציוד" aria-label="הסר ציוד"><i data-lucide="trash-2" aria-hidden="true"></i></button>
-                            </div>
+                            <?php foreach ($editingEquipmentRows as $eqIdx => $eq): ?>
+                                <div class="selected-equipment-row" data-equipment-id="<?= (int)($eq['id'] ?? 0) ?>" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 4px;">
+                                    <?php if ($showEquipmentPreparedChecklist && $eqIdx === 0): ?>
+                                        <label class="selected-equipment-checklist-item" style="flex: 1;">
+                                            <input type="checkbox" name="equipment_prepared" id="equipment_prepared" value="1" <?= !empty($editingOrder['equipment_prepared']) ? 'checked' : '' ?>>
+                                            <span><?= htmlspecialchars((string)($eq['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?><?= ((string)($eq['code'] ?? '') !== '') ? ' (' . htmlspecialchars((string)$eq['code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
+                                        </label>
+                                    <?php else: ?>
+                                        <span style="flex: 1;"><?= htmlspecialchars((string)($eq['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?><?= ((string)($eq['code'] ?? '') !== '') ? ' (' . htmlspecialchars((string)$eq['code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
+                                    <?php endif; ?>
+                                    <?php if ($showEquipmentPreparedChecklist && $formEquipHasComponents && $eqIdx === 0): ?>
+                                        <a href="#" class="equipment-components-link" style="font-size:0.85rem;white-space:nowrap;"
+                                           data-equipment-code="<?= htmlspecialchars($editCodeForm, ENT_QUOTES, 'UTF-8') ?>"
+                                           data-order-id="<?= (int)$editingOrder['id'] ?>"
+                                           data-components-context="prepare">רכיבי ציוד</a>
+                                    <?php endif; ?>
+                                    <button type="button" class="equipment-list-trash" style="border: none; background: transparent; cursor: pointer; font-size: 0.85rem;" title="הסר ציוד" aria-label="הסר ציוד"><i data-lucide="trash-2" aria-hidden="true"></i></button>
+                                </div>
+                            <?php endforeach; ?>
                             <?php if ($formEquipHasComponents): ?>
                                 <script type="application/json" data-components-for="<?= htmlspecialchars($editCodeForm, ENT_QUOTES, 'UTF-8') ?>">
                                     <?= json_encode($equipmentComponentsByCode[$editCodeForm], JSON_UNESCAPED_UNICODE) ?>
@@ -2644,7 +2706,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 if ($cat === '') {
                                     $cat = 'ללא קטגוריה';
                                 }
-                                $isChecked = $editingOrder && (int)$editingOrder['equipment_id'] === (int)$item['id'];
+                                $isChecked = $editingOrder
+                                    ? in_array((int)$item['id'], $editingEquipmentIds, true)
+                                    : false;
                                 ?>
                                 <tr data-category="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>" data-equipment-id="<?= (int)$item['id'] ?>">
                                     <td>
