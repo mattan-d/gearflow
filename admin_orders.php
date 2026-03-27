@@ -2181,7 +2181,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 </p>
             <?php endif; ?>
 
-            <form method="post" action="admin_orders.php<?= $editingOrder && !$isViewModeOrder ? '?edit_id=' . (int)$editingOrder['id'] : '' ?>">
+            <form method="post" action="admin_orders.php<?= $editingOrder && !$isViewModeOrder ? '?edit_id=' . (int)$editingOrder['id'] : '' ?>" <?= $isViewModeOrder ? 'onsubmit="return false;"' : '' ?>>
                 <input type="hidden" name="action" value="<?= $editingOrder && !$isViewModeOrder ? 'update' : 'create' ?>">
                 <input type="hidden" name="id" value="<?= $editingOrder ? (int)$editingOrder['id'] : 0 ?>">
                 <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
@@ -2378,7 +2378,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                            data-order-id="<?= (int)$editingOrder['id'] ?>"
                                            data-components-context="prepare">רכיבי ציוד</a>
                                     <?php endif; ?>
-                                    <button type="button" class="equipment-list-trash" style="border: none; background: transparent; cursor: pointer; font-size: 0.85rem;" title="הסר ציוד" aria-label="הסר ציוד"><i data-lucide="trash-2" aria-hidden="true"></i></button>
+                                    <?php if (!$isViewModeOrder): ?>
+                                        <button type="button" class="equipment-list-trash" style="border: none; background: transparent; cursor: pointer; font-size: 0.85rem;" title="הסר ציוד" aria-label="הסר ציוד"><i data-lucide="trash-2" aria-hidden="true"></i></button>
+                                    <?php endif; ?>
                                 </div>
                             <?php endforeach; ?>
                             <?php if ($formEquipHasComponents): ?>
@@ -2598,7 +2600,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             ?>
                             <h3 class="form-section-title">מצב הזמנה</h3>
                             <label for="order_status">מצב הזמנה</label>
-                            <select id="order_status" name="order_status">
+                            <select id="order_status" name="order_status" <?= $isViewModeOrder ? 'disabled' : '' ?>>
                                 <?php foreach ($orderStatusOptions as $val => $label): ?>
                                     <option value="<?= htmlspecialchars($val, ENT_QUOTES, 'UTF-8') ?>" <?= $val === $currentStatus || ($tab === 'not_picked' && $val === 'returned') ? 'selected' : '' ?>>
                                         <?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?>
@@ -2608,7 +2610,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                             <?php if ($showReturnStatusField): ?>
                                 <label for="return_equipment_status">סטטוס החזרה</label>
-                                <select id="return_equipment_status" name="return_equipment_status">
+                                <select id="return_equipment_status" name="return_equipment_status" <?= $isViewModeOrder ? 'disabled' : '' ?>>
                                     <option value="" <?= $returnStatusValue === '' ? 'selected' : '' ?>>ללא</option>
                                     <option value="לא נאסף" <?= $returnStatusValue === 'לא נאסף' ? 'selected' : '' ?>>לא נאסף</option>
                                     <option value="לא הוחזר בזמן" <?= $returnStatusValue === 'לא הוחזר בזמן' ? 'selected' : '' ?>>לא הוחזר בזמן</option>
@@ -2636,7 +2638,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 ?>
                                 <?php if ($showEquipReturnCombo): ?>
                                     <label for="equipment_return_condition">סטטוס ציוד מוחזר</label>
-                                    <select id="equipment_return_condition" name="equipment_return_condition">
+                                    <select id="equipment_return_condition" name="equipment_return_condition" <?= $isViewModeOrder ? 'disabled' : '' ?>>
                                         <option value="תקין" <?= $equipmentReturnCondition === 'תקין' ? 'selected' : '' ?>>תקין</option>
                                         <option value="תקול" <?= $equipmentReturnCondition === 'תקול' ? 'selected' : '' ?>>לא תקין</option>
                                         <option value="חסר" <?= $equipmentReturnCondition === 'חסר' ? 'selected' : '' ?>>חסר</option>
@@ -2646,7 +2648,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                             <div id="rejection_reason_wrapper" style="margin-top: 0.5rem; display: <?= $currentStatus === 'rejected' ? 'block' : 'none' ?>;">
                                 <label for="rejection_reason">סיבה לדחיית הבקשה</label>
-                                <textarea id="rejection_reason" name="rejection_reason"
+                                <textarea id="rejection_reason" name="rejection_reason" <?= $isViewModeOrder ? 'readonly' : '' ?>
                                           placeholder="פרט את הסיבה לדחיית הבקשה"></textarea>
                             </div>
                         <?php } ?>
@@ -2787,9 +2789,11 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                     }
                 }
                 ?>
-                <button type="submit" class="btn" id="submit_order_btn" disabled>
-                    <?= $submitLabel ?>
-                </button>
+                <?php if (!$isViewModeOrder): ?>
+                    <button type="submit" class="btn" id="submit_order_btn" disabled>
+                        <?= $submitLabel ?>
+                    </button>
+                <?php endif; ?>
                 <?php if ($editingOrder): ?>
                     <?php
                     $cancelUrl = 'admin_orders.php?tab=' . urlencode($tab);
@@ -2797,7 +2801,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         $cancelUrl .= '&today_mode=' . urlencode($todayMode);
                     }
                     ?>
-                    <a href="<?= $cancelUrl ?>" class="btn secondary">ביטול</a>
+                    <a href="<?= $cancelUrl ?>" class="btn secondary"><?= $isViewModeOrder ? 'סגירה' : 'ביטול' ?></a>
                 <?php else: ?>
                     <button type="button" class="btn secondary" id="order_modal_cancel">ביטול</button>
                 <?php endif; ?>
@@ -3306,6 +3310,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const currentTabInput = document.querySelector('input[name="current_tab"]');
     const currentTabValue = '<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>';
     const todayModeValue = '<?= htmlspecialchars($todayMode, ENT_QUOTES, 'UTF-8') ?>';
+    const isViewModeOrder = <?= $isViewModeOrder ? 'true' : 'false' ?>;
 
     function buildReturnUrl() {
         let url = 'admin_orders.php?tab=' + encodeURIComponent(currentTabValue || 'today');
@@ -3477,6 +3482,15 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
     function updateSelectedEquipmentSummary() {
         const checked = equipmentCheckboxes.filter(function (cb) { return cb.checked; });
+
+        // במצבים שבהם רשימת החלפת ציוד לא מוצגת (למשל עריכה בטאבים מסוימים),
+        // שומרים את רשימת "ציוד נבחר" שכבר נטענה מהשרת ולא מוחקים אותה.
+        if (equipmentCheckboxes.length === 0) {
+            if (submitBtn && !isViewModeOrder) {
+                submitBtn.disabled = false;
+            }
+            return;
+        }
 
         if (selectedEquipmentSummary) {
             const count = checked.length;
