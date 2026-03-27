@@ -438,9 +438,20 @@ function initialize_database(PDO $pdo): void
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS order_status_labels (
             status TEXT PRIMARY KEY,
-            label_he TEXT NOT NULL
+            label_he TEXT NOT NULL,
+            color_hex TEXT
         )
     ");
+    // מיגרציה: הוספת color_hex אם חסר (לטובת DB קיימים)
+    try {
+        $stCols = $pdo->query("PRAGMA table_info(order_status_labels)")->fetchAll(PDO::FETCH_ASSOC);
+        $stNames = array_column($stCols, 'name');
+        if (!in_array('color_hex', $stNames, true)) {
+            $pdo->exec("ALTER TABLE order_status_labels ADD COLUMN color_hex TEXT");
+        }
+    } catch (Throwable $e) {
+        // ignore
+    }
     $statusDefaults = [
         'pending'      => 'ממתין',
         'approved'     => 'מאושר',
@@ -455,6 +466,26 @@ function initialize_database(PDO $pdo): void
     foreach ($statusDefaults as $code => $label) {
         $stmt = $pdo->prepare('INSERT OR IGNORE INTO order_status_labels (status, label_he) VALUES (:s, :l)');
         $stmt->execute([':s' => $code, ':l' => $label]);
+    }
+    // צבעי ברירת מחדל (אם לא נקבע צבע)
+    try {
+        $defaultStatusColors = [
+            'pending' => '#f59e0b',
+            'approved' => '#2563eb',
+            'ready' => '#16a34a',
+            'on_loan' => '#0ea5e9',
+            'returned' => '#6b7280',
+            'rejected' => '#ef4444',
+            'deleted' => '#991b1b',
+            'not_returned' => '#dc2626',
+            'not_picked' => '#b45309',
+        ];
+        $updColor = $pdo->prepare("UPDATE order_status_labels SET color_hex = :c WHERE status = :s AND (color_hex IS NULL OR TRIM(color_hex) = '')");
+        foreach ($defaultStatusColors as $s => $c) {
+            $updColor->execute([':s' => $s, ':c' => $c]);
+        }
+    } catch (Throwable $e) {
+        // ignore
     }
 
     // טבלת ספקים

@@ -3039,21 +3039,31 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             $statusCode  = (string)($order['status'] ?? 'pending');
                             $statusLabel = $statusCode;
 
-                            // קריאת התווית מטבלת order_status_labels אם קיימת
+                            // קריאת התווית + צבע מטבלת order_status_labels אם קיימת
                             static $statusMap = null;
                             if ($statusMap === null) {
                                 try {
-                                    $stmtSL = $pdo->query('SELECT status, label_he FROM order_status_labels');
+                                    $stmtSL = $pdo->query('SELECT status, label_he, color_hex FROM order_status_labels');
                                     $statusMap = [];
                                     foreach ($stmtSL->fetchAll(PDO::FETCH_ASSOC) as $rowSL) {
-                                        $statusMap[(string)($rowSL['status'] ?? '')] = (string)($rowSL['label_he'] ?? '');
+                                        $statusMap[(string)($rowSL['status'] ?? '')] = [
+                                            'label' => (string)($rowSL['label_he'] ?? ''),
+                                            'color' => (string)($rowSL['color_hex'] ?? ''),
+                                        ];
                                     }
                                 } catch (Throwable $e) {
                                     $statusMap = [];
                                 }
                             }
-                            if (isset($statusMap[$statusCode]) && $statusMap[$statusCode] !== '') {
-                                $statusLabel = $statusMap[$statusCode];
+                            $statusColor = '';
+                            if (isset($statusMap[$statusCode]) && is_array($statusMap[$statusCode])) {
+                                if (!empty($statusMap[$statusCode]['label'])) {
+                                    $statusLabel = (string)$statusMap[$statusCode]['label'];
+                                }
+                                $statusColor = (string)($statusMap[$statusCode]['color'] ?? '');
+                                if (!preg_match('/^#[0-9a-fA-F]{6}$/', $statusColor)) {
+                                    $statusColor = '';
+                                }
                             }
 
                             if ($statusCode === 'approved') {
@@ -3070,7 +3080,22 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 $statusClass = 'status-ready';
                             }
                             ?>
-                            <span class="badge <?= $statusClass ?>"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></span>
+                            <?php
+                            $badgeStyle = '';
+                            if ($statusColor !== '') {
+                                $hex = ltrim($statusColor, '#');
+                                $r = hexdec(substr($hex, 0, 2));
+                                $g = hexdec(substr($hex, 2, 2));
+                                $b = hexdec(substr($hex, 4, 2));
+                                // luminance (simple) כדי לבחור צבע טקסט קריא
+                                $l = (0.299 * $r + 0.587 * $g + 0.114 * $b);
+                                $text = ($l < 140) ? '#ffffff' : '#111827';
+                                $badgeStyle = 'background:' . $statusColor . ';color:' . $text . ';border:1px solid rgba(0,0,0,0.06);';
+                            }
+                            ?>
+                            <span class="badge <?= $statusClass ?>" <?= $badgeStyle !== '' ? 'style="' . htmlspecialchars($badgeStyle, ENT_QUOTES, 'UTF-8') . '"' : '' ?>>
+                                <?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?>
+                            </span>
                         </td>
                         <td class="muted-small">
                             <?php

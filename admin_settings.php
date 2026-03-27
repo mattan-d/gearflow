@@ -129,24 +129,28 @@ try {
     $categories = [];
 }
 
-// סטטוסי הזמנה – קריאה ועריכה
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['status_action']) && $_POST['status_action'] === 'rename_status') {
-    $code    = trim((string)($_POST['status_code'] ?? ''));
+// סטטוסי הזמנה – קריאה ועריכה (שם + צבע)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['status_action']) && $_POST['status_action'] === 'save_status') {
+    $code     = trim((string)($_POST['status_code'] ?? ''));
     $newLabel = trim((string)($_POST['status_label'] ?? ''));
+    $newColor = trim((string)($_POST['status_color'] ?? ''));
+    if ($newColor !== '' && !preg_match('/^#[0-9a-fA-F]{6}$/', $newColor)) {
+        $newColor = '';
+    }
     if ($code !== '' && $newLabel !== '') {
         try {
-            $stmtS = $pdo->prepare('INSERT OR REPLACE INTO order_status_labels (status, label_he) VALUES (:s, :l)');
-            $stmtS->execute([':s' => $code, ':l' => $newLabel]);
-            $success = 'שם הסטטוס עודכן בהצלחה.';
+            $stmtS = $pdo->prepare('INSERT OR REPLACE INTO order_status_labels (status, label_he, color_hex) VALUES (:s, :l, :c)');
+            $stmtS->execute([':s' => $code, ':l' => $newLabel, ':c' => ($newColor !== '' ? $newColor : null)]);
+            $success = 'הסטטוס עודכן בהצלחה.';
         } catch (Throwable $e) {
-            $error = 'שגיאה בעדכון שם הסטטוס.';
+            $error = 'שגיאה בעדכון הסטטוס.';
         }
     }
 }
 
 $statusLabels = [];
 try {
-    $stmtSL = $pdo->query('SELECT status, label_he FROM order_status_labels ORDER BY status ASC');
+    $stmtSL = $pdo->query('SELECT status, label_he, color_hex FROM order_status_labels ORDER BY status ASC');
     $statusLabels = $stmtSL->fetchAll(PDO::FETCH_ASSOC) ?: [];
 } catch (Throwable $e) {
     $statusLabels = [];
@@ -499,6 +503,7 @@ try {
                 <tr>
                     <th>קוד סטטוס</th>
                     <th>שם מוצג</th>
+                    <th>צבע</th>
                     <th>שמירה</th>
                 </tr>
                 </thead>
@@ -506,18 +511,29 @@ try {
                 <?php foreach ($statusLabels as $st): ?>
                     <tr>
                         <td style="font-family:monospace;direction:ltr;"><?= htmlspecialchars((string)($st['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                        <td>
-                            <form method="post" action="admin_settings.php" style="display:flex;align-items:center;gap:0.4rem;margin:0;">
-                                <input type="hidden" name="status_action" value="rename_status">
+                        <td colspan="3">
+                            <?php
+                            $colorVal = (string)($st['color_hex'] ?? '');
+                            if (!preg_match('/^#[0-9a-fA-F]{6}$/', $colorVal)) {
+                                $colorVal = '#6b7280';
+                            }
+                            ?>
+                            <form method="post" action="admin_settings.php" style="display:flex;align-items:center;gap:0.5rem;margin:0;flex-wrap:wrap;">
+                                <input type="hidden" name="status_action" value="save_status">
                                 <input type="hidden" name="status_code" value="<?= htmlspecialchars((string)($st['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                                 <input type="text"
                                        name="status_label"
                                        value="<?= htmlspecialchars((string)($st['label_he'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                       style="flex:1;padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;">
+                                       style="flex:1;min-width:160px;padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;">
+                                <input type="color"
+                                       name="status_color"
+                                       value="<?= htmlspecialchars($colorVal, ENT_QUOTES, 'UTF-8') ?>"
+                                       title="בחירת צבע"
+                                       aria-label="בחירת צבע לסטטוס"
+                                       style="width:42px;height:32px;border-radius:8px;border:1px solid #d1d5db;padding:0;">
                                 <button type="submit" class="btn small">שמור</button>
                             </form>
                         </td>
-                        <td></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>
