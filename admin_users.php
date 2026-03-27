@@ -24,19 +24,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $username   = trim($_POST['username'] ?? '');
         $password   = $_POST['password'] ?? '';
         $role       = $_POST['role'] ?? 'student';
+        $allowedRoles = ['admin', 'warehouse_manager', 'student', 'lecturer', 'staff'];
+        if (!in_array($role, $allowedRoles, true)) $role = 'student';
         $firstName  = trim($_POST['first_name'] ?? '');
         $lastName   = trim($_POST['last_name'] ?? '');
         $warehouse  = trim($_POST['warehouse'] ?? '');
+                    $idNumber   = trim((string)($_POST['id_number'] ?? ''));
+                    $studyYear  = trim((string)($_POST['study_year'] ?? ''));
         $email      = trim($_POST['email'] ?? '');
         $phone      = trim($_POST['phone'] ?? '');
+                    $consentEmails = !empty($_POST['allow_emails']) ? 1 : 0;
 
         if ($username === '' || $password === '') {
             $error = 'יש למלא שם משתמש וסיסמה.';
         } else {
             try {
                 $stmt = $pdo->prepare(
-                    'INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, email, phone, created_at)
-                     VALUES (:username, :password_hash, :role, :is_active, :first_name, :last_name, :warehouse, :email, :phone, :created_at)'
+                        'INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, id_number, study_year, allow_emails, email, phone, created_at)
+                         VALUES (:username, :password_hash, :role, :is_active, :first_name, :last_name, :warehouse, :id_number, :study_year, :allow_emails, :email, :phone, :created_at)'
                 );
                 $stmt->execute([
                     ':username'      => $username,
@@ -46,6 +51,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':first_name'    => $firstName,
                     ':last_name'     => $lastName,
                     ':warehouse'     => $warehouse,
+                        ':id_number'     => $idNumber !== '' ? $idNumber : null,
+                        ':study_year'    => $studyYear !== '' ? $studyYear : null,
+                        ':allow_emails'  => $consentEmails,
                     ':email'        => $email,
                     ':phone'        => $phone,
                     ':created_at'   => date('Y-m-d H:i:s'),
@@ -68,25 +76,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $firstNames = $_POST['bulk_first_name'] ?? [];
         $lastNames  = $_POST['bulk_last_name'] ?? [];
         $warehouses = $_POST['bulk_warehouse'] ?? [];
+            $idNumbers  = $_POST['bulk_id_number'] ?? [];
+            $studyYears = $_POST['bulk_study_year'] ?? [];
+            $allowEmailsBulk = $_POST['bulk_allow_emails'] ?? [];
         $emails     = $_POST['bulk_email'] ?? [];
         $phones     = $_POST['bulk_phone'] ?? [];
         if (!is_array($usernames)) $usernames = [];
         $inserted = 0;
         $now = date('Y-m-d H:i:s');
         $stmt = $pdo->prepare(
-            'INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, email, phone, created_at)
-             VALUES (:username, :password_hash, :role, 1, :first_name, :last_name, :warehouse, :email, :phone, :created_at)'
+            'INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, id_number, study_year, allow_emails, email, phone, created_at)
+             VALUES (:username, :password_hash, :role, 1, :first_name, :last_name, :warehouse, :id_number, :study_year, :allow_emails, :email, :phone, :created_at)'
         );
         foreach ($usernames as $i => $u) {
             $username = trim((string)$u);
             if ($username === '') continue;
             $password = isset($passwords[$i]) ? (string)$passwords[$i] : '';
             if ($password === '') $password = '123456';
-            $role = isset($roles[$i]) && in_array(trim((string)$roles[$i]), ['admin', 'warehouse_manager', 'student'], true) ? trim((string)$roles[$i]) : 'student';
+            $role = isset($roles[$i]) && in_array(trim((string)$roles[$i]), ['admin', 'warehouse_manager', 'student', 'lecturer', 'staff'], true) ? trim((string)$roles[$i]) : 'student';
             $firstName = isset($firstNames[$i]) ? trim((string)$firstNames[$i]) : '';
             $lastName  = isset($lastNames[$i]) ? trim((string)$lastNames[$i]) : '';
             $warehouse = isset($warehouses[$i]) ? trim((string)$warehouses[$i]) : '';
             if ($warehouse !== 'מחסן א' && $warehouse !== 'מחסן ב') $warehouse = '';
+                $idNumber = isset($idNumbers[$i]) ? trim((string)$idNumbers[$i]) : '';
+                $studyYear = isset($studyYears[$i]) ? trim((string)$studyYears[$i]) : '';
+                $allowEmails = !empty($allowEmailsBulk[$i]) ? 1 : 0;
             $email = isset($emails[$i]) ? trim((string)$emails[$i]) : '';
             $phone = isset($phones[$i]) ? trim((string)$phones[$i]) : '';
             try {
@@ -97,6 +111,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':first_name' => $firstName,
                     ':last_name'  => $lastName,
                     ':warehouse'  => $warehouse,
+                        ':id_number'  => $idNumber !== '' ? $idNumber : null,
+                        ':study_year' => $studyYear !== '' ? $studyYear : null,
+                        ':allow_emails' => $allowEmails,
                     ':email'      => $email,
                     ':phone'      => $phone,
                     ':created_at' => $now,
@@ -139,9 +156,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $username   = trim($_POST['username'] ?? '');
         $password   = (string)($_POST['new_password'] ?? '');
         $role       = $_POST['role'] ?? 'student';
+        $allowedRoles = ['admin', 'warehouse_manager', 'student', 'lecturer', 'staff'];
+        if (!in_array($role, $allowedRoles, true)) $role = 'student';
         $firstName  = trim($_POST['first_name'] ?? '');
         $lastName   = trim($_POST['last_name'] ?? '');
         $warehouse  = trim($_POST['warehouse'] ?? '');
+        $idNumber   = trim((string)($_POST['id_number'] ?? ''));
+        $studyYear  = trim((string)($_POST['study_year'] ?? ''));
+        $consentEmails = !empty($_POST['allow_emails']) ? 1 : 0;
         $email      = trim($_POST['email'] ?? '');
         $phone      = trim($_POST['phone'] ?? '');
 
@@ -158,6 +180,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                              first_name = :first_name,
                              last_name = :last_name,
                              warehouse = :warehouse,
+                             id_number = :id_number,
+                             study_year = :study_year,
+                             allow_emails = :allow_emails,
                              email = :email,
                              phone = :phone
                          WHERE id = :id'
@@ -169,6 +194,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':first_name'    => $firstName,
                         ':last_name'     => $lastName,
                         ':warehouse'     => $warehouse,
+                        ':id_number'     => $idNumber !== '' ? $idNumber : null,
+                        ':study_year'    => $studyYear !== '' ? $studyYear : null,
+                        ':allow_emails'  => $consentEmails,
                         ':email'         => $email,
                         ':phone'         => $phone,
                         ':id'            => $id,
@@ -181,6 +209,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                              first_name = :first_name,
                              last_name = :last_name,
                              warehouse = :warehouse,
+                             id_number = :id_number,
+                             study_year = :study_year,
+                             allow_emails = :allow_emails,
                              email = :email,
                              phone = :phone
                          WHERE id = :id'
@@ -191,6 +222,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':first_name' => $firstName,
                         ':last_name'  => $lastName,
                         ':warehouse'  => $warehouse,
+                        ':id_number'  => $idNumber !== '' ? $idNumber : null,
+                        ':study_year' => $studyYear !== '' ? $studyYear : null,
+                        ':allow_emails' => $consentEmails,
                         ':email'      => $email,
                         ':phone'      => $phone,
                         ':id'         => $id,
@@ -242,7 +276,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: admin_users.php?import_error=' . urlencode($error));
                 exit;
             }
-            $systemCols = ['username', 'password', 'role', 'first_name', 'last_name', 'warehouse', 'email', 'phone', 'is_active'];
+            $systemCols = ['username', 'password', 'role', 'first_name', 'last_name', 'warehouse', 'id_number', 'study_year', 'allow_emails', 'email', 'phone', 'is_active'];
             $requiredCols = ['username'];
             $headerNorm = [];
             foreach ($header as $idx => $col) {
@@ -307,9 +341,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                         $password  = $get('password');
                         $role      = $get('role') ?: 'student';
-                        if (!in_array($role, ['admin', 'warehouse_manager', 'student'], true)) {
+                        if (!in_array($role, ['admin', 'warehouse_manager', 'student', 'lecturer', 'staff'], true)) {
                             $role = 'student';
                         }
+                        $idNumber = $get('id_number');
+                        $studyYear = $get('study_year');
+                        $allowEmailsRaw = $get('allow_emails');
+                        $allowEmailsVal = ($allowEmailsRaw === '1' || strtolower($allowEmailsRaw) === 'true' || strtolower($allowEmailsRaw) === 'yes') ? 1 : 0;
+
                         $firstName = $get('first_name');
                         $lastName  = $get('last_name');
                         $warehouse = $get('warehouse');
@@ -332,6 +371,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                          first_name = :first_name,
                                          last_name = :last_name,
                                          warehouse = :warehouse,
+                                        id_number = :id_number,
+                                        study_year = :study_year,
+                                        allow_emails = :allow_emails,
                                          email = :email,
                                          phone = :phone,
                                          is_active = :is_active,
@@ -343,6 +385,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     ':first_name'    => $firstName,
                                     ':last_name'     => $lastName,
                                     ':warehouse'     => $warehouse,
+                                    ':id_number'     => $idNumber !== '' ? $idNumber : null,
+                                    ':study_year'    => $studyYear !== '' ? $studyYear : null,
+                                    ':allow_emails'  => $allowEmailsVal,
                                     ':email'         => $email,
                                     ':phone'         => $phone,
                                     ':is_active'     => $activeVal,
@@ -356,6 +401,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                          first_name = :first_name,
                                          last_name = :last_name,
                                          warehouse = :warehouse,
+                                         id_number = :id_number,
+                                         study_year = :study_year,
+                                         allow_emails = :allow_emails,
                                          email = :email,
                                          phone = :phone,
                                          is_active = :is_active
@@ -366,6 +414,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     ':first_name'=> $firstName,
                                     ':last_name' => $lastName,
                                     ':warehouse' => $warehouse,
+                                    ':id_number' => $idNumber !== '' ? $idNumber : null,
+                                    ':study_year' => $studyYear !== '' ? $studyYear : null,
+                                    ':allow_emails' => $allowEmailsVal,
                                     ':email'     => $email,
                                     ':phone'     => $phone,
                                     ':is_active' => $activeVal,
@@ -379,8 +430,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 continue;
                             }
                             $ins = $pdo->prepare(
-                                'INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, email, phone, created_at)
-                                 VALUES (:username, :password_hash, :role, :is_active, :first_name, :last_name, :warehouse, :email, :phone, :created_at)'
+                                'INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, id_number, study_year, allow_emails, email, phone, created_at)
+                                 VALUES (:username, :password_hash, :role, :is_active, :first_name, :last_name, :warehouse, :id_number, :study_year, :allow_emails, :email, :phone, :created_at)'
                             );
                             $ins->execute([
                                 ':username'      => $username,
@@ -390,6 +441,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ':first_name'    => $firstName,
                                 ':last_name'     => $lastName,
                                 ':warehouse'     => $warehouse,
+                                ':id_number'     => $idNumber !== '' ? $idNumber : null,
+                                ':study_year'    => $studyYear !== '' ? $studyYear : null,
+                                ':allow_emails'  => $allowEmailsVal,
                                 ':email'         => $email,
                                 ':phone'         => $phone,
                                 ':created_at'    => date('Y-m-d H:i:s'),
@@ -438,7 +492,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($username === '') continue;
                 $password = $get('password');
                 $role = $get('role') ?: 'student';
-                if (!in_array($role, ['admin', 'warehouse_manager', 'student'], true)) $role = 'student';
+                if (!in_array($role, ['admin', 'warehouse_manager', 'student', 'lecturer', 'staff'], true)) $role = 'student';
+                $idNumber = $get('id_number');
+                $studyYear = $get('study_year');
+                $allowEmailsRaw = $get('allow_emails');
+                $allowEmailsVal = ($allowEmailsRaw === '1' || strtolower($allowEmailsRaw) === 'true' || strtolower($allowEmailsRaw) === 'yes') ? 1 : 0;
+
                 $firstName = $get('first_name');
                 $lastName = $get('last_name');
                 $warehouse = $get('warehouse');
@@ -453,16 +512,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $id = (int)$existing['id'];
                     if ($password !== '') {
                         $upd = $pdo->prepare('UPDATE users SET role=:role, first_name=:first_name, last_name=:last_name, warehouse=:warehouse, email=:email, phone=:phone, is_active=:is_active, password_hash=:password_hash WHERE id=:id');
-                        $upd->execute([':role'=>$role, ':first_name'=>$firstName, ':last_name'=>$lastName, ':warehouse'=>$warehouse, ':email'=>$email, ':phone'=>$phone, ':is_active'=>$activeVal, ':password_hash'=>password_hash($password, PASSWORD_DEFAULT), ':id'=>$id]);
+                        $upd = $pdo->prepare('UPDATE users SET role=:role, first_name=:first_name, last_name=:last_name, warehouse=:warehouse, id_number=:id_number, study_year=:study_year, allow_emails=:allow_emails, email=:email, phone=:phone, is_active=:is_active, password_hash=:password_hash WHERE id=:id');
+                        $upd->execute([':role'=>$role, ':first_name'=>$firstName, ':last_name'=>$lastName, ':warehouse'=>$warehouse, ':id_number'=>$idNumber !== '' ? $idNumber : null, ':study_year'=>$studyYear !== '' ? $studyYear : null, ':allow_emails'=>$allowEmailsVal, ':email'=>$email, ':phone'=>$phone, ':is_active'=>$activeVal, ':password_hash'=>password_hash($password, PASSWORD_DEFAULT), ':id'=>$id]);
                     } else {
-                        $upd = $pdo->prepare('UPDATE users SET role=:role, first_name=:first_name, last_name=:last_name, warehouse=:warehouse, email=:email, phone=:phone, is_active=:is_active WHERE id=:id');
-                        $upd->execute([':role'=>$role, ':first_name'=>$firstName, ':last_name'=>$lastName, ':warehouse'=>$warehouse, ':email'=>$email, ':phone'=>$phone, ':is_active'=>$activeVal, ':id'=>$id]);
+                        $upd = $pdo->prepare('UPDATE users SET role=:role, first_name=:first_name, last_name=:last_name, warehouse=:warehouse, id_number=:id_number, study_year=:study_year, allow_emails=:allow_emails, email=:email, phone=:phone, is_active=:is_active WHERE id=:id');
+                        $upd->execute([':role'=>$role, ':first_name'=>$firstName, ':last_name'=>$lastName, ':warehouse'=>$warehouse, ':id_number'=>$idNumber !== '' ? $idNumber : null, ':study_year'=>$studyYear !== '' ? $studyYear : null, ':allow_emails'=>$allowEmailsVal, ':email'=>$email, ':phone'=>$phone, ':is_active'=>$activeVal, ':id'=>$id]);
                     }
                     $updated++;
                 } else {
                     if ($password === '') continue;
-                    $ins = $pdo->prepare('INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, email, phone, created_at) VALUES (:username, :password_hash, :role, :is_active, :first_name, :last_name, :warehouse, :email, :phone, :created_at)');
-                    $ins->execute([':username'=>$username, ':password_hash'=>password_hash($password, PASSWORD_DEFAULT), ':role'=>$role, ':is_active'=>$activeVal, ':first_name'=>$firstName, ':last_name'=>$lastName, ':warehouse'=>$warehouse, ':email'=>$email, ':phone'=>$phone, ':created_at'=>date('Y-m-d H:i:s')]);
+                    $ins = $pdo->prepare('INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, id_number, study_year, allow_emails, email, phone, created_at) VALUES (:username, :password_hash, :role, :is_active, :first_name, :last_name, :warehouse, :id_number, :study_year, :allow_emails, :email, :phone, :created_at)');
+                    $ins->execute([':username'=>$username, ':password_hash'=>password_hash($password, PASSWORD_DEFAULT), ':role'=>$role, ':is_active'=>$activeVal, ':first_name'=>$firstName, ':last_name'=>$lastName, ':warehouse'=>$warehouse, ':id_number'=>$idNumber !== '' ? $idNumber : null, ':study_year'=>$studyYear !== '' ? $studyYear : null, ':allow_emails'=>$allowEmailsVal, ':email'=>$email, ':phone'=>$phone, ':created_at'=>date('Y-m-d H:i:s')]);
                     $imported++;
                 }
             }
@@ -496,10 +556,14 @@ if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESS
             if ($username === '') continue;
             $password = $get('password');
             $role = $get('role') ?: 'student';
-            if (!in_array($role, ['admin', 'warehouse_manager', 'student'], true)) $role = 'student';
+            if (!in_array($role, ['admin', 'warehouse_manager', 'student', 'lecturer', 'staff'], true)) $role = 'student';
             $firstName = $get('first_name');
             $lastName = $get('last_name');
             $warehouse = $get('warehouse');
+            $idNumber = $get('id_number');
+            $studyYear = $get('study_year');
+            $allowEmailsRaw = $get('allow_emails');
+            $allowEmailsVal = ($allowEmailsRaw === '1' || strtolower($allowEmailsRaw) === 'true' || strtolower($allowEmailsRaw) === 'yes') ? 1 : 0;
             $email = $get('email');
             $phone = $get('phone');
             $isActive = $get('is_active');
@@ -510,17 +574,56 @@ if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESS
             if ($existing) {
                 $id = (int)$existing['id'];
                 if ($password !== '') {
-                    $upd = $pdo->prepare('UPDATE users SET role=:role, first_name=:first_name, last_name=:last_name, warehouse=:warehouse, email=:email, phone=:phone, is_active=:is_active, password_hash=:password_hash WHERE id=:id');
-                    $upd->execute([':role'=>$role, ':first_name'=>$firstName, ':last_name'=>$lastName, ':warehouse'=>$warehouse, ':email'=>$email, ':phone'=>$phone, ':is_active'=>$activeVal, ':password_hash'=>password_hash($password, PASSWORD_DEFAULT), ':id'=>$id]);
+                    $upd = $pdo->prepare('UPDATE users SET role=:role, first_name=:first_name, last_name=:last_name, warehouse=:warehouse, id_number=:id_number, study_year=:study_year, allow_emails=:allow_emails, email=:email, phone=:phone, is_active=:is_active, password_hash=:password_hash WHERE id=:id');
+                    $upd->execute([
+                        ':role'=>$role,
+                        ':first_name'=>$firstName,
+                        ':last_name'=>$lastName,
+                        ':warehouse'=>$warehouse,
+                        ':id_number'=>$idNumber !== '' ? $idNumber : null,
+                        ':study_year'=>$studyYear !== '' ? $studyYear : null,
+                        ':allow_emails'=>$allowEmailsVal,
+                        ':email'=>$email,
+                        ':phone'=>$phone,
+                        ':is_active'=>$activeVal,
+                        ':password_hash'=>password_hash($password, PASSWORD_DEFAULT),
+                        ':id'=>$id,
+                    ]);
                 } else {
-                    $upd = $pdo->prepare('UPDATE users SET role=:role, first_name=:first_name, last_name=:last_name, warehouse=:warehouse, email=:email, phone=:phone, is_active=:is_active WHERE id=:id');
-                    $upd->execute([':role'=>$role, ':first_name'=>$firstName, ':last_name'=>$lastName, ':warehouse'=>$warehouse, ':email'=>$email, ':phone'=>$phone, ':is_active'=>$activeVal, ':id'=>$id]);
+                    $upd = $pdo->prepare('UPDATE users SET role=:role, first_name=:first_name, last_name=:last_name, warehouse=:warehouse, id_number=:id_number, study_year=:study_year, allow_emails=:allow_emails, email=:email, phone=:phone, is_active=:is_active WHERE id=:id');
+                    $upd->execute([
+                        ':role'=>$role,
+                        ':first_name'=>$firstName,
+                        ':last_name'=>$lastName,
+                        ':warehouse'=>$warehouse,
+                        ':id_number'=>$idNumber !== '' ? $idNumber : null,
+                        ':study_year'=>$studyYear !== '' ? $studyYear : null,
+                        ':allow_emails'=>$allowEmailsVal,
+                        ':email'=>$email,
+                        ':phone'=>$phone,
+                        ':is_active'=>$activeVal,
+                        ':id'=>$id,
+                    ]);
                 }
                 $updated++;
             } else {
                 if ($password === '') continue;
-                $ins = $pdo->prepare('INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, email, phone, created_at) VALUES (:username, :password_hash, :role, :is_active, :first_name, :last_name, :warehouse, :email, :phone, :created_at)');
-                $ins->execute([':username'=>$username, ':password_hash'=>password_hash($password, PASSWORD_DEFAULT), ':role'=>$role, ':is_active'=>$activeVal, ':first_name'=>$firstName, ':last_name'=>$lastName, ':warehouse'=>$warehouse, ':email'=>$email, ':phone'=>$phone, ':created_at'=>date('Y-m-d H:i:s')]);
+                $ins = $pdo->prepare('INSERT INTO users (username, password_hash, role, is_active, first_name, last_name, warehouse, id_number, study_year, allow_emails, email, phone, created_at) VALUES (:username, :password_hash, :role, :is_active, :first_name, :last_name, :warehouse, :id_number, :study_year, :allow_emails, :email, :phone, :created_at)');
+                $ins->execute([
+                    ':username'=>$username,
+                    ':password_hash'=>password_hash($password, PASSWORD_DEFAULT),
+                    ':role'=>$role,
+                    ':is_active'=>$activeVal,
+                    ':first_name'=>$firstName,
+                    ':last_name'=>$lastName,
+                    ':warehouse'=>$warehouse,
+                    ':id_number'=>$idNumber !== '' ? $idNumber : null,
+                    ':study_year'=>$studyYear !== '' ? $studyYear : null,
+                    ':allow_emails'=>$allowEmailsVal,
+                    ':email'=>$email,
+                    ':phone'=>$phone,
+                    ':created_at'=>date('Y-m-d H:i:s'),
+                ]);
                 $imported++;
             }
         }
@@ -535,11 +638,11 @@ if (!empty($_GET['import_fix']) && isset($_SESSION['import_fix_type']) && $_SESS
         'rows' => $_SESSION['import_fix_rows'] ?? [],
         'issues' => $_SESSION['import_fix_issues'] ?? [],
     ];
-    $import_fix_system_columns_users = ['username', 'password', 'role', 'first_name', 'last_name', 'warehouse', 'email', 'phone', 'is_active'];
+    $import_fix_system_columns_users = ['username', 'password', 'role', 'first_name', 'last_name', 'warehouse', 'id_number', 'study_year', 'allow_emails', 'email', 'phone', 'is_active'];
 }
 
 $nameFilter = trim((string)($_GET['q'] ?? ''));
-$usersSql   = 'SELECT id, username, role, is_active, first_name, last_name, warehouse, email, phone FROM users';
+$usersSql   = 'SELECT id, username, role, is_active, first_name, last_name, warehouse, id_number, study_year, allow_emails, email, phone FROM users';
 $usersParams = [];
 if ($nameFilter !== '') {
     // תומך גם ברשימת אותיות מופרדת בפסיקים (למשל "א,ב")
@@ -571,7 +674,7 @@ if (isset($_GET['export']) && $_GET['export'] === '1') {
     header('Content-Type: text/csv; charset=UTF-8');
     header('Content-Disposition: attachment; filename="users-' . date('Ymd-His') . '.csv"');
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['username', 'password', 'role', 'first_name', 'last_name', 'warehouse', 'email', 'phone', 'is_active']);
+    fputcsv($out, ['username', 'password', 'role', 'first_name', 'last_name', 'warehouse', 'id_number', 'study_year', 'allow_emails', 'email', 'phone', 'is_active']);
     foreach ($users as $row) {
         fputcsv($out, [
             $row['username'] ?? '',
@@ -580,6 +683,9 @@ if (isset($_GET['export']) && $_GET['export'] === '1') {
             $row['first_name'] ?? '',
             $row['last_name'] ?? '',
             $row['warehouse'] ?? '',
+            $row['id_number'] ?? '',
+            $row['study_year'] ?? '',
+            (int)($row['allow_emails'] ?? 0),
             $row['email'] ?? '',
             $row['phone'] ?? '',
             (int)($row['is_active'] ?? 0),
@@ -595,7 +701,7 @@ $editId = isset($_GET['edit_id']) ? (int)$_GET['edit_id'] : 0;
 $viewId = isset($_GET['view_id']) ? (int)$_GET['view_id'] : 0;
 $loadId = $editId > 0 ? $editId : $viewId;
 if ($loadId > 0) {
-    $stmt = $pdo->prepare('SELECT id, username, role, first_name, last_name, warehouse, email, phone FROM users WHERE id = :id');
+    $stmt = $pdo->prepare('SELECT id, username, role, first_name, last_name, warehouse, id_number, study_year, allow_emails, email, phone FROM users WHERE id = :id');
     $stmt->execute([':id' => $loadId]);
     $editingUser = $stmt->fetch() ?: null;
 }
@@ -1000,8 +1106,10 @@ if ($loadId > 0) {
                             <td style="padding:0.35rem 0.5rem;">
                                 <select name="bulk_role[]" style="padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db; min-width:110px;">
                                     <option value="student">סטודנט</option>
-                                    <option value="warehouse_manager">מנהל מחסן</option>
-                                    <option value="admin">אדמין</option>
+                                <option value="lecturer">מרצה</option>
+                                <option value="warehouse_manager">מנהל מחסן</option>
+                                <option value="staff">צוות</option>
+                                    <option value="admin">מנהל</option>
                                 </select>
                             </td>
                             <td style="padding:0.35rem 0.5rem;"><input type="text" name="bulk_first_name[]" placeholder="שם פרטי" style="width:100%;padding:0.3rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;"></td>
@@ -1099,8 +1207,10 @@ if ($loadId > 0) {
                         <?php $currentRole = $editingUser['role'] ?? 'student'; ?>
                         <select id="modal_role" name="role" <?= $isViewMode ? 'disabled' : '' ?>>
                             <option value="student" <?= $currentRole === 'student' ? 'selected' : '' ?>>סטודנט</option>
+                            <option value="lecturer" <?= $currentRole === 'lecturer' ? 'selected' : '' ?>>מרצה</option>
                             <option value="warehouse_manager" <?= $currentRole === 'warehouse_manager' ? 'selected' : '' ?>>מנהל מחסן</option>
-                            <option value="admin" <?= $currentRole === 'admin' ? 'selected' : '' ?>>אדמין</option>
+                            <option value="staff" <?= $currentRole === 'staff' ? 'selected' : '' ?>>צוות</option>
+                            <option value="admin" <?= $currentRole === 'admin' ? 'selected' : '' ?>>מנהל</option>
                         </select>
 
                         <label for="modal_warehouse">מחסן</label>
@@ -1110,6 +1220,30 @@ if ($loadId > 0) {
                             <option value="מחסן א" <?= $currentWarehouse === 'מחסן א' ? 'selected' : '' ?>>מחסן א</option>
                             <option value="מחסן ב" <?= $currentWarehouse === 'מחסן ב' ? 'selected' : '' ?>>מחסן ב</option>
                         </select>
+
+                        <label for="modal_id_number">מספר תעודת זהות</label>
+                        <input type="text"
+                               id="modal_id_number"
+                               name="id_number"
+                               <?= $isViewMode ? 'readonly' : '' ?>
+                               value="<?= $editingUser ? htmlspecialchars((string)($editingUser['id_number'] ?? ''), ENT_QUOTES, 'UTF-8') : '' ?>">
+
+                        <label for="modal_study_year">שנת לימוד</label>
+                        <input type="text"
+                               id="modal_study_year"
+                               name="study_year"
+                               <?= $isViewMode ? 'readonly' : '' ?>
+                               value="<?= $editingUser ? htmlspecialchars((string)($editingUser['study_year'] ?? ''), ENT_QUOTES, 'UTF-8') : '' ?>">
+
+                        <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.35rem;">
+                            <input type="checkbox"
+                                   id="modal_allow_emails"
+                                   name="allow_emails"
+                                   value="1"
+                                   <?= !empty($editingUser['allow_emails']) ? 'checked' : '' ?>
+                                   <?= $isViewMode ? 'disabled' : '' ?>>
+                            <span>הסכמה לקבלת מיילים</span>
+                        </label>
 
                         <p class="muted">
                             משתמשים עתידיים ישמשו להזמנת ציוד, אישור הזמנות ועוד.
@@ -1166,9 +1300,13 @@ if ($loadId > 0) {
                     <td><?= htmlspecialchars($user['warehouse'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
                     <td>
                         <?php if ($user['role'] === 'admin'): ?>
-                            <span class="badge admin">אדמין</span>
+                            <span class="badge admin">מנהל</span>
                         <?php elseif ($user['role'] === 'warehouse_manager'): ?>
                             <span class="badge warehouse">מנהל מחסן</span>
+                        <?php elseif ($user['role'] === 'lecturer'): ?>
+                            <span class="badge lecturer">מרצה</span>
+                        <?php elseif ($user['role'] === 'staff'): ?>
+                            <span class="badge staff">צוות</span>
                         <?php else: ?>
                             <span class="badge student">סטודנט</span>
                         <?php endif; ?>

@@ -144,6 +144,15 @@ function initialize_database(PDO $pdo): void
         if (!in_array('reset_token_expires_at', $names, true)) {
             $pdo->exec("ALTER TABLE users ADD COLUMN reset_token_expires_at TEXT");
         }
+        if (!in_array('id_number', $names, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN id_number TEXT");
+        }
+        if (!in_array('study_year', $names, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN study_year TEXT");
+        }
+        if (!in_array('allow_emails', $names, true)) {
+            $pdo->exec("ALTER TABLE users ADD COLUMN allow_emails INTEGER NOT NULL DEFAULT 0");
+        }
     } catch (PDOException $e) {
         // דילוג בשקט אם העמודות כבר קיימות
     }

@@ -36,7 +36,7 @@ $pdo = get_db();
 
 try {
     $stmtUser = $pdo->prepare(
-        'SELECT id, username, first_name, last_name, role, warehouse, email, is_active
+        'SELECT id, username, first_name, last_name, role, warehouse, email, is_active, allow_emails
          FROM users
          WHERE id = :id
          LIMIT 1'
@@ -49,6 +49,13 @@ try {
 
 if (!$target || (int)($target['is_active'] ?? 0) !== 1) {
     $_SESSION['header_mail_error'] = 'הנמען שנבחר אינו זמין.';
+    header('Location: ' . $redirect);
+    exit;
+}
+
+$allowEmails = (int)($target['allow_emails'] ?? 0) === 1;
+if (!$allowEmails) {
+    $_SESSION['header_mail_error'] = 'לנמען אין הסכמה לקבלת מיילים.';
     header('Location: ' . $redirect);
     exit;
 }

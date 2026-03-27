@@ -11,7 +11,7 @@ function current_user(): ?array
     }
 
     $pdo = get_db();
-    $stmt = $pdo->prepare('SELECT id, username, role, first_name, last_name, warehouse, email, phone FROM users WHERE id = :id LIMIT 1');
+    $stmt = $pdo->prepare('SELECT id, username, role, first_name, last_name, warehouse, email, phone, id_number, study_year, allow_emails FROM users WHERE id = :id LIMIT 1');
     $stmt->execute([':id' => (int)$_SESSION['user_id']]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
