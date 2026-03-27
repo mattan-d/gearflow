@@ -627,31 +627,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                          VALUES
                          (:equipment_id, :borrower_name, :borrower_contact, :start_date, :end_date, :start_time, :end_time, :status, :notes, :purpose, :admin_notes, :equipment_prepared, :recurring_series_id, :created_at, :creator_username, :return_equipment_status)'
                     );
-                    $createdCount = 0;
+                    $stmt->execute([
+                        // שומרים equipment_id ראשון לצורך תאימות לאזורים במערכת שמסתמכים על orders.equipment_id
+                        ':equipment_id'            => (int)($equipmentIds[0] ?? 0),
+                        ':borrower_name'           => $borrowerName,
+                        ':borrower_contact'        => $borrowerContact,
+                        ':start_date'              => $startDate,
+                        ':end_date'                => $endDate,
+                        ':start_time'              => $startTime !== '' ? $startTime : null,
+                        ':end_time'                => $endTime !== '' ? $endTime : null,
+                        ':status'                  => $initialStatus,
+                        ':notes'                   => $notes,
+                        ':purpose'                 => $purpose !== '' ? $purpose : null,
+                        ':admin_notes'             => $adminNotesPost !== '' ? $adminNotesPost : null,
+                        ':equipment_prepared'      => 0,
+                        ':recurring_series_id'     => null,
+                        ':created_at'              => date('Y-m-d H:i:s'),
+                        ':creator_username'        => (string)($me['username'] ?? ''),
+                        ':return_equipment_status' => 'תקין',
+                    ]);
+                    $newOrderId = (int)$pdo->lastInsertId();
+
+                    $insertOrderEquipment = $pdo->prepare(
+                        'INSERT OR IGNORE INTO order_equipment (order_id, equipment_id) VALUES (:order_id, :equipment_id)'
+                    );
                     foreach ($equipmentIds as $equipmentId) {
-                        $stmt->execute([
-                            ':equipment_id'           => $equipmentId,
-                            ':borrower_name'          => $borrowerName,
-                            ':borrower_contact'       => $borrowerContact,
-                            ':start_date'             => $startDate,
-                            ':end_date'               => $endDate,
-                            ':start_time'             => $startTime !== '' ? $startTime : null,
-                            ':end_time'               => $endTime !== '' ? $endTime : null,
-                            ':status'                 => $initialStatus,
-                            ':notes'                  => $notes,
-                            ':purpose'                => $purpose !== '' ? $purpose : null,
-                            ':admin_notes'            => $adminNotesPost !== '' ? $adminNotesPost : null,
-                            ':equipment_prepared'     => 0,
-                            ':recurring_series_id'     => null,
-                            ':created_at'             => date('Y-m-d H:i:s'),
-                            ':creator_username'       => (string)($me['username'] ?? ''),
-                            ':return_equipment_status'=> 'תקין',
+                        $insertOrderEquipment->execute([
+                            ':order_id' => $newOrderId,
+                            ':equipment_id' => (int)$equipmentId,
                         ]);
-                        $createdCount++;
                     }
-                    $success = $createdCount > 1
-                        ? "נוצרו {$createdCount} הזמנות בהצלחה."
-                        : 'הזמנה נוצרה בהצלחה.';
+
+                    $success = 'הזמנה נוצרה בהצלחה.';
 
                     // התראה למנהלים על הזמנה חדשה שיצר סטודנט
                     if ($role === 'student') {
