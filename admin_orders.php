@@ -427,7 +427,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $recurringCount = (int)($_POST['recurring_count'] ?? 1);
         $recurringEndDate = trim($_POST['recurring_end_date'] ?? '');
 
-        // איסוף מזהי ציוד – מרובים במצב יצירה, יחיד במצב עדכון
+        // איסוף מזהי ציוד – מרובים במצב יצירה, ובעריכה תומך גם בהחלפת ציוד מרובה
         $equipmentIds = [];
         if ($action === 'create') {
             $rawEquipmentIds = $_POST['equipment_ids'] ?? [];
@@ -441,9 +441,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         } else { // update
-            $singleEquipmentId = (int)($_POST['equipment_id'] ?? 0);
-            if ($singleEquipmentId > 0) {
-                $equipmentIds[] = $singleEquipmentId;
+            $rawEquipmentIds = $_POST['equipment_ids'] ?? [];
+            if (is_array($rawEquipmentIds) && !empty($rawEquipmentIds)) {
+                foreach ($rawEquipmentIds as $rawId) {
+                    $eid = (int)$rawId;
+                    if ($eid > 0 && !in_array($eid, $equipmentIds, true)) {
+                        $equipmentIds[] = $eid;
+                    }
+                }
+            }
+            if (empty($equipmentIds)) {
+                $singleEquipmentId = (int)($_POST['equipment_id'] ?? 0);
+                if ($singleEquipmentId > 0) {
+                    $equipmentIds[] = $singleEquipmentId;
+                }
             }
         }
 
@@ -864,6 +875,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':id'                         => $id,
                         ]);
 
+                        // החלפת ציוד בפועל: עדכון טבלת order_equipment לפי בחירת checkboxes (רק אם התקבלו מהטופס)
+                        // במצבי "טאבים מיוחדים" / שדות disabled – לא נוגעים בקשרי הציוד.
+                        if (!$isSpecialStatusUpdate && isset($_POST['equipment_ids']) && is_array($_POST['equipment_ids'])) {
+                            $newEquipIds = [];
+                            foreach ($_POST['equipment_ids'] as $raw) {
+                                $eid = (int)$raw;
+                                if ($eid > 0 && !in_array($eid, $newEquipIds, true)) {
+                                    $newEquipIds[] = $eid;
+                                }
+                            }
+                            if (!empty($newEquipIds)) {
+                                $pdo->beginTransaction();
+                                try {
+                                    $pdo->prepare('DELETE FROM order_equipment WHERE order_id = :oid')->execute([':oid' => $id]);
+                                    $insOe = $pdo->prepare('INSERT OR IGNORE INTO order_equipment (order_id, equipment_id) VALUES (:oid, :eid)');
+                                    foreach ($newEquipIds as $eid) {
+                                        $insOe->execute([':oid' => $id, ':eid' => $eid]);
+                                    }
+                                    $pdo->commit();
+                                } catch (Throwable $e) {
+                                    if ($pdo->inTransaction()) {
+                                        $pdo->rollBack();
+                                    }
+                                }
+                            }
+                        }
+
                         $success = 'הזמנה עודכנה בהצלחה.';
                     }
 
@@ -1253,7 +1291,8 @@ $baseSql = 'SELECT o.id,
                    o.updated_at,
                    o.creator_username,
                    e.name AS equipment_name,
-                   e.code AS equipment_code
+                   e.code AS equipment_code,
+                   (SELECT COUNT(*) FROM order_equipment oe WHERE oe.order_id = o.id) AS equipment_items_count
             FROM orders o
             JOIN equipment e ON e.id = o.equipment_id
             LEFT JOIN users u
@@ -2962,6 +3001,14 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             <?php else: ?>
                                 <?= htmlspecialchars($order['equipment_name'], ENT_QUOTES, 'UTF-8') ?>
                             <?php endif; ?>
+                            <?php
+                            $itemsCount = (int)($order['equipment_items_count'] ?? 0);
+                            if ($itemsCount <= 0) $itemsCount = 1;
+                            ?>
+                            <?php if ($itemsCount > 1): ?>
+                                <br>
+                                <span class="muted-small"><?= $itemsCount ?> פריטים בהזמנה</span>
+                            <?php endif; ?>
                             <br>
                             <span class="muted-small">
                                 <?= htmlspecialchars($code, ENT_QUOTES, 'UTF-8') ?>
@@ -3612,7 +3659,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 const eqId = parseInt(row.getAttribute('data-equipment-id'), 10);
                 const categoryMatch = categoryValue === 'all' || categoryValue === cat;
                 const available = useAvailability ? (unavailableEquipmentIds.indexOf(eqId) === -1) : true;
-                const show = datesReady && categoryMatch && available;
+                // מציגים את רשימת הציוד גם לפני בחירת תאריכים (לפי בקשה),
+                // אך מנטרלים בחירה בפועל עד שהטווח מוכן.
+                const show = categoryMatch && (datesReady ? available : true);
                 row.style.display = show ? '' : 'none';
                 const checkbox = row.querySelector('input[type="checkbox"]');
                 if (checkbox) {
