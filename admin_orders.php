@@ -3358,7 +3358,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     // מצב עריכת הזמנה מטאבים "לא נלקח" / "לא הוחזר" – נעילה של רוב הפקדים
     const isEditFromSpecial = <?= ($editingOrder && ($tab === 'not_picked' || $tab === 'not_returned')) ? 'true' : 'false' ?>;
     if (isEditFromSpecial && orderModal) {
-        const allowedIds = new Set(['order_status', 'return_equipment_status', 'equipment_return_condition']);
+        const allowedIds = new Set(['order_status', 'return_equipment_status', 'equipment_return_condition', 'toggle_equipment_column_btn']);
         const fields = orderModal.querySelectorAll('input, select, textarea, button');
         fields.forEach(function (el) {
             if (el.type === 'hidden') return;
@@ -3378,7 +3378,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     // מצב עריכת הזמנה בטאב "היום" במצב החזרה – רק שדות סטטוס פעילים
     const isEditFromTodayReturn = <?= ($editingOrder && $tab === 'today' && $todayMode === 'return') ? 'true' : 'false' ?>;
     if (isEditFromTodayReturn && orderModal) {
-        const allowedIdsTodayReturn = new Set(['order_status', 'equipment_return_condition']);
+        const allowedIdsTodayReturn = new Set(['order_status', 'equipment_return_condition', 'toggle_equipment_column_btn']);
         const fieldsToday = orderModal.querySelectorAll('input, select, textarea, button');
         fieldsToday.forEach(function (el) {
             if (el.type === 'hidden') return;
@@ -3398,7 +3398,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         && $role !== 'student') ? 'true' : 'false' ?>;
     const preparedInitiallyChecked = <?= (!empty($editingOrder['equipment_prepared'])) ? 'true' : 'false' ?>;
     if (isEditFromTodayPrepare && orderModal) {
-        const allowedIdsTodayPrepare = new Set(['order_status', 'equipment_prepared', 'rejection_reason', 'admin_notes']);
+        const allowedIdsTodayPrepare = new Set(['order_status', 'equipment_prepared', 'rejection_reason', 'admin_notes', 'toggle_equipment_column_btn']);
         const fieldsPrep = orderModal.querySelectorAll('input, select, textarea, button');
         fieldsPrep.forEach(function (el) {
             if (el.type === 'hidden') return;
