@@ -32,6 +32,24 @@ $reportCategory = isset($_GET['orders_category']) ? trim((string)$_GET['orders_c
 // סטטוס הזמנה לדוח (ריק או 'הכל' = כל הסטטוסים)
 $reportStatus = isset($_GET['orders_status']) ? trim((string)$_GET['orders_status']) : '';
 
+// תצוגה יומית (גרף עמודות לפי יום)
+$ordersDailyView = isset($_GET['orders_daily_view']) && (string)$_GET['orders_daily_view'] === '1';
+$ordersDailyStatusesRaw = $_GET['orders_daily_statuses'] ?? [];
+if (!is_array($ordersDailyStatusesRaw)) {
+    $ordersDailyStatusesRaw = [];
+}
+$ordersDailyStatusesRaw = array_values(array_filter(array_map('trim', array_map('strval', $ordersDailyStatusesRaw)), static function ($v) {
+    return $v !== '';
+}));
+$allowedDailyStatusKeys = ['pending', 'approved', 'rejected', 'on_loan', 'returned', 'not_picked', 'not_returned_late'];
+$ordersDailyStatuses = array_values(array_filter($ordersDailyStatusesRaw, static function ($v) use ($allowedDailyStatusKeys) {
+    return in_array($v, $allowedDailyStatusKeys, true);
+}));
+if (empty($ordersDailyStatuses)) {
+    // ברירת מחדל: אם לא בחרו שום דבר – מציגים הכל
+    $ordersDailyStatuses = $allowedDailyStatusKeys;
+}
+
 // סינון נוסף לדוח הזמנות עבור הזמנות במצב "עבר" (סטטוס החזרה + סטטוס ציוד מוחזר)
 $reportReturnStatus = isset($_GET['orders_return_status']) ? trim((string)$_GET['orders_return_status']) : '';
 $reportEquipCondition = isset($_GET['orders_equip_condition']) ? trim((string)$_GET['orders_equip_condition']) : '';
@@ -60,6 +78,13 @@ $ordersReport = [
     'returned_after_not_returned_time' => 0,
     'returned_broken'    => 0,
     'returned_missing'   => 0,
+];
+
+// סדרות יומיות: [statusKey => ['label' => ..., 'series' => [date => count]]]
+$ordersDaily = [
+    'enabled' => false,
+    'dates' => [],
+    'series' => [],
 ];
 
 // הדוח מוצג רק לאחר לחיצה על "הצג"
@@ -152,6 +177,126 @@ if (isset($_GET['orders_show'])) {
     $ordersReport['returned_after_not_returned_time'] = (int)($row['returned_after_not_returned_time_count'] ?? 0);
     $ordersReport['returned_broken']   = (int)($row['returned_broken_count'] ?? 0);
     $ordersReport['returned_missing']  = (int)($row['returned_missing_count'] ?? 0);
+
+    // תצוגה יומית – רק אם נבחר טווח תאריכים תקין
+    if ($ordersDailyView && $reportStart !== '' && $reportEnd !== '' && $reportStart <= $reportEnd) {
+        try {
+            // יצירת רשימת הימים בטווח (כולל ימים ללא הזמנות)
+            $dates = [];
+            $d = new DateTime($reportStart);
+            $end = new DateTime($reportEnd);
+            while ($d <= $end) {
+                $dates[] = $d->format('Y-m-d');
+                $d->modify('+1 day');
+            }
+
+            $sqlDaily = "SELECT
+                    DATE(o.start_date) AS day,
+                    SUM(CASE WHEN o.status = 'pending'  THEN 1 ELSE 0 END) AS pending_count,
+                    SUM(CASE WHEN o.status = 'approved' THEN 1 ELSE 0 END) AS approved_count,
+                    SUM(CASE WHEN o.status = 'rejected' THEN 1 ELSE 0 END) AS rejected_count,
+                    SUM(CASE WHEN o.status = 'on_loan'  THEN 1 ELSE 0 END) AS on_loan_count,
+                    SUM(CASE WHEN o.status = 'returned' THEN 1 ELSE 0 END) AS returned_count,
+                    SUM(CASE WHEN o.status = 'approved' AND DATE(o.start_date) < DATE('now') THEN 1 ELSE 0 END) AS not_picked_count,
+                    SUM(CASE WHEN o.status = 'on_loan'  AND DATE(o.end_date) < DATE('now') THEN 1 ELSE 0 END) AS not_returned_late_count
+                FROM orders o
+                JOIN equipment e ON e.id = o.equipment_id
+                WHERE 1=1
+                  AND DATE(o.start_date) BETWEEN :start AND :end";
+            $paramsDaily = [
+                ':start' => $reportStart,
+                ':end' => $reportEnd,
+            ];
+
+            if (!empty($selectedStudents)) {
+                $placeholders = [];
+                foreach ($selectedStudents as $idx => $u) {
+                    $ph = ':dui' . $idx;
+                    $placeholders[] = $ph;
+                    $paramsDaily[$ph] = $u;
+                }
+                $sqlDaily .= ' AND o.creator_username IN (' . implode(',', $placeholders) . ')';
+            }
+
+            if ($reportCategory !== '') {
+                $sqlDaily .= " AND TRIM(COALESCE(e.category, '')) = :cat";
+                $paramsDaily[':cat'] = $reportCategory;
+            }
+
+            // אם הוגדר סטטוס הזמנה ספציפי (הפילטר הישן) ניישם אותו גם פה
+            if ($reportStatus !== '' && $reportStatus !== 'הכל') {
+                if ($reportStatus === 'not_returned') {
+                    $sqlDaily .= " AND o.status = 'on_loan' AND DATE(o.end_date) < DATE('now')";
+                } elseif ($reportStatus === 'not_picked') {
+                    $sqlDaily .= " AND o.status = 'approved' AND DATE(o.start_date) < DATE('now')";
+                } else {
+                    $sqlDaily .= " AND o.status = :status";
+                    $paramsDaily[':status'] = $reportStatus;
+                }
+            }
+
+            if ($reportReturnStatus !== '') {
+                $sqlDaily .= " AND COALESCE(o.return_equipment_status, '') = :ret_status";
+                $paramsDaily[':ret_status'] = $reportReturnStatus;
+            }
+            if ($reportEquipCondition !== '') {
+                $sqlDaily .= " AND COALESCE(o.equipment_return_condition, '') = :eq_cond";
+                $paramsDaily[':eq_cond'] = $reportEquipCondition;
+            }
+
+            $sqlDaily .= " GROUP BY DATE(o.start_date) ORDER BY day ASC";
+            $stmtDaily = $pdo->prepare($sqlDaily);
+            $stmtDaily->execute($paramsDaily);
+            $rowsDaily = $stmtDaily->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            $byDay = [];
+            foreach ($rowsDaily as $r) {
+                $day = (string)($r['day'] ?? '');
+                if ($day === '') continue;
+                $byDay[$day] = $r;
+            }
+
+            $labelsByKey = [
+                'pending' => 'ממתין',
+                'approved' => 'מאושר',
+                'rejected' => 'נדחה',
+                'on_loan' => 'בהשאלה',
+                'returned' => 'עבר',
+                'not_picked' => 'הוזמנו ולא נלקחו',
+                'not_returned_late' => 'לא הושבו בזמן',
+            ];
+
+            $series = [];
+            foreach ($ordersDailyStatuses as $k) {
+                $series[$k] = [
+                    'label' => $labelsByKey[$k] ?? $k,
+                    'data' => [],
+                    'max' => 1,
+                ];
+                foreach ($dates as $day) {
+                    $rowDay = $byDay[$day] ?? null;
+                    $val = 0;
+                    if ($rowDay) {
+                        if ($k === 'pending') $val = (int)($rowDay['pending_count'] ?? 0);
+                        elseif ($k === 'approved') $val = (int)($rowDay['approved_count'] ?? 0);
+                        elseif ($k === 'rejected') $val = (int)($rowDay['rejected_count'] ?? 0);
+                        elseif ($k === 'on_loan') $val = (int)($rowDay['on_loan_count'] ?? 0);
+                        elseif ($k === 'returned') $val = (int)($rowDay['returned_count'] ?? 0);
+                        elseif ($k === 'not_picked') $val = (int)($rowDay['not_picked_count'] ?? 0);
+                        elseif ($k === 'not_returned_late') $val = (int)($rowDay['not_returned_late_count'] ?? 0);
+                    }
+                    $series[$k]['data'][$day] = $val;
+                    $series[$k]['max'] = max($series[$k]['max'], $val);
+                }
+            }
+
+            $ordersDaily['enabled'] = true;
+            $ordersDaily['dates'] = $dates;
+            $ordersDaily['series'] = $series;
+        } catch (Throwable $e) {
+            // אם נכשל – פשוט לא נציג תצוגה יומית
+            $ordersDaily['enabled'] = false;
+        }
+    }
 }
 
 // ספירת פרמטרים פעילים לדוח הזמנות – סך הכל מוצג רק כשיש יותר מפרמטר אחד
@@ -768,6 +913,13 @@ if ($eqShow) {
 
                 <h3 class="report-params-title">פרמטרים להצגת דוח</h3>
                 <div class="report-params-row">
+                    <div class="report-param-block" style="min-width:150px;">
+                        <span class="param-label">תצוגה</span>
+                        <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.35rem;font-size:0.85rem;color:#111827;">
+                            <input type="checkbox" name="orders_daily_view" value="1" <?= $ordersDailyView ? 'checked' : '' ?>>
+                            <span>תצוגה יומית</span>
+                        </label>
+                    </div>
                     <div class="report-param-block">
                         <label class="param-label" for="orders_status">סטטוס הזמנה</label>
                         <select name="orders_status" id="orders_status"
@@ -855,11 +1007,73 @@ if ($eqShow) {
                         <button type="submit" name="orders_show" value="1" class="btn">הצג</button>
                     </div>
                 </div>
+
+                <div class="report-params-row" id="orders_daily_statuses_row" style="<?= $ordersDailyView ? '' : 'display:none;' ?>;margin-top:0.45rem;">
+                    <div class="report-param-block" style="flex:1;min-width:260px;">
+                        <span class="param-label">סטטוסים להצגה בתצוגה יומית</span>
+                        <?php
+                        $dailyOpts = [
+                            'pending' => 'ממתין',
+                            'approved' => 'מאושר',
+                            'rejected' => 'נדחה',
+                            'on_loan' => 'בהשאלה',
+                            'returned' => 'עבר',
+                            'not_picked' => 'הוזמנו ולא נלקחו',
+                            'not_returned_late' => 'לא הושבו בזמן',
+                        ];
+                        ?>
+                        <div style="margin-top:0.35rem;display:flex;flex-wrap:wrap;gap:0.6rem;font-size:0.85rem;">
+                            <?php foreach ($dailyOpts as $k => $lbl): ?>
+                                <label style="display:flex;align-items:center;gap:0.35rem;">
+                                    <input type="checkbox"
+                                           name="orders_daily_statuses[]"
+                                           value="<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>"
+                                        <?= in_array($k, $ordersDailyStatuses, true) ? 'checked' : '' ?>>
+                                    <span><?= htmlspecialchars($lbl, ENT_QUOTES, 'UTF-8') ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="muted-small" style="margin-top:0.25rem;">
+                            בתצוגה יומית נדרש טווח תאריכים. עמודות מוצגות מימין לשמאל.
+                        </div>
+                    </div>
+                </div>
                 <input type="hidden" name="orders_detail" id="orders_detail" value="<?= htmlspecialchars(isset($_GET['orders_detail']) ? (string)$_GET['orders_detail'] : '', ENT_QUOTES, 'UTF-8') ?>">
                 <input type="hidden" name="orders_show" id="orders_show_hidden" value="1">
             </form>
 
             <?php if ($ordersReport['has_range']): ?>
+                <?php if ($ordersDailyView && $ordersDaily['enabled']): ?>
+                    <div style="margin-top:0.75rem;">
+                        <?php foreach ($ordersDaily['series'] as $s): ?>
+                            <?php
+                            $seriesLabel = (string)($s['label'] ?? '');
+                            $seriesData = $s['data'] ?? [];
+                            $seriesMax = (int)($s['max'] ?? 1);
+                            if ($seriesMax < 1) $seriesMax = 1;
+                            ?>
+                            <div style="margin-bottom:1rem;border:1px solid #e5e7eb;border-radius:12px;padding:0.75rem;background:#fff;">
+                                <div style="font-weight:700;margin-bottom:0.5rem;"><?= htmlspecialchars($seriesLabel, ENT_QUOTES, 'UTF-8') ?></div>
+                                <div style="display:flex;flex-direction:row-reverse;align-items:flex-end;gap:6px;overflow-x:auto;padding:0.25rem 0.15rem;">
+                                    <?php foreach ($ordersDaily['dates'] as $day): ?>
+                                        <?php
+                                        $v = (int)($seriesData[$day] ?? 0);
+                                        $h = $seriesMax > 0 ? max(2, (int)round(($v / $seriesMax) * 120)) : 2;
+                                        ?>
+                                        <div title="<?= htmlspecialchars($day . ': ' . $v, ENT_QUOTES, 'UTF-8') ?>"
+                                             style="display:flex;flex-direction:column;align-items:center;min-width:18px;">
+                                            <div style="width:14px;height:<?= (int)$h ?>px;border-radius:6px 6px 2px 2px;background:linear-gradient(135deg,#4f46e5,#6366f1);"></div>
+                                            <div style="margin-top:4px;font-size:0.68rem;color:#6b7280;writing-mode:vertical-rl;transform:rotate(180deg);line-height:1;">
+                                                <?= htmlspecialchars(substr($day, 5), ENT_QUOTES, 'UTF-8') ?>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                                <div class="muted-small" style="margin-top:0.35rem;">מוצג לפי תאריך התחלה (Start Date).</div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php else: ?>
                 <div class="orders-report-bars">
                     <?php
                     // אם נבחר סטטוס ספציפי – מציגים רק אותו, אחרת את כל הסטטוסים
@@ -978,6 +1192,7 @@ if ($eqShow) {
                         </div>
                     <?php endforeach; ?>
                 </div>
+                <?php endif; ?>
                 <?php if (!empty($ordersDetailRows)): ?>
                     <div class="orders-report-details-table" id="orders_report_details">
                         <h3 style="margin-top:1.5rem;margin-bottom:0.75rem;font-size:1rem;">
@@ -1219,6 +1434,15 @@ if ($eqShow) {
         }
 
         updateReturnFiltersVisibility();
+
+        // תצוגה יומית – הצגה/הסתרה של בחירת סטטוסים
+        var dailyCb = document.querySelector('input[name="orders_daily_view"]');
+        var dailyRow = document.getElementById('orders_daily_statuses_row');
+        if (dailyCb && dailyRow) {
+            dailyCb.addEventListener('change', function () {
+                dailyRow.style.display = dailyCb.checked ? '' : 'none';
+            });
+        }
 
         function updateHint() {
             if (!rangeHint) return;
