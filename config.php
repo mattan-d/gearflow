@@ -479,6 +479,15 @@ function initialize_database(PDO $pdo): void
         if (!in_array('manufacturer_code', $equipNames, true)) {
             $pdo->exec("ALTER TABLE equipment ADD COLUMN manufacturer_code TEXT");
         }
+        if (!in_array('journal_id', $equipNames, true)) {
+            $pdo->exec("ALTER TABLE equipment ADD COLUMN journal_id TEXT");
+        }
+        if (!in_array('purchase_date', $equipNames, true)) {
+            $pdo->exec("ALTER TABLE equipment ADD COLUMN purchase_date TEXT");
+        }
+        if (!in_array('purchase_price', $equipNames, true)) {
+            $pdo->exec("ALTER TABLE equipment ADD COLUMN purchase_price REAL");
+        }
     } catch (Throwable $e) {
         // מתעלמים משגיאות מיגרציה של עמודות שירות/אחריות
     }

@@ -79,6 +79,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $name         = trim($_POST['name'] ?? '');
         $code         = trim($_POST['code'] ?? '');
         $manufacturerCode = trim($_POST['manufacturer_code'] ?? '');
+        $journalId    = trim((string)($_POST['journal_id'] ?? ''));
+        $purchaseDate = trim((string)($_POST['purchase_date'] ?? ''));
+        $purchasePriceRaw = trim((string)($_POST['purchase_price'] ?? ''));
         $description  = trim($_POST['description'] ?? '');
         $category     = trim($_POST['category'] ?? '');
         $location     = trim($_POST['location'] ?? '');
@@ -216,6 +219,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($name === '' || $code === '') {
             $error = 'יש למלא שם ציוד וקוד זיהוי.';
         } else {
+            if ($purchaseDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $purchaseDate)) {
+                $error = 'תאריך הרכישה אינו תקין.';
+            }
+            $purchasePrice = null;
+            if ($purchasePriceRaw !== '') {
+                if (!is_numeric($purchasePriceRaw)) {
+                    $error = 'מחיר הרכישה חייב להיות מספר.';
+                } else {
+                    $purchasePrice = (float)$purchasePriceRaw;
+                }
+            }
+        }
+
+        if ($error === '') {
             try {
                 if ($id > 0) {
                     $stmt = $pdo->prepare(
@@ -223,6 +240,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                          SET name = :name,
                              code = :code,
                              manufacturer_code = :manufacturer_code,
+                             journal_id = :journal_id,
+                             purchase_date = :purchase_date,
+                             purchase_price = :purchase_price,
                              description = :description,
                              category = :category,
                              location = :location,
@@ -244,6 +264,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':name'              => $name,
                         ':code'              => $code,
                         ':manufacturer_code' => $manufacturerCode !== '' ? $manufacturerCode : null,
+                        ':journal_id'        => $journalId !== '' ? $journalId : null,
+                        ':purchase_date'     => $purchaseDate !== '' ? $purchaseDate : null,
+                        ':purchase_price'    => $purchasePrice,
                         ':description'       => $description,
                         ':category'          => $category,
                         ':location'          => $location,
@@ -271,11 +294,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $insertStmt = $pdo->prepare(
                         'INSERT INTO equipment
-                         (name, code, manufacturer_code, description, category, location, quantity_total, quantity_available, status, picture,
+                         (name, code, manufacturer_code, journal_id, purchase_date, purchase_price, description, category, location, quantity_total, quantity_available, status, picture,
                           service_supplier_id, service_lab_id, service_warranty_mode, service_warranty_supplier_id,
                           warranty_start, warranty_end, warranty_image, created_at)
                          VALUES
-                         (:name, :code, :manufacturer_code, :description, :category, :location, :quantity_total, :quantity_available, :status, :picture,
+                         (:name, :code, :manufacturer_code, :journal_id, :purchase_date, :purchase_price, :description, :category, :location, :quantity_total, :quantity_available, :status, :picture,
                           :service_supplier_id, :service_lab_id, :service_warranty_mode, :service_warranty_supplier_id,
                           :warranty_start, :warranty_end, :warranty_image, :created_at)'
                     );
@@ -290,6 +313,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 ':name'               => $name,
                                 ':code'               => $codeToUse,
                                 ':manufacturer_code'  => $manufacturerCode !== '' ? $manufacturerCode : null,
+                                ':journal_id'         => $journalId !== '' ? $journalId : null,
+                                ':purchase_date'      => $purchaseDate !== '' ? $purchaseDate : null,
+                                ':purchase_price'     => $purchasePrice,
                                 ':description'        => $description,
                                 ':category'           => $category,
                                 ':location'           => $location,
@@ -1822,6 +1848,29 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                                name="manufacturer_code"
                                <?= $isViewModeEq ? 'readonly' : '' ?>
                                value="<?= $editingEquipment ? htmlspecialchars((string)($editingEquipment['manufacturer_code'] ?? ''), ENT_QUOTES, 'UTF-8') : '' ?>">
+
+                        <label for="journal_id">שיוך ליומן (Journalid)</label>
+                        <input type="text"
+                               id="journal_id"
+                               name="journal_id"
+                               <?= $isViewModeEq ? 'readonly' : '' ?>
+                               value="<?= $editingEquipment ? htmlspecialchars((string)($editingEquipment['journal_id'] ?? ''), ENT_QUOTES, 'UTF-8') : '' ?>">
+
+                        <label for="purchase_date">תאריך רכישה</label>
+                        <input type="date"
+                               id="purchase_date"
+                               name="purchase_date"
+                               <?= $isViewModeEq ? 'readonly' : '' ?>
+                               value="<?= $editingEquipment ? htmlspecialchars((string)($editingEquipment['purchase_date'] ?? ''), ENT_QUOTES, 'UTF-8') : '' ?>">
+
+                        <label for="purchase_price">מחיר רכישה</label>
+                        <input type="number"
+                               step="0.01"
+                               min="0"
+                               id="purchase_price"
+                               name="purchase_price"
+                               <?= $isViewModeEq ? 'readonly' : '' ?>
+                               value="<?= $editingEquipment ? htmlspecialchars((string)($editingEquipment['purchase_price'] ?? ''), ENT_QUOTES, 'UTF-8') : '' ?>">
 
                         <label for="description">תיאור</label>
                         <textarea id="description" name="description" <?= $isViewModeEq ? 'readonly' : '' ?>><?= $editingEquipment ? htmlspecialchars($editingEquipment['description'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
