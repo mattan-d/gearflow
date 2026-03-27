@@ -668,7 +668,13 @@ document.addEventListener('DOMContentLoaded', function() {
         <nav class="main-nav">
             <div class="main-nav-primary">
                 <?php if ($role === 'admin' || $role === 'warehouse_manager'): ?>
-                    <a href="admin_equipment.php"><?= htmlspecialchars($navLabels['equipment'], ENT_QUOTES, 'UTF-8') ?></a>
+                    <div class="main-nav-item-wrapper">
+                        <a href="admin_equipment.php"><?= htmlspecialchars($navLabels['equipment'], ENT_QUOTES, 'UTF-8') ?></a>
+                        <div class="main-nav-sub">
+                            <a href="admin_equipment.php">ניהול ציוד</a>
+                            <a href="admin_inventory_count.php">ספירת מלאי</a>
+                        </div>
+                    </div>
                     <a href="admin_orders.php"><?= htmlspecialchars($navLabels['orders'], ENT_QUOTES, 'UTF-8') ?></a>
                     <a href="admin_users.php"><?= htmlspecialchars($navLabels['users'], ENT_QUOTES, 'UTF-8') ?></a>
                     <a href="admin_suppliers.php"><?= htmlspecialchars($navLabels['suppliers'], ENT_QUOTES, 'UTF-8') ?></a>

@@ -390,6 +390,31 @@ function initialize_database(PDO $pdo): void
         }
     }
 
+    // טבלאות ספירת מלאי
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS inventory_counts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            count_date TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            created_by_user_id INTEGER,
+            created_by_username TEXT
+        )
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS inventory_count_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            count_id INTEGER NOT NULL,
+            equipment_id INTEGER NOT NULL,
+            item_status TEXT NOT NULL DEFAULT 'תקין',
+            counted_quantity INTEGER NOT NULL DEFAULT 1,
+            notes TEXT,
+            updated_at TEXT,
+            UNIQUE(count_id, equipment_id)
+        )
+    ");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_inventory_count_items_count_id ON inventory_count_items (count_id)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_inventory_count_items_equipment_id ON inventory_count_items (equipment_id)");
+
     // טבלת הגדרות מערכת כלליות (key/value) – כולל דף הבית לפי תפקיד
     $pdo->exec("
         CREATE TABLE IF NOT EXISTS app_settings (
