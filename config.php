@@ -11,12 +11,47 @@ session_start();
 const DB_PATH = __DIR__ . '/app.sqlite';
 
 /**
+ * כפיית https בכתובות ציבוריות (OAuth redirect וכו׳).
+ * שימוש כשהאתר נגיש ב־HTTPS אך PHP רואה בקשה כ־http (פרוקסי בלי כותרות TLS).
+ */
+const APP_FORCE_PUBLIC_HTTPS = false;
+
+/**
+ * סכמת ה-URL הציבורי של הבקשה (https כשהגלישה מוצפנת, כולל מאחורי reverse proxy).
+ */
+function app_request_public_scheme(): string
+{
+    if (APP_FORCE_PUBLIC_HTTPS) {
+        return 'https';
+    }
+    if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+        return 'https';
+    }
+    $fwdProto = strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+    if ($fwdProto === 'https') {
+        return 'https';
+    }
+    // לפעמים רשימה: "https,http"
+    if (str_starts_with($fwdProto, 'https')) {
+        return 'https';
+    }
+    if (strcasecmp((string)($_SERVER['HTTP_X_FORWARDED_SSL'] ?? ''), 'on') === 0) {
+        return 'https';
+    }
+    $req = strtolower((string)($_SERVER['REQUEST_SCHEME'] ?? ''));
+    if ($req === 'https') {
+        return 'https';
+    }
+    return 'http';
+}
+
+/**
  * כתובת הבסיס של תיקיית האפליקציה ב־URL (ללא סלאש בסוף), לדוגמה https://example.com או https://example.com/gearflow.
  * משמש ל־OAuth redirect ולקישורים מוחלטים.
  */
 function app_script_dir_url(): string
 {
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $scheme = app_request_public_scheme();
     $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
     $script = $_SERVER['SCRIPT_NAME'] ?? '/index.php';
     $dir    = str_replace('\\', '/', dirname($script));
