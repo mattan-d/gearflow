@@ -10,6 +10,22 @@ session_start();
 
 const DB_PATH = __DIR__ . '/app.sqlite';
 
+/**
+ * כתובת הבסיס של תיקיית האפליקציה ב־URL (ללא סלאש בסוף), לדוגמה https://example.com או https://example.com/gearflow.
+ * משמש ל־OAuth redirect ולקישורים מוחלטים.
+ */
+function app_script_dir_url(): string
+{
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $script = $_SERVER['SCRIPT_NAME'] ?? '/index.php';
+    $dir    = str_replace('\\', '/', dirname($script));
+    if ($dir === '/' || $dir === '.') {
+        return $scheme . '://' . $host;
+    }
+    return $scheme . '://' . $host . rtrim($dir, '/');
+}
+
 function get_db(): PDO
 {
     static $pdo = null;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/google_mail.php';
 
 require_admin();
 
@@ -38,6 +39,22 @@ $daysLabels = [
 
 $success = '';
 $error   = '';
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && isset($_GET['google_oauth'])) {
+    $go = (string)$_GET['google_oauth'];
+    if ($go === 'success') {
+        $success = 'חשבון Google חובר בהצלחה לשליחת מיילים.';
+    } elseif ($go === 'missing_credentials') {
+        $error = 'יש לשמור תחילה Client ID ו־Client Secret לפני חיבור החשבון.';
+    } elseif ($go === 'bad_state') {
+        $error = 'אימות OAuth נכשל. נסה שוב להתחבר מול Google.';
+    } elseif ($go === 'denied') {
+        $error = 'ההרשאה בגוגל בוטלה או נדחתה.';
+    } elseif ($go === 'fail') {
+        $reason = trim((string)($_GET['reason'] ?? ''));
+        $error  = 'חיבור Google נכשל: ' . ($reason !== '' ? $reason : 'שגיאה לא ידועה');
+    }
+}
 
 // עדכון שעות ברירת מחדל (ימים א-ה – ערך אחד לכל השבוע)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['default_hours_submit'])) {
@@ -182,6 +199,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['homepage_submit'])) {
     }
 }
 
+// Google OAuth – מפתחות (Client ID / Secret)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['google_credentials_submit'])) {
+    $gClientId = trim((string)($_POST['google_oauth_client_id'] ?? ''));
+    $gSecretIn = trim((string)($_POST['google_oauth_client_secret'] ?? ''));
+    if ($gClientId === '') {
+        $error = $error ?: 'יש להזין Client ID מפרויקט Google Cloud.';
+    } else {
+        try {
+            $stmtG = $pdo->prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (:k, :v)');
+            $stmtG->execute([':k' => 'google_oauth_client_id', ':v' => $gClientId]);
+            if ($gSecretIn !== '') {
+                $stmtG->execute([':k' => 'google_oauth_client_secret', ':v' => $gSecretIn]);
+            }
+            $success = 'מפתחות Google OAuth נשמרו. אם שינית את ה־Secret, יש להתחבר מחדש לחשבון השולח.';
+        } catch (Throwable $e) {
+            $error = $error ?: 'שגיאה בשמירת מפתחות Google.';
+        }
+    }
+}
+
+// ניתוק חשבון Google לשליחת מיילים
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['google_disconnect_submit'])) {
+    try {
+        $stmtDisc = $pdo->prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (:k, :v)');
+        $stmtDisc->execute([':k' => 'google_oauth_refresh_token', ':v' => '']);
+        $stmtDisc->execute([':k' => 'google_mail_sender_email', ':v' => '']);
+        $success = 'חיבור Google לשליחת מיילים נותק (מפתחות OAuth נשארו לשימוש חוזר).';
+    } catch (Throwable $e) {
+        $error = $error ?: 'שגיאה בניתוק חשבון Google.';
+    }
+}
+
 // מצב בדיקות: מחסן פתוח תמיד (עקיפת שעות פעילות)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['always_open_submit'])) {
     $alwaysOpenEnabled = isset($_POST['warehouse_always_open']) ? '1' : '0';
@@ -212,6 +261,11 @@ try {
 } catch (Throwable $e) {
     // נשאר עם ברירות המחדל
 }
+
+$googleCfg          = google_mail_load_config($pdo);
+$googleConnected    = google_mail_is_configured($googleCfg);
+$googleRedirectUri  = google_mail_oauth_redirect_uri();
+$googleHasSecret    = trim($googleCfg['client_secret'] ?? '') !== '';
 
 ?>
 <!DOCTYPE html>
@@ -369,6 +423,34 @@ try {
             background: #f9fafb;
             font-weight: 600;
         }
+        .google-mail-section label {
+            display: block;
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+        }
+        .google-mail-section input[type="text"],
+        .google-mail-section input[type="password"] {
+            width: 100%;
+            max-width: 520px;
+            padding: 0.4rem 0.55rem;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            font-size: 0.9rem;
+            box-sizing: border-box;
+        }
+        .google-mail-section .redirect-box {
+            font-family: ui-monospace, monospace;
+            font-size: 0.8rem;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 0.5rem 0.65rem;
+            max-width: 520px;
+            word-break: break-all;
+            direction: ltr;
+            text-align: left;
+        }
     </style>
 </head>
 <body>
@@ -382,7 +464,61 @@ try {
             <div class="flash error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
 
-        <h3 style="margin-top:0.5rem;margin-bottom:0.5rem;font-size:1.05rem;">שעות ברירת מחדל לפתיחת מחסן</h3>
+        <div class="google-mail-section status-section">
+            <h3 style="margin-top:0.5rem;margin-bottom:0.5rem;font-size:1.05rem;">שליחת דוא״ל דרך Google (Gmail API)</h3>
+            <p class="muted-small">
+                כל המיילים מהמערכת (למשל ממסך ההזמנות) נשלחים דרך חשבון Google שתחברו כאן, באמצעות Gmail API.
+                יש ליצור ב־<a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer">Google Cloud Console</a>
+                פרויקט, להפעיל את <strong>Gmail API</strong>, ולייצר OAuth 2.0 Client ID מסוג <strong>Web application</strong>.
+            </p>
+            <p class="muted-small" style="margin-top:0.5rem;">
+                בקונסולה, תחת <em>Authorized redirect URIs</em>, הוסיפו בדיוק את הכתובת הבאה:
+            </p>
+            <div class="redirect-box"><?= htmlspecialchars($googleRedirectUri, ENT_QUOTES, 'UTF-8') ?></div>
+
+            <?php if ($googleConnected): ?>
+                <p class="muted-small" style="margin-top:0.75rem;color:#166534;">
+                    מצב: מחובר כ־<strong dir="ltr"><?= htmlspecialchars($googleCfg['sender_email'], ENT_QUOTES, 'UTF-8') ?></strong>
+                </p>
+            <?php else: ?>
+                <p class="muted-small" style="margin-top:0.75rem;">
+                    מצב: לא מחובר — לאחר שמירת המפתחות יש ללחוץ על &quot;התחברות ל־Google&quot; ולאשר הרשאות (כולל שליחת מייל).
+                </p>
+            <?php endif; ?>
+
+            <form method="post" action="admin_settings.php" style="max-width:520px;margin-top:1rem;">
+                <label for="google_oauth_client_id">OAuth Client ID</label>
+                <input type="text" id="google_oauth_client_id" name="google_oauth_client_id" autocomplete="off"
+                       value="<?= htmlspecialchars($googleCfg['client_id'], ENT_QUOTES, 'UTF-8') ?>"
+                       placeholder="xxxxxxxx.apps.googleusercontent.com">
+
+                <label for="google_oauth_client_secret" style="margin-top:0.75rem;">OAuth Client Secret</label>
+                <input type="password" id="google_oauth_client_secret" name="google_oauth_client_secret" autocomplete="new-password"
+                       placeholder="<?= $googleHasSecret ? 'השאר ריק כדי לשמור את הסוד הקיים' : 'GOCSPX-...' ?>">
+                <?php if ($googleHasSecret): ?>
+                    <p class="muted" style="margin:0.35rem 0 0;">סוד שמור במערכת. להחלפה — הזינו סוד חדש.</p>
+                <?php endif; ?>
+
+                <button type="submit" name="google_credentials_submit" value="1" class="btn" style="margin-top:0.85rem;">
+                    שמירת מפתחות OAuth
+                </button>
+            </form>
+
+            <div style="margin-top:1rem;display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;">
+                <a href="google_oauth_start.php" class="btn" style="display:inline-block;text-decoration:none;margin-top:0;">
+                    התחברות ל־Google לשליחת מיילים
+                </a>
+                <?php if ($googleConnected || trim($googleCfg['refresh_token'] ?? '') !== ''): ?>
+                    <form method="post" action="admin_settings.php" style="margin:0;" onsubmit="return confirm('לנתק את חשבון Google משליחת המיילים?');">
+                        <button type="submit" name="google_disconnect_submit" value="1" class="btn small" style="background:#6b7280;">
+                            ניתוק חשבון שולח
+                        </button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <h3 style="margin-top:1.75rem;margin-bottom:0.5rem;font-size:1.05rem;">שעות ברירת מחדל לפתיחת מחסן</h3>
         <p class="muted-small">
             שעות אלו ישמשו כברירת מחדל בעת הגדרת שעות פתיחה למחסנים חדשים, ובהיעדר הגדרה ספציפית למחסן.
         </p>

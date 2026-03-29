@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/google_mail.php';
 
 require_admin_or_warehouse();
 
@@ -94,19 +95,19 @@ if ($senderEmail === '' || !filter_var($senderEmail, FILTER_VALIDATE_EMAIL)) {
     $senderEmail = 'no-reply@gearflow.local';
 }
 
-$encodedSubject = '=?UTF-8?B?' . base64_encode($subject) . '?=';
-$headers = [];
-$headers[] = 'MIME-Version: 1.0';
-$headers[] = 'Content-Type: text/plain; charset=UTF-8';
-$headers[] = 'From: ' . str_replace(["\r", "\n"], '', $senderName) . ' <' . $senderEmail . '>';
-$headers[] = 'Reply-To: ' . $senderEmail;
+$googleCfg = google_mail_load_config($pdo);
+if (!google_mail_is_configured($googleCfg)) {
+    $_SESSION['header_mail_error'] = 'שליחת מיילים אפשרית רק דרך Google. יש להגדיר Client ID, Client Secret וחיבור חשבון בהגדרות המערכת.';
+    header('Location: ' . $redirect);
+    exit;
+}
 
-$mailOk = @mail($targetEmail, $encodedSubject, $body, implode("\r\n", $headers));
+$sendResult = google_mail_send($pdo, $targetEmail, $subject, $body, $senderName, $senderEmail);
 
-if ($mailOk) {
+if ($sendResult['ok']) {
     $_SESSION['header_mail_success'] = 'המייל נשלח בהצלחה.';
 } else {
-    $_SESSION['header_mail_error'] = 'שליחת המייל נכשלה בשרת. יש לבדוק הגדרות דוא"ל.';
+    $_SESSION['header_mail_error'] = 'שליחת המייל נכשלה: ' . ($sendResult['error'] ?? 'שגיאה לא ידועה');
 }
 
 header('Location: ' . $redirect);
