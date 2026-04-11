@@ -678,7 +678,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     <a href="admin_orders.php"><?= htmlspecialchars($navLabels['orders'], ENT_QUOTES, 'UTF-8') ?></a>
                     <a href="admin_users.php"><?= htmlspecialchars($navLabels['users'], ENT_QUOTES, 'UTF-8') ?></a>
                     <a href="admin_suppliers.php"><?= htmlspecialchars($navLabels['suppliers'], ENT_QUOTES, 'UTF-8') ?></a>
-                    <a href="admin_daily.php">ניהול יומי</a>
+                    <div class="main-nav-item-wrapper">
+                        <a href="admin_daily.php?calendar=cameras">יומן</a>
+                        <div class="main-nav-sub">
+                            <a href="admin_daily.php?calendar=cameras">יומן מצלמות</a>
+                            <a href="admin_daily.php?calendar=edit_rooms">יומן חדרי עריכה</a>
+                        </div>
+                    </div>
                     <a href="admin_reports.php"><?= htmlspecialchars($navLabels['reports'], ENT_QUOTES, 'UTF-8') ?></a>
                     <div class="main-nav-item-wrapper">
                         <a href="admin.php"><?= htmlspecialchars($navLabels['system'], ENT_QUOTES, 'UTF-8') ?></a>

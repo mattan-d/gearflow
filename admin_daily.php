@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 
+/** שם קטגוריית ציוד ליומן מצלמות — חייב להתאים ל־equipment.category (ברירת מחדל תואמת לזריעה ב־config.php) */
+const GF_DAILY_CALENDAR_CATEGORY_CAMERAS = 'מצלמה';
+/** שם קטגוריית ציוד ליומן חדרי עריכה */
+const GF_DAILY_CALENDAR_CATEGORY_EDIT_ROOMS = 'חדרי עריכה';
+
 // דף ניהול יומי – מנהל/מנהל מחסן בלבד
 $me = current_user();
 if ($me === null) {
@@ -69,8 +74,19 @@ if ($day === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) {
     $day = $todayYmd;
 }
 
-$selectedCategory = isset($_GET['category']) ? trim((string)$_GET['category']) : 'all';
-if ($selectedCategory === '') $selectedCategory = 'all';
+$calendarParam = isset($_GET['calendar']) ? trim((string)$_GET['calendar']) : '';
+$calendarMode = in_array($calendarParam, ['cameras', 'edit_rooms'], true) ? $calendarParam : '';
+
+if ($calendarMode === 'cameras') {
+    $selectedCategory = GF_DAILY_CALENDAR_CATEGORY_CAMERAS;
+} elseif ($calendarMode === 'edit_rooms') {
+    $selectedCategory = GF_DAILY_CALENDAR_CATEGORY_EDIT_ROOMS;
+} else {
+    $selectedCategory = isset($_GET['category']) ? trim((string)$_GET['category']) : 'all';
+    if ($selectedCategory === '') {
+        $selectedCategory = 'all';
+    }
+}
 $searchQ = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
 
 // קטגוריות ציוד (כולל "ללא קטגוריה")
@@ -279,15 +295,26 @@ $prevDay = date('Y-m-d', strtotime($day . ' -1 day'));
 $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
 
 $dailyNavQuery = ['category' => $selectedCategory, 'q' => $searchQ];
+if ($calendarMode !== '') {
+    $dailyNavQuery['calendar'] = $calendarMode;
+}
 $hrefDailyPrev = 'admin_daily.php?' . htmlspecialchars(http_build_query(array_merge(['day' => $prevDay], $dailyNavQuery)), ENT_QUOTES, 'UTF-8');
 $hrefDailyNext = 'admin_daily.php?' . htmlspecialchars(http_build_query(array_merge(['day' => $nextDay], $dailyNavQuery)), ENT_QUOTES, 'UTF-8');
+
+$pageTitleMain = 'ניהול יומי';
+$pageTitleSuffix = 'מערכת השאלת ציוד';
+if ($calendarMode === 'cameras') {
+    $pageTitleMain = 'יומן מצלמות';
+} elseif ($calendarMode === 'edit_rooms') {
+    $pageTitleMain = 'יומן חדרי עריכה';
+}
 
 ?>
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>ניהול יומי - מערכת השאלת ציוד</title>
+    <title><?= htmlspecialchars($pageTitleMain, ENT_QUOTES, 'UTF-8') ?> - <?= htmlspecialchars($pageTitleSuffix, ENT_QUOTES, 'UTF-8') ?></title>
     <style>
         body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#f3f4f6; margin:0; }
         main { max-width: 1200px; margin: 1.5rem auto; padding: 0 1rem 2rem; }
@@ -451,16 +478,20 @@ $hrefDailyNext = 'admin_daily.php?' . htmlspecialchars(http_build_query(array_me
     <div class="card">
         <div class="topbar">
             <div>
-                <h2 style="margin:0 0 0.15rem;font-size:1.25rem;">ניהול יומי</h2>
-                <div class="muted">תצוגת הזמנות לפי יום ושעות השאלה (07:00–22:00, חצי שעה)</div>
+                <h2 style="margin:0 0 0.15rem;font-size:1.25rem;"><?= htmlspecialchars($pageTitleMain, ENT_QUOTES, 'UTF-8') ?></h2>
+                <div class="muted">תצוגת הזמנות לפי יום ושעות השאלה (07:00–22:00, חצי שעה)<?= $calendarMode !== '' ? ' · קטגוריה: ' . htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8') : '' ?></div>
             </div>
         </div>
 
         <form method="get" action="admin_daily.php" class="filters-row" id="daily_filters_form">
+            <?php if ($calendarMode !== ''): ?>
+                <input type="hidden" name="calendar" value="<?= htmlspecialchars($calendarMode, ENT_QUOTES, 'UTF-8') ?>">
+            <?php endif; ?>
             <div class="filter-block" style="min-width:170px;">
                 <label for="day_input">בחירת תאריך</label>
                 <input id="day_input" type="date" name="day" value="<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>" onchange="this.form.submit()">
             </div>
+            <?php if ($calendarMode === ''): ?>
             <div class="filter-block" style="min-width:190px;">
                 <label for="cat_input">בחירת קטגוריה</label>
                 <select id="cat_input" name="category" onchange="this.form.submit()">
@@ -472,19 +503,22 @@ $hrefDailyNext = 'admin_daily.php?' . htmlspecialchars(http_build_query(array_me
                     <?php endforeach; ?>
                 </select>
             </div>
+            <?php else: ?>
+                <input type="hidden" name="category" value="<?= htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8') ?>">
+            <?php endif; ?>
             <div class="filter-block" style="max-width:360px; min-width:220px;">
                 <label for="q_input">חיפוש פריט ציוד לפי שם</label>
                 <input id="q_input" type="text" name="q" value="<?= htmlspecialchars($searchQ, ENT_QUOTES, 'UTF-8') ?>" placeholder="הקלד שם פריט...">
             </div>
             <div style="display:flex; gap:0.4rem; align-items:flex-end;">
                 <a class="nav-arrow"
-                   href="admin_daily.php?<?= htmlspecialchars(http_build_query(['day' => $prevDay, 'category' => $selectedCategory, 'q' => $searchQ]), ENT_QUOTES, 'UTF-8') ?>"
+                   href="admin_daily.php?<?= htmlspecialchars(http_build_query(array_merge(['day' => $prevDay], $dailyNavQuery)), ENT_QUOTES, 'UTF-8') ?>"
                    title="יום קודם"
                    aria-label="יום קודם">
                     <i data-lucide="chevron-right" aria-hidden="true"></i>
                 </a>
                 <a class="nav-arrow"
-                   href="admin_daily.php?<?= htmlspecialchars(http_build_query(['day' => $nextDay, 'category' => $selectedCategory, 'q' => $searchQ]), ENT_QUOTES, 'UTF-8') ?>"
+                   href="admin_daily.php?<?= htmlspecialchars(http_build_query(array_merge(['day' => $nextDay], $dailyNavQuery)), ENT_QUOTES, 'UTF-8') ?>"
                    title="יום הבא"
                    aria-label="יום הבא">
                     <i data-lucide="chevron-left" aria-hidden="true"></i>
