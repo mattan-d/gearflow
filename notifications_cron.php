@@ -121,7 +121,7 @@ foreach ($ordersToday as $order) {
     if ($endDate === $nowDate && $endTime === $oneHourBefore) {
         $msgManager = 'שעה לפני החזרת ציוד בהזמנה #' . $orderId;
         $msgStudent = 'תזכורת: בעוד שעה זמן ההחזרה של הציוד בהזמנה #' . $orderId;
-        $link       = 'admin_orders.php?tab=today&today_mode=return';
+        $link       = 'admin_orders.php?tab=today';
 
         create_timed_notification($pdo, null, 'admin', $msgManager, $link);
         create_timed_notification($pdo, null, 'warehouse_manager', $msgManager, $link);
@@ -135,7 +135,7 @@ foreach ($ordersToday as $order) {
                     (int)$row['id'],
                     null,
                     $msgStudent,
-                    'admin_orders.php?tab=today&today_mode=return'
+                    'admin_orders.php?tab=today'
                 );
             }
         }
