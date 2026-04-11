@@ -726,7 +726,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="main-nav-item-wrapper">
                     <a href="#">הודעות</a>
                     <div class="main-nav-sub">
-                        <a href="warehouse_rules.php">נהלי מחסן</a>
+                        <a href="admin_documents.php?doc=warehouse_rules">נהלי מחסן</a>
                         <?php foreach ($customDocs as $doc): ?>
                             <?php $docId = (int)($doc['id'] ?? 0); ?>
                             <a href="admin_documents.php?custom_id=<?= $docId ?>">
