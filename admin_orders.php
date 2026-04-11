@@ -550,13 +550,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!$isSpecialStatusUpdate && !$isRecurringCreate && $startDate !== '' && $endDate !== '' && $startDate === $endDate && $startTime !== '' && $endTime !== '' && strcmp($endTime, $startTime) <= 0) {
             $error = 'באותו יום, שעת החזרה חייבת להיות מאוחרת משעת ההשאלה.';
         } else {
-            if (
-                !$isSpecialStatusUpdate
-                && (
-                    ($role === 'student' && ($action === 'create' || $action === 'update'))
-                    || ($role !== 'student' && $action === 'create')
-                )
-            ) {
+            if (!$isSpecialStatusUpdate && ($action === 'create' || $action === 'update')) {
                 $stErr = gf_validate_student_order_equipment_selection($pdo, $equipmentIds);
                 if ($stErr !== null) {
                     $error = $stErr;
@@ -3777,51 +3771,36 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <?php endif; ?>
                     </div>
 
-                    <!-- עמודת ציוד (זהה בהזמנה חדשה ובעריכה) / פאנל ציוד נלווה למצלמה (מנהל) -->
+                    <!-- עמודת ציוד (זהה בהזמנה חדשה ובעריכה) / פאנל ציוד נלווה למצלמה (מנהל) — עמודת הבחירה תמיד זמינה גם כשיש פאנל נלווה -->
                     <?php if (!($editingOrder && ($tab === 'not_picked' || $tab === 'not_returned'))): ?>
                     <?php if (!empty($showAdminCameraAccessoryPanel)): ?>
                     <div id="camera_accessory_panel" class="camera-accessory-panel">
                         <h3>ציוד נלווה למצלמה</h3>
                         <p class="muted-small" style="margin:0 0 0.5rem 0;">
-                            מצלמה: <strong><?= htmlspecialchars((string)($editingOrder['equipment_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></strong>
-                            <?php if ((string)($editingOrder['equipment_code'] ?? '') !== ''): ?>
-                                (<?= htmlspecialchars((string)$editingOrder['equipment_code'], ENT_QUOTES, 'UTF-8') ?>)
-                            <?php endif; ?>
+                            מצלמה נבחרת מטבלת «החלפת ציוד» למטה. ניתן להחליף מצלמה — יוצגו המצלמות הפנויות לתאריכים שנבחרו.
                         </p>
                         <div id="camera_accessory_list_ui"></div>
                         <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin-top:0.5rem;">
                             <button type="button" class="btn secondary camera-accessory-interactive" id="camera_accessory_add_btn" title="הוספת פריט נלווה">+</button>
                             <button type="button" class="btn camera-accessory-interactive" id="camera_accessory_copy_prev_btn">העתק פריטים מהזמנה קודמת</button>
                         </div>
-                        <div id="camera_accessory_mirror_host" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;" aria-hidden="true">
-                            <?php foreach ($editingEquipmentRows as $eq): ?>
-                                <?php
-                                $eidMir = (int)($eq['id'] ?? 0);
-                                if ($eidMir < 1) {
-                                    continue;
-                                }
-                                ?>
-                                <input type="checkbox"
-                                       name="equipment_ids[]"
-                                       value="<?= $eidMir ?>"
-                                       checked
-                                       data-name="<?= htmlspecialchars((string)($eq['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                       data-code="<?= htmlspecialchars((string)($eq['code'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
-                            <?php endforeach; ?>
-                        </div>
+                        <div id="camera_accessory_mirror_host" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;" aria-hidden="true"></div>
                     </div>
-                    <?php else: ?>
+                    <?php endif; ?>
+                    <?php
+                    $isNewOrderMode = !$editingOrder;
+                    $equipmentColumnBodyHidden = !$isNewOrderMode && empty($showAdminCameraAccessoryPanel);
+                    ?>
                     <div id="equipment_column">
-                        <?php $isNewOrderMode = !$editingOrder; ?>
                         <div class="equipment-column-header">
                             <label style="margin:0;"><?= $isNewOrderMode ? 'בחירת ציוד' : 'החלפת ציוד' ?></label>
                             <?php if (!$isNewOrderMode): ?>
-                                <button type="button" id="toggle_equipment_column_btn" class="equipment-column-toggle-btn" aria-expanded="false">
-                                    הצג
+                                <button type="button" id="toggle_equipment_column_btn" class="equipment-column-toggle-btn" aria-expanded="<?= $equipmentColumnBodyHidden ? 'false' : 'true' ?>">
+                                    <?= $equipmentColumnBodyHidden ? 'הצג' : 'הסתר' ?>
                                 </button>
                             <?php endif; ?>
                         </div>
-                        <div id="equipment_column_body" class="equipment-column-body <?= $isNewOrderMode ? '' : 'hidden' ?>">
+                        <div id="equipment_column_body" class="equipment-column-body <?= $equipmentColumnBodyHidden ? 'hidden' : '' ?>">
                             <?php
                             $hideEquipmentCategoryUi = ($role === 'student')
                                 || ($tab === 'today' && $todayFormMode === 'prepare' && in_array($role, ['admin', 'warehouse_manager'], true));
@@ -3898,7 +3877,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 הוסף
                             </button>
                             <div class="muted-small" id="selected_equipment_summary" style="margin-top:0.3rem;"></div>
-                            <?php if (empty($showAdminCameraAccessoryPanel)): ?>
+                            <?php if (!$isViewModeOrder): ?>
                             <div id="order_equipment_kit_wrap" class="order-equipment-kit-wrap" style="display:none;margin-top:0.55rem;">
                                 <label style="display:flex;align-items:flex-start;gap:0.45rem;font-size:0.88rem;cursor:pointer;">
                                     <input type="checkbox" name="include_equipment_kit" value="1" id="include_equipment_kit"
@@ -3911,7 +3890,6 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             <?php endif; ?>
                         </div>
                     </div>
-                    <?php endif; ?>
                     <?php endif; ?>
                 </div>
 
@@ -4705,7 +4683,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         && $role !== 'student') ? 'true' : 'false' ?>;
     const preparedInitiallyChecked = <?= (!empty($editingOrder['equipment_prepared'])) ? 'true' : 'false' ?>;
     if (isEditFromTodayPrepare && orderModal) {
-        const allowedIdsTodayPrepare = new Set(['order_status', 'equipment_prepared', 'rejection_reason', 'admin_notes', 'toggle_equipment_column_btn']);
+        const allowedIdsTodayPrepare = new Set(['order_status', 'equipment_prepared', 'rejection_reason', 'admin_notes', 'toggle_equipment_column_btn', 'include_equipment_kit']);
         const fieldsPrep = orderModal.querySelectorAll('input, select, textarea, button');
         fieldsPrep.forEach(function (el) {
             if (el.type === 'hidden') return;
@@ -4716,6 +4694,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             if (el.classList && el.classList.contains('equipment-components-link')) return;
             if (el.classList && el.classList.contains('equipment-prepared-item-check')) return;
             if (el.classList && el.classList.contains('camera-accessory-interactive')) return;
+            if (el.classList && el.classList.contains('equipment-list-trash')) return;
             if (el === orderModalClose || el === orderModalCancel || el.id === 'submit_order_btn') return;
             el.disabled = true;
         });
@@ -4724,6 +4703,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     <?php if (!empty($showAdminCameraAccessoryPanel)): ?>
     (function initCameraAccessoryPanel() {
         var primaryId = <?= (int)($editingOrder['equipment_id'] ?? 0) ?>;
+        var lastCameraIdForAccessories = primaryId;
         var orderIdAjax = <?= (int)($editingOrder['id'] ?? 0) ?>;
         var catalog = <?= $accessoryCatalogJson ?>;
         var meta = <?= $equipmentMetaForCameraJson ?>;
@@ -4741,11 +4721,28 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             return d.innerHTML;
         }
 
+        function getTablePrimaryCameraId() {
+            var tbody = document.getElementById('equipment_table_body');
+            if (!tbody) {
+                return 0;
+            }
+            var cbs = tbody.querySelectorAll('input[name="equipment_ids[]"]');
+            var found = 0;
+            cbs.forEach(function (inp) {
+                if (!inp.checked) return;
+                var id = parseInt(inp.value, 10);
+                if (!id) return;
+                if (equipmentMainById[id] === 'מצלמות') {
+                    found = id;
+                }
+            });
+            return found;
+        }
+
         function syncMirror() {
             if (!host) return;
             host.innerHTML = '';
-            var ids = [primaryId].concat(Array.from(accessorySet));
-            ids.forEach(function (id) {
+            Array.from(accessorySet).forEach(function (id) {
                 if (!id || id < 1) return;
                 var m = meta[id] || { name: '#' + id, code: '' };
                 var inp = document.createElement('input');
@@ -4762,7 +4759,18 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         function renderList() {
             if (!listUi) return;
             listUi.innerHTML = '';
-            var cam = meta[primaryId] || { name: '', code: '' };
+            var camId = getTablePrimaryCameraId();
+            var cam = { name: '', code: '' };
+            if (camId && equipmentTableBody) {
+                var inpCam = equipmentTableBody.querySelector('input[name="equipment_ids[]"][value="' + String(camId) + '"]');
+                if (inpCam) {
+                    cam.name = inpCam.getAttribute('data-name') || '';
+                    cam.code = inpCam.getAttribute('data-code') || '';
+                }
+            }
+            if (!cam.name && meta[camId]) {
+                cam = meta[camId];
+            }
             var row0 = document.createElement('div');
             row0.className = 'camera-accessory-row';
             row0.innerHTML = '<span><strong>מצלמה</strong> — ' + esc(cam.name || '') + (cam.code ? ' (' + esc(cam.code) + ')' : '') + '</span><span></span>';
@@ -4815,7 +4823,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             searchResults.innerHTML = '';
             var picked = 0;
             catalog.forEach(function (it) {
-                if (!it || accessorySet.has(it.id) || it.id === primaryId) return;
+                if (!it || accessorySet.has(it.id) || it.id === getTablePrimaryCameraId()) return;
                 var blob = ((it.name || '') + ' ' + (it.code || '')).toLowerCase();
                 if (q && blob.indexOf(q) === -1) return;
                 var btn = document.createElement('button');
@@ -4862,7 +4870,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 if (v) {
                     for (var i = 0; i < catalog.length; i++) {
                         var it = catalog[i];
-                        if (!it || accessorySet.has(it.id) || it.id === primaryId) continue;
+                        if (!it || accessorySet.has(it.id) || it.id === getTablePrimaryCameraId()) continue;
                         if (String(it.code || '') === v) {
                             toAdd = it.id;
                             break;
@@ -4870,7 +4878,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                     }
                 }
             }
-            if (toAdd > 0 && !accessorySet.has(toAdd) && toAdd !== primaryId) {
+            if (toAdd > 0 && !accessorySet.has(toAdd) && toAdd !== getTablePrimaryCameraId()) {
                 accessorySet.add(toAdd);
                 if (!meta[toAdd]) {
                     var found = catalog.filter(function (x) { return x && x.id === toAdd; })[0];
@@ -4881,11 +4889,11 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             refreshEquipmentUi();
         });
         document.getElementById('camera_accessory_copy_prev_btn') && document.getElementById('camera_accessory_copy_prev_btn').addEventListener('click', function () {
-            var u = 'admin_orders.php?ajax=prev_accessories&order_id=' + orderIdAjax + '&camera_equipment_id=' + primaryId;
+            var u = 'admin_orders.php?ajax=prev_accessories&order_id=' + orderIdAjax + '&camera_equipment_id=' + getTablePrimaryCameraId();
             fetch(u).then(function (r) { return r.json(); }).then(function (data) {
                 if (!data || !data.ok || !data.items) return;
                 data.items.forEach(function (it) {
-                    if (!it || !it.id || it.id === primaryId || accessorySet.has(it.id)) return;
+                    if (!it || !it.id || it.id === getTablePrimaryCameraId() || accessorySet.has(it.id)) return;
                     accessorySet.add(it.id);
                     meta[it.id] = { name: it.name || '', code: it.code || '' };
                 });
@@ -4901,6 +4909,14 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 refreshEquipmentUi();
             });
         }
+        window.gfCameraAccessoryOnEquipmentChange = function () {
+            var camNow = getTablePrimaryCameraId();
+            if (camNow !== lastCameraIdForAccessories) {
+                accessorySet.clear();
+                lastCameraIdForAccessories = camNow;
+            }
+            refreshEquipmentUi();
+        };
         refreshEquipmentUi();
     })();
     <?php endif; ?>
@@ -4910,6 +4926,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             var t = e.target;
             if (t && t.name === 'equipment_ids[]') {
                 updateEquipmentState();
+                updateOrderKitCheckboxVisibility();
+                updateSelectedEquipmentSummary();
+                if (typeof window.gfCameraAccessoryOnEquipmentChange === 'function') {
+                    window.gfCameraAccessoryOnEquipmentChange();
+                }
+            }
+            if (t && t.id === 'include_equipment_kit') {
                 updateOrderKitCheckboxVisibility();
             }
         });
@@ -4980,6 +5003,20 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         return getEquipmentCheckboxes().some(function (cb) { return cb.checked; });
     }
 
+    function hasPrimaryBorrowerEquipmentSelected() {
+        return getEquipmentCheckboxes().some(function (cb) {
+            if (!cb.checked) {
+                return false;
+            }
+            const id = parseInt(cb.value, 10);
+            if (!id) {
+                return false;
+            }
+            const m = equipmentMainById[id];
+            return m === 'מצלמות' || m === 'חדרי עריכה';
+        });
+    }
+
     function updateOrderKitCheckboxVisibility() {
         const wrap = document.getElementById('order_equipment_kit_wrap');
         const kitCb = document.getElementById('include_equipment_kit');
@@ -5016,7 +5053,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         // שומרים את רשימת "ציוד נבחר" שכבר נטענה מהשרת ולא מוחקים אותה.
         if (getEquipmentCheckboxes().length === 0) {
             if (submitBtn && !isViewModeOrder) {
-                submitBtn.disabled = false;
+                submitBtn.disabled = true;
             }
             updateOrderKitCheckboxVisibility();
             return;
@@ -5158,9 +5195,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             });
         }
 
-        const hasEquipFromList = equipmentIdHidden ? !!equipmentIdHidden.value : false;
-        const hasEquipCheckbox = anyEquipmentChecked();
-        const hasEquip = hasEquipFromList || hasEquipCheckbox;
+        const hasEquip = hasPrimaryBorrowerEquipmentSelected();
         let allowByDuplicate = true;
         if (isDuplicateMode && submitBtn) {
             const origStart = originalStartInput ? originalStartInput.value : '';
