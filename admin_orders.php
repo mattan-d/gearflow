@@ -216,31 +216,100 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'available_equipment') {
     exit;
 }
 
-// AJAX: פריטי ציוד נלווה מהזמנות קודמות לאותה מצלמה (מנהל בלבד)
+// AJAX: פריטי ציוד נלווה מהזמנות קודמות (אותו שואל / אותה מצלמה; מנהל מחסן + אדמין)
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'prev_accessories') {
     header('Content-Type: application/json; charset=UTF-8');
-    if ($role !== 'admin') {
+    if (!in_array($role, ['admin', 'warehouse_manager'], true)) {
         http_response_code(403);
         echo json_encode(['ok' => false, 'error' => 'forbidden'], JSON_UNESCAPED_UNICODE);
         exit;
     }
     $orderId  = (int)($_GET['order_id'] ?? 0);
     $cameraId = (int)($_GET['camera_equipment_id'] ?? 0);
-    if ($orderId < 1 || $cameraId < 1) {
+    if ($orderId < 1) {
         echo json_encode(['ok' => false, 'error' => 'bad'], JSON_UNESCAPED_UNICODE);
         exit;
     }
     try {
-        $stmt = $pdo->prepare(
-            "SELECT id FROM orders WHERE equipment_id = :cam AND id != :oid AND status != 'deleted' ORDER BY created_at DESC, id DESC LIMIT 3"
-        );
-        $stmt->execute([':cam' => $cameraId, ':oid' => $orderId]);
-        /** @var list<int|string> $pastIds */
-        $pastIds = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
+        $stmtCur = $pdo->prepare('SELECT borrower_name, equipment_id FROM orders WHERE id = :id LIMIT 1');
+        $stmtCur->execute([':id' => $orderId]);
+        $cur = $stmtCur->fetch(PDO::FETCH_ASSOC);
+        if (!$cur) {
+            echo json_encode(['ok' => false, 'error' => 'not_found'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $borrower = trim((string)($cur['borrower_name'] ?? ''));
+        if ($cameraId < 1) {
+            $cameraId = (int)($cur['equipment_id'] ?? 0);
+        }
+        if ($cameraId > 0) {
+            $stmtCat = $pdo->prepare('SELECT TRIM(COALESCE(category, \'\')) FROM equipment WHERE id = :id LIMIT 1');
+            $stmtCat->execute([':id' => $cameraId]);
+            $catMain = gf_parse_stored_equipment_category(trim((string)$stmtCat->fetchColumn()))['main'];
+            if ($catMain !== 'מצלמות') {
+                $cameraId = 0;
+            }
+        }
+        if ($cameraId < 1 && $borrower !== '') {
+            $stmtCam = $pdo->prepare(
+                'SELECT oe.equipment_id FROM order_equipment oe
+                 JOIN equipment e ON e.id = oe.equipment_id
+                 WHERE oe.order_id = :oid'
+            );
+            $stmtCam->execute([':oid' => $orderId]);
+            foreach ($stmtCam->fetchAll(PDO::FETCH_COLUMN, 0) as $eidRaw) {
+                $eid = (int)$eidRaw;
+                if ($eid < 1) {
+                    continue;
+                }
+                $stmtCat = $pdo->prepare('SELECT TRIM(COALESCE(category, \'\')) FROM equipment WHERE id = :id LIMIT 1');
+                $stmtCat->execute([':id' => $eid]);
+                $cm = gf_parse_stored_equipment_category(trim((string)$stmtCat->fetchColumn()))['main'];
+                if ($cm === 'מצלמות') {
+                    $cameraId = $eid;
+                    break;
+                }
+            }
+        }
+
+        $pastIds = [];
+        if ($borrower !== '' && $cameraId > 0) {
+            $stmt = $pdo->prepare(
+                "SELECT o.id FROM orders o
+                 WHERE o.id != :oid
+                 AND o.status NOT IN ('deleted', 'rejected')
+                 AND TRIM(o.borrower_name) = :borrower
+                 AND (
+                     o.equipment_id = :cam
+                     OR EXISTS (SELECT 1 FROM order_equipment ox WHERE ox.order_id = o.id AND ox.equipment_id = :cam2)
+                 )
+                 ORDER BY o.created_at DESC, o.id DESC
+                 LIMIT 10"
+            );
+            $stmt->execute([
+                ':oid' => $orderId,
+                ':borrower' => $borrower,
+                ':cam' => $cameraId,
+                ':cam2' => $cameraId,
+            ]);
+            $pastIds = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN, 0) ?: []);
+        }
+        if ($pastIds === [] && $borrower !== '') {
+            $stmt = $pdo->prepare(
+                "SELECT o.id FROM orders o
+                 WHERE o.id != :oid
+                 AND o.status NOT IN ('deleted', 'rejected')
+                 AND TRIM(o.borrower_name) = :borrower
+                 ORDER BY o.created_at DESC, o.id DESC
+                 LIMIT 10"
+            );
+            $stmt->execute([':oid' => $orderId, ':borrower' => $borrower]);
+            $pastIds = array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN, 0) ?: []);
+        }
+
         $items = [];
         $seen  = [];
         foreach ($pastIds as $pastOid) {
-            $pastOid = (int)$pastOid;
             if ($pastOid < 1) {
                 continue;
             }
@@ -4889,16 +4958,45 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             refreshEquipmentUi();
         });
         document.getElementById('camera_accessory_copy_prev_btn') && document.getElementById('camera_accessory_copy_prev_btn').addEventListener('click', function () {
-            var u = 'admin_orders.php?ajax=prev_accessories&order_id=' + orderIdAjax + '&camera_equipment_id=' + getTablePrimaryCameraId();
-            fetch(u).then(function (r) { return r.json(); }).then(function (data) {
-                if (!data || !data.ok || !data.items) return;
-                data.items.forEach(function (it) {
-                    if (!it || !it.id || it.id === getTablePrimaryCameraId() || accessorySet.has(it.id)) return;
+            var camForAjax = getTablePrimaryCameraId();
+            if (camForAjax < 1) {
+                camForAjax = primaryId;
+            }
+            if (camForAjax < 1) {
+                alert('יש לבחור מצלמה בטבלת «החלפת ציוד» לפני העתקה מהזמנות קודמות.');
+                return;
+            }
+            var u = 'admin_orders.php?ajax=prev_accessories&order_id=' + orderIdAjax + '&camera_equipment_id=' + camForAjax;
+            fetch(u, { credentials: 'same-origin' }).then(function (r) {
+                if (r.status === 403) {
+                    throw new Error('forbidden');
+                }
+                return r.json();
+            }).then(function (data) {
+                if (!data || !data.ok) {
+                    alert('לא ניתן לטעון הזמנות קודמות. נסו שוב או בדקו הרשאות.');
+                    return;
+                }
+                var list = data.items || [];
+                if (list.length === 0) {
+                    alert('לא נמצאו פריטי ציוד נלווה מהזמנות קודמות של אותו שואל (או שאין הזמנות קודמות עם שורות ציוד נלווה).');
+                    return;
+                }
+                var camNow = getTablePrimaryCameraId() || primaryId;
+                var added = 0;
+                list.forEach(function (it) {
+                    if (!it || !it.id || it.id === camNow || accessorySet.has(it.id)) return;
                     accessorySet.add(it.id);
                     meta[it.id] = { name: it.name || '', code: it.code || '' };
+                    added++;
                 });
                 refreshEquipmentUi();
-            }).catch(function () {});
+                if (added === 0) {
+                    alert('כל הפריטים מההזמנות הקודמות כבר מסומנים בהזמנה הנוכחית.');
+                }
+            }).catch(function () {
+                alert('שגיאה בטעינת נתונים מהשרת.');
+            });
         });
         if (listUi) {
             listUi.addEventListener('click', function (e) {
