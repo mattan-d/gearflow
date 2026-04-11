@@ -391,23 +391,27 @@ if ($editingOrder) {
     try {
         $stmtEditEquip = $pdo->prepare(
             'SELECT e.id, e.name, e.code,
+                    TRIM(COALESCE(e.category, \'\')) AS category,
                     COALESCE(oe.line_returned, 0) AS line_returned,
                     oe.line_condition AS line_condition
              FROM order_equipment oe
              JOIN equipment e ON e.id = oe.equipment_id
              WHERE oe.order_id = :oid
-             ORDER BY e.name ASC'
+             ORDER BY CASE WHEN e.id = :primary_eid THEN 0 ELSE 1 END, e.name ASC'
         );
-        $stmtEditEquip->execute([':oid' => (int)$editingOrder['id']]);
+        $stmtEditEquip->execute([':oid' => (int)$editingOrder['id'], ':primary_eid' => (int)($editingOrder['equipment_id'] ?? 0)]);
         $editingEquipmentRows = $stmtEditEquip->fetchAll(PDO::FETCH_ASSOC) ?: [];
     } catch (Throwable $e) {
         $editingEquipmentRows = [];
     }
     if (empty($editingEquipmentRows) && (int)($editingOrder['equipment_id'] ?? 0) > 0) {
+        $stmtCatOne = $pdo->prepare('SELECT TRIM(COALESCE(category, \'\')) FROM equipment WHERE id = :id LIMIT 1');
+        $stmtCatOne->execute([':id' => (int)$editingOrder['equipment_id']]);
         $editingEquipmentRows[] = [
             'id'             => (int)$editingOrder['equipment_id'],
             'name'           => (string)($editingOrder['equipment_name'] ?? ''),
             'code'           => (string)($editingOrder['equipment_code'] ?? ''),
+            'category'       => trim((string)$stmtCatOne->fetchColumn()),
             'line_returned'  => 0,
             'line_condition' => null,
         ];
@@ -416,6 +420,37 @@ if ($editingOrder) {
         $eid = (int)($eqRow['id'] ?? 0);
         if ($eid > 0 && !in_array($eid, $editingEquipmentIds, true)) {
             $editingEquipmentIds[] = $eid;
+        }
+    }
+}
+
+/** פריט ראשי (מצלמה/חדר) מול נלווה — לתצוגת «ציוד נבחר» */
+$editingEquipmentPrimary   = null;
+$editingEquipmentAccessories = [];
+if ($editingOrder && $editingEquipmentRows !== []) {
+    $primId = (int)($editingOrder['equipment_id'] ?? 0);
+    foreach ($editingEquipmentRows as $er) {
+        if ($primId > 0 && (int)($er['id'] ?? 0) === $primId) {
+            $editingEquipmentPrimary = $er;
+            break;
+        }
+    }
+    if ($editingEquipmentPrimary === null) {
+        foreach ($editingEquipmentRows as $er) {
+            $m = gf_parse_stored_equipment_category(trim((string)($er['category'] ?? '')))['main'];
+            if ($m === 'מצלמות' || $m === 'חדרי עריכה') {
+                $editingEquipmentPrimary = $er;
+                break;
+            }
+        }
+    }
+    if ($editingEquipmentPrimary === null) {
+        $editingEquipmentPrimary = $editingEquipmentRows[0];
+    }
+    $pid = (int)($editingEquipmentPrimary['id'] ?? 0);
+    foreach ($editingEquipmentRows as $er) {
+        if ((int)($er['id'] ?? 0) !== $pid) {
+            $editingEquipmentAccessories[] = $er;
         }
     }
 }
@@ -3369,6 +3404,14 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             <?php if ($editingOrder):
                                 $editCodeForm = (string)($editingOrder['equipment_code'] ?? '');
                                 $formEquipHasComponents = ($editCodeForm !== '' && !empty($equipmentComponentsByCode[$editCodeForm] ?? []));
+                                $__oePid = (int)($editingEquipmentPrimary['id'] ?? 0);
+                                $__oeOrdered = [];
+                                if ($editingEquipmentPrimary) {
+                                    $__oeOrdered[] = $editingEquipmentPrimary;
+                                }
+                                foreach ($editingEquipmentAccessories as $__acc) {
+                                    $__oeOrdered[] = $__acc;
+                                }
                                 $showEquipmentPreparedChecklist = (
                                     $tab === 'today' && $todayFormMode === 'prepare'
                                     && in_array((string)($editingOrder['status'] ?? ''), ['pending', 'approved'], true)
@@ -3382,12 +3425,15 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     <button type="button" class="btn small secondary oe-return-field" id="oe_select_none_btn">בטל סימון</button>
                                 </div>
                                 <?php endif; ?>
-                                <?php foreach ($editingEquipmentRows as $eqIdx => $eq): ?>
+                                <?php foreach ($__oeOrdered as $eqIdx => $eq): ?>
+                                <?php if ($eqIdx === 1 && count($editingEquipmentAccessories) > 0): ?>
+                                <div class="gf-oe-accessory-heading muted-small" style="font-weight:600;margin:0.65rem 0 0.25rem 0;width:100%;flex-basis:100%;">ציוד נלווה</div>
+                                <?php endif; ?>
                                 <div class="selected-equipment-row" data-equipment-id="<?= (int)($eq['id'] ?? 0) ?>" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 4px;">
                                     <?php if ($showEquipmentPreparedChecklist): ?>
                                         <label class="selected-equipment-checklist-item" style="flex: 1;">
                                             <input type="checkbox"
-                                                   <?= $eqIdx === 0 ? 'name="equipment_prepared" id="equipment_prepared" value="1"' : 'class="equipment-prepared-item-check"' ?>
+                                                   <?= (int)($eq['id'] ?? 0) === $__oePid ? 'name="equipment_prepared" id="equipment_prepared" value="1"' : 'class="equipment-prepared-item-check"' ?>
                                                    <?= !empty($editingOrder['equipment_prepared']) ? 'checked' : '' ?>>
                                             <span><?= htmlspecialchars((string)($eq['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?><?= ((string)($eq['code'] ?? '') !== '') ? ' (' . htmlspecialchars((string)$eq['code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
                                         </label>
@@ -3427,9 +3473,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     <?php else: ?>
                                         <span style="flex: 1;"><?= htmlspecialchars((string)($eq['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?><?= ((string)($eq['code'] ?? '') !== '') ? ' (' . htmlspecialchars((string)$eq['code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
                                     <?php endif; ?>
-                                    <?php if ($showEquipmentPreparedChecklist && $formEquipHasComponents && $eqIdx === 0): ?>
+                                    <?php
+                                    $eqCodePrepare = (string)($eq['code'] ?? '');
+                                    $hasRowComponentsPrepare = ($eqCodePrepare !== '' && !empty($equipmentComponentsByCode[$eqCodePrepare] ?? []));
+                                    ?>
+                                    <?php if ($showEquipmentPreparedChecklist && $hasRowComponentsPrepare && (int)($eq['id'] ?? 0) === $__oePid): ?>
                                         <a href="#" class="equipment-components-link" style="font-size:0.85rem;white-space:nowrap;"
-                                           data-equipment-code="<?= htmlspecialchars($editCodeForm, ENT_QUOTES, 'UTF-8') ?>"
+                                           data-equipment-code="<?= htmlspecialchars($eqCodePrepare, ENT_QUOTES, 'UTF-8') ?>"
                                            data-order-id="<?= (int)$editingOrder['id'] ?>"
                                            data-components-context="prepare">רכיבי ציוד</a>
                                     <?php endif; ?>
