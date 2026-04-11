@@ -1194,6 +1194,22 @@ if (empty($bulkCategories)) {
     $catStmt = $pdo->query("SELECT DISTINCT category FROM equipment WHERE category IS NOT NULL AND TRIM(category) != '' ORDER BY category");
     if ($catStmt) $bulkCategories = $catStmt->fetchAll(PDO::FETCH_COLUMN);
 }
+$accBulk = gf_equipment_category_accessories_main();
+$subsOnlyBulk = gf_equipment_accessories_sub_labels_only();
+$bulkMapped = [];
+foreach ($bulkCategories as $bc) {
+    $bc = trim((string)$bc);
+    if ($bc === '') {
+        continue;
+    }
+    if (in_array($bc, $subsOnlyBulk, true)) {
+        $bulkMapped[] = gf_format_equipment_category($accBulk, $bc);
+    } else {
+        $bulkMapped[] = $bc;
+    }
+}
+$bulkCategories = array_values(array_unique($bulkMapped));
+sort($bulkCategories, SORT_LOCALE_STRING);
 $isAdminForBulk = isset($me['role']) && ($me['role'] ?? '') === 'admin';
 $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
 
@@ -1203,9 +1219,10 @@ $categoryMainOptions = ['מצלמות', 'חדרי עריכה', $gfAcc];
 try {
     $stmtM = $pdo->prepare('SELECT name FROM equipment_categories WHERE instr(name, ?) = 0 ORDER BY name');
     $stmtM->execute([$gfSep]);
+    $subsOnlyMain = gf_equipment_accessories_sub_labels_only();
     foreach ($stmtM->fetchAll(PDO::FETCH_COLUMN) ?: [] as $mn) {
         $mn = (string)$mn;
-        if ($mn !== '' && !in_array($mn, $categoryMainOptions, true)) {
+        if ($mn !== '' && !in_array($mn, $categoryMainOptions, true) && !in_array($mn, $subsOnlyMain, true)) {
             $categoryMainOptions[] = $mn;
         }
     }
@@ -1221,8 +1238,15 @@ try {
     $categorySubOptions = $stmtS->fetchAll(PDO::FETCH_COLUMN) ?: [];
 } catch (Throwable $e) {
 }
+foreach (gf_equipment_accessories_sub_labels_only() as $subLabel) {
+    $fullSub = gf_format_equipment_category($gfAcc, $subLabel);
+    if (!in_array($fullSub, $categorySubOptions, true)) {
+        $categorySubOptions[] = $fullSub;
+    }
+}
+sort($categorySubOptions, SORT_LOCALE_STRING);
 
-$eqCategoryCurrent = trim((string)($editingEquipment['category'] ?? ''));
+$eqCategoryCurrent = gf_normalize_equipment_category_for_form(trim((string)($editingEquipment['category'] ?? '')));
 $parsedEqCat = gf_parse_stored_equipment_category($eqCategoryCurrent);
 $formMain = $parsedEqCat['main'];
 $formMainSelect = $formMain;
@@ -2018,8 +2042,15 @@ if ($formMain === $gfAcc) {
                                 <select id="category_sub" name="category_sub" style="margin-bottom:0.35rem;">
                                     <option value="_none_" <?= ($formSubSelect === '_none_') ? 'selected' : '' ?>>ללא תת־קטגוריה</option>
                                     <?php foreach ($categorySubOptions as $so): ?>
-                                        <option value="<?= htmlspecialchars((string)$so, ENT_QUOTES, 'UTF-8') ?>" <?= ($formSubSelect === (string)$so) ? 'selected' : '' ?>>
-                                            <?= htmlspecialchars((string)$so, ENT_QUOTES, 'UTF-8') ?>
+                                        <?php
+                                        $soStr = (string)$so;
+                                        $pSo = gf_parse_stored_equipment_category($soStr);
+                                        $subOptLabel = ($pSo['main'] === $gfAcc && ($pSo['sub'] ?? '') !== '')
+                                            ? $pSo['sub']
+                                            : $soStr;
+                                        ?>
+                                        <option value="<?= htmlspecialchars($soStr, ENT_QUOTES, 'UTF-8') ?>" <?= ($formSubSelect === $soStr) ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($subOptLabel, ENT_QUOTES, 'UTF-8') ?>
                                         </option>
                                     <?php endforeach; ?>
                                     <option value="__new__">תת־קטגוריה חדשה…</option>

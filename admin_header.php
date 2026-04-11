@@ -724,7 +724,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <a href="admin_orders.php"><?= htmlspecialchars($navLabels['orders'], ENT_QUOTES, 'UTF-8') ?></a>
                 <?php endif; ?>
                 <div class="main-nav-item-wrapper">
-                    <a href="#">נהלים</a>
+                    <a href="#">הודעות</a>
                     <div class="main-nav-sub">
                         <a href="warehouse_rules.php">נהלי מחסן</a>
                         <?php foreach ($customDocs as $doc): ?>

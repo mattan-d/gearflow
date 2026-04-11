@@ -16,6 +16,13 @@ $canEdit = in_array($role, ['admin', 'warehouse_manager'], true);
 
 $pdo = get_db();
 
+$openingSettings = [
+    'as_home'       => gf_app_setting($pdo, 'opening_message_as_home', '0'),
+    'until_enabled' => gf_app_setting($pdo, 'opening_message_until_enabled', '0'),
+    'until_date'    => gf_app_setting($pdo, 'opening_message_until_date', ''),
+    'allow_dismiss' => gf_app_setting($pdo, 'opening_allow_student_dismiss', '0'),
+];
+
 // הגדרת מסמכים בסיסיים ושמירתם לקבצים פשוטים
 $docDir = __DIR__ . '/documents';
 if (!is_dir($docDir)) {
@@ -32,6 +39,11 @@ $documents = [
         'title'   => 'נוהלי מחסן',
         'file'    => $docDir . '/warehouse_rules.txt',
         'default' => "נוהלי מחסן - טיוטה בסיסית\n\n1. הוצאת ציוד מהמחסן מתבצעת רק לאחר הזמנה מאושרת במערכת.\n2. יש להגיע בזמן שנקבע לקבלת הציוד ולהזדהות באמצעות תעודה מתאימה.\n3. האחריות לשלמות הציוד מרגע קבלתו ועד החזרתו חלה על השואל.\n4. אין להעביר ציוד בין סטודנטים ללא תיאום ואישור מנהל המחסן.\n5. החזרת ציוד תתבצע נקי, תקין ובאריזה המקורית ככל הניתן.\n6. איחור בהחזרה או נזק לציוד עלולים להביא לחיוב כספי ולהגבלת השאלות עתידיות.\n7. יש לפעול בהתאם להוראות הבטיחות והשימוש שמופיעות על הציוד או במסמכי ההדרכה.\n",
+    ],
+    'opening_message' => [
+        'title'   => 'הודעת פתיחה',
+        'file'    => $docDir . '/opening_message.txt',
+        'default' => "הודעת פתיחה\n\nכאן ניתן לערוך טקסט שיוצג לסטודנטים כאשר מוגדר כדף הבית (בהגדרות למטה).",
     ],
 ];
 
@@ -181,6 +193,22 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 file_put_contents($documents[$docKey]['file'], $content);
                 $documents[$docKey]['content'] = $content;
+                if ($docKey === 'opening_message') {
+                    gf_set_app_setting($pdo, 'opening_message_as_home', !empty($_POST['opening_as_home']) ? '1' : '0');
+                    gf_set_app_setting($pdo, 'opening_message_until_enabled', !empty($_POST['opening_until_enabled']) ? '1' : '0');
+                    $ud = trim((string)($_POST['opening_until_date'] ?? ''));
+                    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $ud)) {
+                        $ud = '';
+                    }
+                    gf_set_app_setting($pdo, 'opening_message_until_date', $ud);
+                    gf_set_app_setting($pdo, 'opening_allow_student_dismiss', !empty($_POST['opening_allow_dismiss']) ? '1' : '0');
+                    $openingSettings = [
+                        'as_home'       => gf_app_setting($pdo, 'opening_message_as_home', '0'),
+                        'until_enabled' => gf_app_setting($pdo, 'opening_message_until_enabled', '0'),
+                        'until_date'    => gf_app_setting($pdo, 'opening_message_until_date', ''),
+                        'allow_dismiss' => gf_app_setting($pdo, 'opening_allow_student_dismiss', '0'),
+                    ];
+                }
                 $notice = 'המסמך "' . $documents[$docKey]['title'] . '" נשמר בהצלחה.';
             }
         }
@@ -875,6 +903,39 @@ if ($canEdit && $_SERVER['REQUEST_METHOD'] === 'POST') {
                             <p class="muted" style="margin-top:0.4rem;">
                                 שים לב: במסמך "הסכם השאלה" אין לשנות את שמות המשתנים במבנה `{...}` (כגון `{borrower_name}`, `{equipment_name}`, `{equipment_code}`, `{start_date}`, `{end_date}`). אפשר לערוך רק את הטקסט סביבם.
                             </p>
+                        <?php endif; ?>
+                        <?php if ($currentDocKey === 'opening_message'): ?>
+                            <fieldset style="margin-top:1rem;border:1px solid #e5e7eb;border-radius:10px;padding:0.85rem 1rem;background:#fafafa;">
+                                <legend style="font-size:0.9rem;font-weight:600;padding:0 0.35rem;">הגדרות עמוד הבית (סטודנטים)</legend>
+                                <label style="display:flex;align-items:center;gap:0.45rem;margin-bottom:0.55rem;cursor:pointer;font-size:0.88rem;">
+                                    <input type="checkbox" name="opening_as_home" value="1" <?= $openingSettings['as_home'] === '1' ? 'checked' : '' ?>>
+                                    קבע בעמוד הבית
+                                </label>
+                                <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.5rem;margin-bottom:0.55rem;">
+                                    <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-size:0.88rem;">
+                                        <input type="checkbox" name="opening_until_enabled" value="1" id="opening_until_enabled"
+                                               <?= $openingSettings['until_enabled'] === '1' ? 'checked' : '' ?>>
+                                        קבע כעמוד הבית עד
+                                    </label>
+                                    <input type="date" name="opening_until_date" id="opening_until_date"
+                                           value="<?= htmlspecialchars($openingSettings['until_date'], ENT_QUOTES, 'UTF-8') ?>"
+                                           style="padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.88rem;">
+                                </div>
+                                <label style="display:flex;align-items:center;gap:0.45rem;cursor:pointer;font-size:0.88rem;">
+                                    <input type="checkbox" name="opening_allow_dismiss" value="1" <?= $openingSettings['allow_dismiss'] === '1' ? 'checked' : '' ?>>
+                                    אפשר לסטודנט לבטל עמוד בית (כפתור «לא להציג שוב»)
+                                </label>
+                            </fieldset>
+                            <script>
+                            (function () {
+                                var u = document.getElementById('opening_until_enabled');
+                                var d = document.getElementById('opening_until_date');
+                                if (!u || !d) return;
+                                function sync() { d.disabled = !u.checked; }
+                                u.addEventListener('change', sync);
+                                sync();
+                            })();
+                            </script>
                         <?php endif; ?>
                         <button type="submit" class="btn" style="margin-top:0.6rem;">שמירת מסמך</button>
                     </form>

@@ -89,6 +89,55 @@ function get_db(): PDO
     return $pdo;
 }
 
+function gf_app_setting(PDO $pdo, string $key, string $default = ''): string
+{
+    try {
+        $stmt = $pdo->prepare('SELECT value FROM app_settings WHERE key = :k LIMIT 1');
+        $stmt->execute([':k' => $key]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($row && isset($row['value']) && is_string($row['value'])) {
+            return trim($row['value']);
+        }
+    } catch (Throwable $e) {
+        // ignore
+    }
+
+    return $default;
+}
+
+function gf_set_app_setting(PDO $pdo, string $key, string $value): void
+{
+    $stmt = $pdo->prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (:k, :v)');
+    $stmt->execute([':k' => $key, ':v' => $value]);
+}
+
+/**
+ * האם סטודנט אמור לראות את הודעת הפתיחה כדף הבית (לפי הגדרות + תאריך + עוגייה).
+ */
+function gf_student_should_use_opening_home(PDO $pdo): bool
+{
+    if (gf_app_setting($pdo, 'opening_message_as_home', '0') !== '1') {
+        return false;
+    }
+    if (gf_app_setting($pdo, 'opening_message_until_enabled', '0') === '1') {
+        $until = gf_app_setting($pdo, 'opening_message_until_date', '');
+        if ($until === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $until)) {
+            return false;
+        }
+        if (date('Y-m-d') > $until) {
+            return false;
+        }
+    }
+    if (gf_app_setting($pdo, 'opening_allow_student_dismiss', '0') === '1') {
+        $c = $_COOKIE['gf_opening_home_dismissed'] ?? '';
+        if ($c === '1') {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 /**
  * מחזיר את דף הבית עבור תפקיד משתמש נתון.
  * התוצאה היא נתיב יחסי בתוך האפליקציה (ללא domain).
@@ -100,6 +149,9 @@ function get_home_route_for_role(string $role): string
 
     try {
         $pdo = get_db();
+        if ($role === 'student' && gf_student_should_use_opening_home($pdo)) {
+            return 'opening_message.php';
+        }
         $key = ($role === 'admin') ? 'home_admin' : 'home_student';
         $stmt = $pdo->prepare('SELECT value FROM app_settings WHERE key = :k LIMIT 1');
         $stmt->execute([':k' => $key]);
@@ -204,6 +256,40 @@ function gf_format_equipment_category(string $main, string $sub = ''): string
     return $main . gf_equipment_category_sep() . $sub;
 }
 
+/**
+ * שמות שמופיעים רק כתת־קטגוריה תחת «ציוד נלווה» — לא כקטגוריה ראשית ברשימת הבחירה בטופס ציוד.
+ *
+ * @return list<string>
+ */
+function gf_equipment_accessories_sub_labels_only(): array
+{
+    return ['חצובה', 'מיקרופון', 'פנס', 'תאורה'];
+}
+
+/**
+ * ממיר ערך ישן (שם תת־בלבד ללא קטגוריית על) לפורמט מלא לתצוגה בטופס.
+ */
+function gf_normalize_equipment_category_for_form(string $stored): string
+{
+    $stored = trim($stored);
+    if ($stored === '') {
+        return '';
+    }
+    $parsed = gf_parse_stored_equipment_category($stored);
+    if (($parsed['sub'] ?? '') !== '') {
+        return $stored;
+    }
+    $main = $parsed['main'] ?? '';
+    if ($main === '') {
+        return $stored;
+    }
+    if (in_array($main, gf_equipment_accessories_sub_labels_only(), true)) {
+        return gf_format_equipment_category(gf_equipment_category_accessories_main(), $main);
+    }
+
+    return $stored;
+}
+
 /** רישום שם קטגוריה מלא בטבלת הקטגוריות (לרשימות נפתחות) */
 function gf_register_equipment_category_name(PDO $pdo, string $fullName): void
 {
@@ -268,6 +354,7 @@ function gf_run_equipment_category_tree_migration(PDO $pdo): void
         $acc,
         $acc . $sep . 'חצובה',
         $acc . $sep . 'מיקרופון',
+        $acc . $sep . 'פנס',
         $acc . $sep . 'תאורה',
     ];
     $ins = $pdo->prepare('INSERT OR IGNORE INTO equipment_categories (name) VALUES (:n)');
@@ -284,6 +371,7 @@ function gf_run_equipment_category_tree_migration(PDO $pdo): void
         'מצלמות'      => 'מצלמות',
         'מיקרופון'    => $acc . $sep . 'מיקרופון',
         'חצובה'       => $acc . $sep . 'חצובה',
+        'פנס'         => $acc . $sep . 'פנס',
         'תאורה'       => $acc . $sep . 'תאורה',
     ];
     foreach ($mapDirect as $from => $to) {
