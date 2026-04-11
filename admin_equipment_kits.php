@@ -31,14 +31,41 @@ try {
     $error = 'שגיאה בטעינת ציוד.';
 }
 
+/** @var list<array{id:int,name:string,code:string,category:string}> */
+$accessoriesForGrid = $accessories;
+
 $selectedCameraId = isset($_GET['camera_id']) ? (int)$_GET['camera_id'] : 0;
 if ($selectedCameraId < 1 && !empty($cameras)) {
     $selectedCameraId = (int)($cameras[0]['id'] ?? 0);
 }
 
 $selectedKitIds = [];
+/** @var array<int, true> פריט נלווה שכבר משויך לערכה של מצלמה אחרת (לא להציג בטופס של המצלמה הנוכחית) */
+$accessoryReservedElsewhere = [];
 if ($selectedCameraId > 0) {
     $selectedKitIds = gf_equipment_kit_item_ids($pdo, $selectedCameraId);
+    try {
+        $stReserve = $pdo->prepare(
+            'SELECT eki.equipment_id
+             FROM equipment_kit_items eki
+             INNER JOIN equipment_kits ek ON ek.id = eki.kit_id
+             WHERE ek.camera_equipment_id != :cid'
+        );
+        $stReserve->execute([':cid' => $selectedCameraId]);
+        foreach ($stReserve->fetchAll(PDO::FETCH_COLUMN, 0) as $rid) {
+            $accessoryReservedElsewhere[(int)$rid] = true;
+        }
+    } catch (Throwable $e) {
+        $accessoryReservedElsewhere = [];
+    }
+    $accessoriesForGrid = [];
+    foreach ($accessories as $a) {
+        $aid = (int)($a['id'] ?? 0);
+        if ($aid > 0 && isset($accessoryReservedElsewhere[$aid]) && !in_array($aid, $selectedKitIds, true)) {
+            continue;
+        }
+        $accessoriesForGrid[] = $a;
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_kit') {
@@ -69,6 +96,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 $c2 = trim((string)$stmt2->fetchColumn());
                 if (!gf_is_accessories_equipment_category($c2)) {
                     $error = 'בערכה ניתן לכלול רק ציוד נלווה.';
+                    break;
+                }
+                $stmtO = $pdo->prepare(
+                    'SELECT ek.camera_equipment_id
+                     FROM equipment_kit_items eki
+                     INNER JOIN equipment_kits ek ON ek.id = eki.kit_id
+                     WHERE eki.equipment_id = :eid AND ek.camera_equipment_id != :cam
+                     LIMIT 1'
+                );
+                $stmtO->execute([':eid' => $kid, ':cam' => $camId]);
+                $otherCam = (int)$stmtO->fetchColumn();
+                if ($otherCam > 0) {
+                    $error = 'פריט נלווה כבר משויך לערכה של מצלמה אחרת. יש להסיר אותו מהערכה הקודמת לפני השיוך כאן.';
                     break;
                 }
             }
@@ -136,7 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 <main>
     <div class="card">
         <h1>ניהול ערכות</h1>
-        <p class="muted">לכל מצלמה ניתן להגדיר ערכה — חבילת ציוד נלווה (חצובה, מיקרופון וכו׳). בהזמנה ניתן לסמן «להזמין עם הערכה» כדי לכלול את כל הפריטים האלה.</p>
+        <p class="muted">לכל מצלמה ניתן להגדיר ערכה — חבילת ציוד נלווה (חצובה, מיקרופון וכו׳). בהזמנה ניתן לסמן «להזמין עם הערכה» כדי לכלול את כל הפריטים האלה. כל פריט נלווה יכול להשתייך לערכה של מצלמה אחת בלבד — פריטים שכבר משויכים למצלמה אחרת לא יופיעו ברשימה.</p>
         <?php if ($error !== ''): ?>
             <div class="flash err"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
@@ -167,9 +207,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 <label>פריטים בערכה (ציוד נלווה)</label>
                 <?php if (empty($accessories)): ?>
                     <p class="muted">אין פריטי ציוד נלווה מוגדרים. הוסיפו קטגוריית נלווה ב«ניהול ציוד».</p>
+                <?php elseif (empty($accessoriesForGrid)): ?>
+                    <p class="muted">כל פריטי הנלווה כבר משויכים לערכות של מצלמות אחרות. הסירו פריט מערכה אחרת כדי לשייך אותו למצלמה זו.</p>
                 <?php else: ?>
                     <div class="kit-grid">
-                        <?php foreach ($accessories as $a): ?>
+                        <?php foreach ($accessoriesForGrid as $a): ?>
                             <?php $aid = (int)($a['id'] ?? 0); ?>
                             <label class="kit-item">
                                 <input type="checkbox" name="kit_item[]" value="<?= $aid ?>"
