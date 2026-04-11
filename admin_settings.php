@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/google_mail.php';
+require_once __DIR__ . '/order_notifications.php';
 
 require_admin();
 
@@ -306,6 +307,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['google_disconnect_sub
     }
 }
 
+// התראות הזמנה (תלמיד / מנהל — פנימי ומייל)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_notifications_submit'])) {
+    try {
+        foreach (gf_order_notify_setting_keys() as $k) {
+            $internal = isset($_POST['notify_order'][$k]['internal']) ? '1' : '0';
+            $email    = isset($_POST['notify_order'][$k]['email']) ? '1' : '0';
+            gf_set_app_setting($pdo, 'notify_order_' . $k . '_internal', $internal);
+            gf_set_app_setting($pdo, 'notify_order_' . $k . '_email', $email);
+        }
+        $success = 'הגדרות התראות הזמנה נשמרו.';
+    } catch (Throwable $e) {
+        $error = 'שגיאה בשמירת הגדרות התראות.';
+    }
+}
+
 // מצב בדיקות: מחסן פתוח תמיד (עקיפת שעות פעילות)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['always_open_submit'])) {
     $alwaysOpenEnabled = isset($_POST['warehouse_always_open']) ? '1' : '0';
@@ -498,6 +514,28 @@ $googleHasSecret    = trim($googleCfg['client_secret'] ?? '') !== '';
             background: #f9fafb;
             font-weight: 600;
         }
+        table.notify-order-table {
+            width: 100%;
+            max-width: 720px;
+            border-collapse: collapse;
+            margin-top: 0.5rem;
+        }
+        table.notify-order-table th,
+        table.notify-order-table td {
+            border: 1px solid #e5e7eb;
+            padding: 0.4rem 0.5rem;
+            font-size: 0.9rem;
+            text-align: right;
+            vertical-align: middle;
+        }
+        table.notify-order-table th {
+            background: #f9fafb;
+            font-weight: 600;
+        }
+        table.notify-order-table td.chk {
+            text-align: center;
+            width: 110px;
+        }
         .google-mail-section label {
             display: block;
             font-size: 0.9rem;
@@ -647,6 +685,69 @@ $googleHasSecret    = trim($googleCfg['client_secret'] ?? '') !== '';
                     <span>מחסן פתוח תמיד</span>
                 </label>
                 <button type="submit" name="always_open_submit" value="1" class="btn">שמירת הגדרה</button>
+            </form>
+        </div>
+
+        <div class="status-section">
+            <h3 style="margin-top:1.5rem;margin-bottom:0.5rem;font-size:1.05rem;">התראות הזמנה</h3>
+            <p class="muted-small">
+                בחרו לכל סוג אירוע האם לשלוח התראה פנימית במערכת ו/או מייל (נדרש חיבור Google בהגדרות למעלה).
+                מייל לסטודנט נשלח רק אם למשתמש יש כתובת תקינה וסומן &quot;מאשר קבלת מיילים&quot; בפרופיל.
+            </p>
+            <form method="post" action="admin_settings.php" style="margin-top:0.75rem;">
+                <h4 style="margin:0.75rem 0 0.35rem;font-size:0.98rem;color:#374151;">תלמיד</h4>
+                <table class="notify-order-table">
+                    <thead>
+                    <tr>
+                        <th>אירוע</th>
+                        <th class="chk">התראה פנימית</th>
+                        <th class="chk">מייל</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($notifyOrderLabelsStudent as $nk => $label): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></td>
+                            <td class="chk">
+                                <input type="checkbox" name="notify_order[<?= htmlspecialchars($nk, ENT_QUOTES, 'UTF-8') ?>][internal]" value="1"
+                                    <?= !empty($notifyOrderState[$nk]['internal']) ? 'checked' : '' ?>>
+                            </td>
+                            <td class="chk">
+                                <input type="checkbox" name="notify_order[<?= htmlspecialchars($nk, ENT_QUOTES, 'UTF-8') ?>][email]" value="1"
+                                    <?= !empty($notifyOrderState[$nk]['email']) ? 'checked' : '' ?>>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <h4 style="margin:1rem 0 0.35rem;font-size:0.98rem;color:#374151;">מנהל / מנהל מחסן</h4>
+                <table class="notify-order-table">
+                    <thead>
+                    <tr>
+                        <th>אירוע</th>
+                        <th class="chk">התראה פנימית</th>
+                        <th class="chk">מייל</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($notifyOrderLabelsAdmin as $nk => $label): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></td>
+                            <td class="chk">
+                                <input type="checkbox" name="notify_order[<?= htmlspecialchars($nk, ENT_QUOTES, 'UTF-8') ?>][internal]" value="1"
+                                    <?= !empty($notifyOrderState[$nk]['internal']) ? 'checked' : '' ?>>
+                            </td>
+                            <td class="chk">
+                                <input type="checkbox" name="notify_order[<?= htmlspecialchars($nk, ENT_QUOTES, 'UTF-8') ?>][email]" value="1"
+                                    <?= !empty($notifyOrderState[$nk]['email']) ? 'checked' : '' ?>>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <button type="submit" name="order_notifications_submit" value="1" class="btn" style="margin-top:0.85rem;">
+                    שמירת התראות הזמנה
+                </button>
             </form>
         </div>
 

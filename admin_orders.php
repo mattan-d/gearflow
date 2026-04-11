@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/order_mail.php';
+require_once __DIR__ . '/order_notifications.php';
 
 require_admin_or_warehouse();
 
@@ -60,72 +61,14 @@ if ($prefillStartTime !== '' && !$prefillNoEnd) {
     $prefillEndTime = sprintf('%02d:%02d', intdiv((int)$mins2, 60), ((int)$mins2) % 60);
 }
 
-/**
- * יצירת התראה חדשה.
- *
- * @param PDO         $pdo
- * @param int|null    $userId  אם לא null – התראה למשתמש ספציפי
- * @param string|null $role    אם userId null – התראה לכל בעלי התפקיד הזה
- * @param string      $message טקסט ההתראה
- * @param string|null $link    קישור רלוונטי (אופציונלי)
- */
 function create_notification(PDO $pdo, ?int $userId, ?string $role, string $message, ?string $link = null): void
 {
-    try {
-        $stmt = $pdo->prepare(
-            'INSERT INTO notifications (user_id, role, message, link, is_read, created_at)
-             VALUES (:user_id, :role, :message, :link, 0, :created_at)'
-        );
-        $stmt->execute([
-            ':user_id'    => $userId,
-            ':role'       => $userId === null ? $role : null,
-            ':message'    => $message,
-            ':link'       => $link,
-            ':created_at' => date('Y-m-d H:i:s'),
-        ]);
-    } catch (Throwable $e) {
-        // לא מפילים את הדף במקרה של שגיאת התראה
-    }
+    gf_notification_create($pdo, $userId, $role, $message, $link);
 }
 
-/**
- * איתור מזהה הסטודנט לקבלת התראה על שינוי סטטוס.
- * קודם לפי creator_username, ואם חסר/לא נמצא – לפי borrower_name (שם משתמש או שם מלא).
- */
 function resolve_student_user_id_for_notification(PDO $pdo, string $creatorUsername, string $borrowerName): int
 {
-    try {
-        if ($creatorUsername !== '') {
-            $stmt = $pdo->prepare("SELECT id FROM users WHERE username = :u AND role = 'student' LIMIT 1");
-            $stmt->execute([':u' => $creatorUsername]);
-            $id = (int)($stmt->fetchColumn() ?: 0);
-            if ($id > 0) {
-                return $id;
-            }
-        }
-
-        if ($borrowerName !== '') {
-            $stmt = $pdo->prepare(
-                "SELECT id
-                 FROM users
-                 WHERE role = 'student'
-                   AND (
-                       username = :borrower
-                       OR TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')) = :borrower
-                   )
-                 LIMIT 1"
-            );
-            $stmt->execute([':borrower' => $borrowerName]);
-            $id = (int)($stmt->fetchColumn() ?: 0);
-            if ($id > 0) {
-                return $id;
-            }
-        }
-    } catch (Throwable $e) {
-        // לא מפילים את הזרימה אם לא מצאנו נמען
-    }
-
-    return 0;
+    return gf_resolve_student_user_id_for_notification($pdo, $creatorUsername, $borrowerName);
 }
 $error    = '';
 $success  = '';
@@ -707,8 +650,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $creatorName = (string)($me['username'] ?? ($me['first_name'] ?? 'סטודנט'));
                                 $msg = 'סטודנט ' . $creatorName . ' יצר הזמנה מחזורית חדשה.';
                                 $link = 'admin_orders.php?tab=pending';
-                                create_notification($pdo, null, 'admin', $msg, $link);
-                                create_notification($pdo, null, 'warehouse_manager', $msg, $link);
+                                gf_notify_admins_order_event($pdo, 'adm_new_order', $msg, $link);
                             }
 
                             if ($role === 'student') {
@@ -770,8 +712,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $creatorName = (string)($me['username'] ?? ($me['first_name'] ?? 'סטודנט'));
                         $msg = 'סטודנט ' . $creatorName . ' יצר הזמנה חדשה.';
                         $link = 'admin_orders.php?tab=pending';
-                        create_notification($pdo, null, 'admin', $msg, $link);
-                        create_notification($pdo, null, 'warehouse_manager', $msg, $link);
+                        gf_notify_admins_order_event($pdo, 'adm_new_order', $msg, $link);
+                    }
+
+                    // הזמנה שנוצרה על ידי מנהל — התראה לסטודנט (שאול)
+                    if ($role !== 'student') {
+                        $sidPlaced = gf_resolve_student_user_id_for_notification($pdo, '', $borrowerName);
+                        if ($sidPlaced > 0) {
+                            gf_notify_student_order_event(
+                                $pdo,
+                                $sidPlaced,
+                                'stu_admin_placed',
+                                'נפתחה עבורך הזמנה חדשה על ידי המחסן.',
+                                'admin_orders.php',
+                                $newOrderId,
+                                'הזמנה חדשה #' . $newOrderId,
+                                'נפתחה עבורך הזמנה במערכת:'
+                            );
+                        }
                     }
 
                     // לאחר יצירת הזמנה – סוגרים את הטופס תמיד ע\"י רענון לדף הרשימה
@@ -1099,6 +1057,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
 
                     if ($error === '') {
+                        $oldEquipIdsSorted = [];
+                        $newEquipIdsSorted = [];
+                        if ($action === 'update' && $id > 0) {
+                            $stmtOldOe = $pdo->prepare('SELECT equipment_id FROM order_equipment WHERE order_id = :oid');
+                            $stmtOldOe->execute([':oid' => $id]);
+                            $oldEquipIdsSorted = array_map('intval', $stmtOldOe->fetchAll(PDO::FETCH_COLUMN) ?: []);
+                            $primOld = (int)($orderRow['equipment_id'] ?? 0);
+                            if ($primOld > 0) {
+                                $oldEquipIdsSorted = array_values(array_unique(array_filter(array_merge([$primOld], $oldEquipIdsSorted), static fn ($x) => (int)$x > 0)));
+                            }
+                            sort($oldEquipIdsSorted);
+                            $newEquipIdsSorted = $equipmentIds;
+                            sort($newEquipIdsSorted);
+                        }
                         $stmt = $pdo->prepare(
                             'UPDATE orders
                              SET equipment_id               = :equipment_id,
@@ -1190,6 +1162,86 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $success = 'הזמנה עודכנה בהצלחה.';
                         if ($role === 'student') {
                             gf_try_mail_student_order_event($pdo, $me, $id, 'updated');
+                            $creatorNameStu = (string)($me['username'] ?? ($me['first_name'] ?? 'סטודנט'));
+                            gf_notify_admins_order_event(
+                                $pdo,
+                                'adm_student_changed',
+                                'סטודנט ' . $creatorNameStu . ' עדכן הזמנה #' . $id . '.',
+                                'admin_orders.php?tab=pending'
+                            );
+                        } elseif (
+                            $action === 'update'
+                            && $id > 0
+                            && !$isSpecialStatusUpdate
+                            && in_array($role, ['admin', 'warehouse_manager'], true)
+                        ) {
+                            $studentIdN = gf_resolve_student_user_id_for_notification($pdo, $creatorUsername, $borrowerNameForNotification);
+                            if ($studentIdN > 0) {
+                                $didApprove = ($currentStatus === 'pending' && $newStatus === 'approved');
+                                $didReject  = ($currentStatus !== 'rejected' && $newStatus === 'rejected');
+                                $didDelete  = ($currentStatus !== 'deleted' && $newStatus === 'deleted');
+                                if ($didApprove) {
+                                    gf_notify_student_order_event(
+                                        $pdo,
+                                        $studentIdN,
+                                        'stu_approve',
+                                        'ההזמנה שלך אושרה.',
+                                        'admin_orders.php',
+                                        $id,
+                                        'הזמנה #' . $id . ' אושרה',
+                                        'ההזמנה שלך אושרה.'
+                                    );
+                                } elseif ($didReject) {
+                                    gf_notify_student_order_event(
+                                        $pdo,
+                                        $studentIdN,
+                                        'stu_reject',
+                                        'ההזמנה שלך נדחתה.',
+                                        'admin_orders.php',
+                                        $id,
+                                        'הזמנה #' . $id . ' נדחתה',
+                                        'ההזמנה שלך נדחתה.'
+                                    );
+                                } elseif ($didDelete) {
+                                    gf_notify_student_order_event(
+                                        $pdo,
+                                        $studentIdN,
+                                        'stu_delete',
+                                        'ההזמנה שלך נמחקה.',
+                                        'admin_orders.php',
+                                        $id,
+                                        'הזמנה #' . $id . ' נמחקה',
+                                        'ההזמנה שלך נמחקה מהמערכת.'
+                                    );
+                                } elseif (
+                                    gf_order_admin_meaningful_content_change(
+                                        $orderRow,
+                                        $borrowerName,
+                                        $borrowerContact,
+                                        $startDate,
+                                        $endDate,
+                                        $startTime,
+                                        $endTime,
+                                        $notes,
+                                        $purpose,
+                                        $adminNotesToSave,
+                                        $equipmentId,
+                                        $newEquipIdsSorted,
+                                        $oldEquipIdsSorted
+                                    )
+                                ) {
+                                    gf_notify_student_order_event(
+                                        $pdo,
+                                        $studentIdN,
+                                        'stu_edit_admin',
+                                        'פרטי ההזמנה שלך עודכנו על ידי המחסן.',
+                                        'admin_orders.php',
+                                        $id,
+                                        'עדכון הזמנה #' . $id,
+                                        'פרטי ההזמנה עודכנו על ידי המחסן:'
+                                    );
+                                }
+                            }
                         }
                     }
 
@@ -1323,6 +1375,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 $success = 'סטטוס ההזמנה עודכן.';
 
+                if ($currentStatus !== null && $status !== $currentStatus) {
+                    $studentIdQuick = resolve_student_user_id_for_notification($pdo, $creatorUsername, $borrowerNameForNotification);
+                    if ($studentIdQuick > 0) {
+                        if ($status === 'approved' && $currentStatus === 'pending') {
+                            gf_notify_student_order_event(
+                                $pdo,
+                                $studentIdQuick,
+                                'stu_approve',
+                                'ההזמנה שלך אושרה.',
+                                'admin_orders.php',
+                                $id,
+                                'הזמנה #' . $id . ' אושרה',
+                                'ההזמנה שלך אושרה.'
+                            );
+                        } elseif ($status === 'rejected') {
+                            gf_notify_student_order_event(
+                                $pdo,
+                                $studentIdQuick,
+                                'stu_reject',
+                                'ההזמנה שלך נדחתה.',
+                                'admin_orders.php',
+                                $id,
+                                'הזמנה #' . $id . ' נדחתה',
+                                'ההזמנה שלך נדחתה.'
+                            );
+                        } elseif ($status === 'deleted') {
+                            gf_notify_student_order_event(
+                                $pdo,
+                                $studentIdQuick,
+                                'stu_delete',
+                                'ההזמנה שלך נמחקה.',
+                                'admin_orders.php',
+                                $id,
+                                'הזמנה #' . $id . ' נמחקה',
+                                'ההזמנה שלך נמחקה מהמערכת.'
+                            );
+                        }
+                    }
+                }
+
                 // התראה לסטודנט על שינוי סטטוס (גם בעדכון מתוך הטבלה)
                 if ($currentStatus !== null && $status !== $currentStatus && in_array($status, ['ready', 'returned'], true)) {
                     $studentId = resolve_student_user_id_for_notification($pdo, $creatorUsername, $borrowerNameForNotification);
@@ -1419,6 +1511,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':id'         => $id,
                 ]);
 
+                if ($currentStatus !== null && $status !== $currentStatus) {
+                    $studentIdBulk = resolve_student_user_id_for_notification($pdo, $creatorUsername, $borrowerNameForNotification);
+                    if ($studentIdBulk > 0) {
+                        if ($status === 'approved' && $currentStatus === 'pending') {
+                            gf_notify_student_order_event(
+                                $pdo,
+                                $studentIdBulk,
+                                'stu_approve',
+                                'ההזמנה שלך אושרה.',
+                                'admin_orders.php',
+                                $id,
+                                'הזמנה #' . $id . ' אושרה',
+                                'ההזמנה שלך אושרה.'
+                            );
+                        } elseif ($status === 'rejected') {
+                            gf_notify_student_order_event(
+                                $pdo,
+                                $studentIdBulk,
+                                'stu_reject',
+                                'ההזמנה שלך נדחתה.',
+                                'admin_orders.php',
+                                $id,
+                                'הזמנה #' . $id . ' נדחתה',
+                                'ההזמנה שלך נדחתה.'
+                            );
+                        } elseif ($status === 'deleted') {
+                            gf_notify_student_order_event(
+                                $pdo,
+                                $studentIdBulk,
+                                'stu_delete',
+                                'ההזמנה שלך נמחקה.',
+                                'admin_orders.php',
+                                $id,
+                                'הזמנה #' . $id . ' נמחקה',
+                                'ההזמנה שלך נמחקה מהמערכת.'
+                            );
+                        }
+                    }
+                }
+
                 // התראה לסטודנט על שינוי סטטוס בעדכון מרובה
                 if ($currentStatus !== null && $status !== $currentStatus && in_array($status, ['ready', 'returned'], true)) {
                     $studentId = resolve_student_user_id_for_notification($pdo, $creatorUsername, $borrowerNameForNotification);
@@ -1457,8 +1589,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $todayYmd = date('Y-m-d');
 
             if ($deleteScope === 'single') {
+                $stmtPreDel = $pdo->prepare(
+                    'SELECT creator_username, borrower_name FROM orders WHERE id = :id AND status != \'deleted\' LIMIT 1'
+                );
+                $stmtPreDel->execute([':id' => $id]);
+                $delMeta = $stmtPreDel->fetch(PDO::FETCH_ASSOC);
                 $stmt = $pdo->prepare("UPDATE orders SET status = 'deleted', updated_at = :u WHERE id = :id AND status != 'deleted'");
                 $stmt->execute([':u' => $now, ':id' => $id]);
+                if ($delMeta && $stmt->rowCount() > 0) {
+                    $stuDel = gf_resolve_student_user_id_for_notification(
+                        $pdo,
+                        (string)($delMeta['creator_username'] ?? ''),
+                        (string)($delMeta['borrower_name'] ?? '')
+                    );
+                    if ($stuDel > 0) {
+                        gf_notify_student_order_event(
+                            $pdo,
+                            $stuDel,
+                            'stu_delete',
+                            'ההזמנה שלך נמחקה.',
+                            'admin_orders.php',
+                            $id,
+                            'הזמנה #' . $id . ' נמחקה',
+                            'ההזמנה שלך נמחקה מהמערכת.'
+                        );
+                    }
+                }
                 $success = 'ההזמנה סומנה כנמחקה.';
             } else {
                 $q = $pdo->prepare('SELECT recurring_series_id FROM orders WHERE id = :id LIMIT 1');
@@ -1466,21 +1622,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $sid = $q->fetchColumn();
                 $seriesId = ($sid !== false && $sid !== null) ? (int)$sid : 0;
                 if ($seriesId <= 0) {
+                    $stmtPreDel = $pdo->prepare(
+                        'SELECT creator_username, borrower_name FROM orders WHERE id = :id AND status != \'deleted\' LIMIT 1'
+                    );
+                    $stmtPreDel->execute([':id' => $id]);
+                    $delMeta = $stmtPreDel->fetch(PDO::FETCH_ASSOC);
                     $stmt = $pdo->prepare("UPDATE orders SET status = 'deleted', updated_at = :u WHERE id = :id AND status != 'deleted'");
                     $stmt->execute([':u' => $now, ':id' => $id]);
+                    if ($delMeta && $stmt->rowCount() > 0) {
+                        $stuDel = gf_resolve_student_user_id_for_notification(
+                            $pdo,
+                            (string)($delMeta['creator_username'] ?? ''),
+                            (string)($delMeta['borrower_name'] ?? '')
+                        );
+                        if ($stuDel > 0) {
+                            gf_notify_student_order_event(
+                                $pdo,
+                                $stuDel,
+                                'stu_delete',
+                                'ההזמנה שלך נמחקה.',
+                                'admin_orders.php',
+                                $id,
+                                'הזמנה #' . $id . ' נמחקה',
+                                'ההזמנה שלך נמחקה מהמערכת.'
+                            );
+                        }
+                    }
                     $success = 'ההזמנה סומנה כנמחקה.';
                 } elseif ($deleteScope === 'series') {
+                    $stmtList = $pdo->prepare(
+                        'SELECT id, creator_username, borrower_name FROM orders
+                         WHERE recurring_series_id = :sid AND status != \'deleted\''
+                    );
+                    $stmtList->execute([':sid' => $seriesId]);
+                    $delRows = $stmtList->fetchAll(PDO::FETCH_ASSOC) ?: [];
                     $stmt = $pdo->prepare(
                         "UPDATE orders SET status = 'deleted', updated_at = :u
                          WHERE recurring_series_id = :sid AND status != 'deleted'"
                     );
                     $stmt->execute([':u' => $now, ':sid' => $seriesId]);
                     $n = $stmt->rowCount();
+                    foreach ($delRows as $dr) {
+                        $oid = (int)($dr['id'] ?? 0);
+                        if ($oid <= 0) {
+                            continue;
+                        }
+                        $stuDel = gf_resolve_student_user_id_for_notification(
+                            $pdo,
+                            (string)($dr['creator_username'] ?? ''),
+                            (string)($dr['borrower_name'] ?? '')
+                        );
+                        if ($stuDel > 0) {
+                            gf_notify_student_order_event(
+                                $pdo,
+                                $stuDel,
+                                'stu_delete',
+                                'ההזמנה שלך נמחקה.',
+                                'admin_orders.php',
+                                $oid,
+                                'הזמנה #' . $oid . ' נמחקה',
+                                'ההזמנה שלך נמחקה מהמערכת.'
+                            );
+                        }
+                    }
                     $success = $n > 1
                         ? "סומנו {$n} הזמנות ברצף מחזורי #{$seriesId} כנמחקות."
                         : 'ההזמנה סומנה כנמחקה.';
                 } else {
                     // עתידיות: תאריך התחלה אחרי היום (באותו רצף)
+                    $stmtList = $pdo->prepare(
+                        'SELECT id, creator_username, borrower_name FROM orders
+                         WHERE recurring_series_id = :sid
+                           AND status != \'deleted\'
+                           AND date(start_date) > :today'
+                    );
+                    $stmtList->execute([':sid' => $seriesId, ':today' => $todayYmd]);
+                    $delRows = $stmtList->fetchAll(PDO::FETCH_ASSOC) ?: [];
                     $stmt = $pdo->prepare(
                         "UPDATE orders SET status = 'deleted', updated_at = :u
                          WHERE recurring_series_id = :sid
@@ -1489,6 +1706,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     );
                     $stmt->execute([':u' => $now, ':sid' => $seriesId, ':today' => $todayYmd]);
                     $n = $stmt->rowCount();
+                    foreach ($delRows as $dr) {
+                        $oid = (int)($dr['id'] ?? 0);
+                        if ($oid <= 0) {
+                            continue;
+                        }
+                        $stuDel = gf_resolve_student_user_id_for_notification(
+                            $pdo,
+                            (string)($dr['creator_username'] ?? ''),
+                            (string)($dr['borrower_name'] ?? '')
+                        );
+                        if ($stuDel > 0) {
+                            gf_notify_student_order_event(
+                                $pdo,
+                                $stuDel,
+                                'stu_delete',
+                                'ההזמנה שלך נמחקה.',
+                                'admin_orders.php',
+                                $oid,
+                                'הזמנה #' . $oid . ' נמחקה',
+                                'ההזמנה שלך נמחקה מהמערכת.'
+                            );
+                        }
+                    }
                     $success = $n > 0
                         ? "סומנו {$n} הזמנות עתידיות ברצף #{$seriesId} כנמחקות."
                         : 'לא נמצאו הזמנות עתידיות למחיקה ברצף זה.';
@@ -1538,8 +1778,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $upd->execute([':u' => date('Y-m-d H:i:s'), ':n' => $newNotes, ':id' => $id]);
                         gf_try_mail_student_order_event($pdo, $me, $id, 'cancelled');
                         $msg = 'סטודנט ביטל הזמנה #' . $id . ': ' . $reason;
-                        create_notification($pdo, null, 'admin', $msg, 'admin_orders.php?tab=pending');
-                        create_notification($pdo, null, 'warehouse_manager', $msg, 'admin_orders.php?tab=pending');
+                        gf_notify_admins_order_event($pdo, 'adm_student_cancelled', $msg, 'admin_orders.php?tab=pending');
                         $success = 'ההזמנה בוטלה.';
                         if ($currentTabCancel && in_array($currentTabCancel, ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history', 'rejected_deleted'], true)) {
                             $redir = 'admin_orders.php?tab=' . urlencode((string)$currentTabCancel);
@@ -1588,8 +1827,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':id' => $id,
                         ]);
                         $msg = 'בקשת מחיקה להזמנה #' . $id . ': ' . $reason;
-                        create_notification($pdo, null, 'admin', $msg, 'admin_orders.php?tab=pending');
-                        create_notification($pdo, null, 'warehouse_manager', $msg, 'admin_orders.php?tab=pending');
+                        gf_notify_admins_order_event($pdo, 'adm_cancel_request', $msg, 'admin_orders.php?tab=pending');
                         $success = 'בקשת המחיקה נשלחה למנהל.';
                         if ($currentTabDel && in_array($currentTabDel, ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history', 'rejected_deleted'], true)) {
                             $redir = 'admin_orders.php?tab=' . urlencode((string)$currentTabDel);
