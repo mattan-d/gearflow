@@ -148,6 +148,169 @@ function gf_daily_calendars_for_nav(PDO $pdo, string $role): array
     return [];
 }
 
+/** מפריד בין קטגוריה ראשית לתת־קטגוריה (למשל ציוד נלווה › חצובה) */
+function gf_equipment_category_sep(): string
+{
+    return ' › ';
+}
+
+/** קטגוריית על ראשונה: ציוד נלווה (עם תתי־קטגוריות אופציונליות) */
+function gf_equipment_category_accessories_main(): string
+{
+    return 'ציוד נלווה';
+}
+
+/**
+ * @return array{main:string, sub:string}
+ */
+function gf_parse_stored_equipment_category(string $stored): array
+{
+    $stored = trim($stored);
+    if ($stored === '') {
+        return ['main' => '', 'sub' => ''];
+    }
+    $sep = gf_equipment_category_sep();
+    if (function_exists('mb_strpos')) {
+        $pos = mb_strpos($stored, $sep, 0, 'UTF-8');
+        if ($pos === false) {
+            return ['main' => $stored, 'sub' => ''];
+        }
+        $main = trim(mb_substr($stored, 0, $pos, 'UTF-8'));
+        $sub = trim(mb_substr($stored, $pos + mb_strlen($sep, 'UTF-8'), null, 'UTF-8'));
+
+        return ['main' => $main, 'sub' => $sub];
+    }
+    $pos = strpos($stored, $sep);
+    if ($pos === false) {
+        return ['main' => $stored, 'sub' => ''];
+    }
+    $main = trim(substr($stored, 0, $pos));
+    $sub = trim(substr($stored, $pos + strlen($sep)));
+
+    return ['main' => $main, 'sub' => $sub];
+}
+
+function gf_format_equipment_category(string $main, string $sub = ''): string
+{
+    $main = trim($main);
+    $sub = trim($sub);
+    if ($main === '') {
+        return '';
+    }
+    if ($sub === '') {
+        return $main;
+    }
+
+    return $main . gf_equipment_category_sep() . $sub;
+}
+
+/** רישום שם קטגוריה מלא בטבלת הקטגוריות (לרשימות נפתחות) */
+function gf_register_equipment_category_name(PDO $pdo, string $fullName): void
+{
+    $fullName = trim($fullName);
+    if ($fullName === '' || $fullName === 'ללא קטגוריה') {
+        return;
+    }
+    try {
+        $stmt = $pdo->prepare('INSERT OR IGNORE INTO equipment_categories (name) VALUES (:n)');
+        $stmt->execute([':n' => $fullName]);
+    } catch (Throwable $e) {
+        // התעלמות
+    }
+}
+
+/**
+ * האם שורת category של ציוד תואמת לסינון יומן/רשימה (כולל קיבוץ כל "ציוד נלווה › …").
+ */
+function gf_equipment_category_matches_filter(string $equipmentCategory, string $filterCategory): bool
+{
+    $eq = trim($equipmentCategory);
+    $fil = trim($filterCategory);
+    if ($fil === '' || $fil === 'all') {
+        return true;
+    }
+    if ($fil === 'ללא קטגוריה') {
+        return $eq === '';
+    }
+    if ($eq === $fil) {
+        return true;
+    }
+    $acc = gf_equipment_category_accessories_main();
+    if ($fil === $acc) {
+        return $eq === $acc || str_starts_with($eq, $acc . gf_equipment_category_sep());
+    }
+
+    return false;
+}
+
+/**
+ * מיגרציית שמות קטגוריות (מצלמה→מצלמות, תתי־קטגוריה תחת ציוד נלווה) — פעם אחת.
+ */
+function gf_run_equipment_category_tree_migration(PDO $pdo): void
+{
+    try {
+        $stmt = $pdo->prepare('SELECT value FROM app_settings WHERE key = :k LIMIT 1');
+        $stmt->execute([':k' => 'equipment_category_tree_v1']);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (is_array($row) && trim((string)($row['value'] ?? '')) === '1') {
+            return;
+        }
+    } catch (Throwable $e) {
+        return;
+    }
+
+    $sep = gf_equipment_category_sep();
+    $acc = gf_equipment_category_accessories_main();
+
+    $defaults = [
+        'מצלמות',
+        'חדרי עריכה',
+        $acc,
+        $acc . $sep . 'חצובה',
+        $acc . $sep . 'מיקרופון',
+        $acc . $sep . 'תאורה',
+    ];
+    $ins = $pdo->prepare('INSERT OR IGNORE INTO equipment_categories (name) VALUES (:n)');
+    foreach ($defaults as $d) {
+        try {
+            $ins->execute([':n' => $d]);
+        } catch (Throwable $e) {
+            // ignore
+        }
+    }
+
+    $mapDirect = [
+        'מצלמה'       => 'מצלמות',
+        'מצלמות'      => 'מצלמות',
+        'מיקרופון'    => $acc . $sep . 'מיקרופון',
+        'חצובה'       => $acc . $sep . 'חצובה',
+        'תאורה'       => $acc . $sep . 'תאורה',
+    ];
+    foreach ($mapDirect as $from => $to) {
+        try {
+            $up = $pdo->prepare('UPDATE equipment SET category = :to WHERE TRIM(COALESCE(category, \'\')) = :from');
+            $up->execute([':to' => $to, ':from' => $from]);
+        } catch (Throwable $e) {
+            // ignore
+        }
+    }
+
+    try {
+        $pdo->exec(
+            "UPDATE daily_calendars SET equipment_category = 'מצלמות' WHERE TRIM(equipment_category) IN ('מצלמה','מצלמות')"
+        );
+    } catch (Throwable $e) {
+        // ignore
+    }
+
+    try {
+        $stmtSet = $pdo->prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (:k, :v)');
+        $stmtSet->execute([':k' => 'equipment_category_tree_v1', ':v' => '1']);
+    } catch (Throwable $e) {
+        // ignore
+    }
+}
+
 function initialize_database(PDO $pdo): void
 {
     $pdo->exec(
@@ -460,7 +623,16 @@ function initialize_database(PDO $pdo): void
         }
         // ואם אין כלום – נוסיף קטגוריות בסיסיות
         if (empty($existingCats)) {
-            foreach (['מצלמה', 'מיקרופון', 'חצובה', 'תאורה'] as $baseCat) {
+            $sep0 = gf_equipment_category_sep();
+            $acc0 = gf_equipment_category_accessories_main();
+            foreach ([
+                'מצלמות',
+                'חדרי עריכה',
+                $acc0,
+                $acc0 . $sep0 . 'חצובה',
+                $acc0 . $sep0 . 'מיקרופון',
+                $acc0 . $sep0 . 'תאורה',
+            ] as $baseCat) {
                 $insertCat->execute([':n' => $baseCat]);
             }
         }
@@ -527,7 +699,7 @@ function initialize_database(PDO $pdo): void
                 'INSERT INTO daily_calendars (title, equipment_category, student_visible, sort_order) VALUES (:t, :c, :sv, :so)'
             );
             $insDc->execute([
-                ':t' => 'יומן מצלמות', ':c' => 'מצלמה', ':sv' => 1, ':so' => 1,
+                ':t' => 'יומן מצלמות', ':c' => 'מצלמות', ':sv' => 1, ':so' => 1,
             ]);
             $insDc->execute([
                 ':t' => 'יומן חדרי עריכה', ':c' => 'חדרי עריכה', ':sv' => 1, ':so' => 2,
@@ -659,6 +831,8 @@ function initialize_database(PDO $pdo): void
     } catch (Throwable $e) {
         // מתעלמים משגיאות מיגרציה של עמודות שירות/אחריות
     }
+
+    gf_run_equipment_category_tree_migration($pdo);
 
     // Ensure default admin user exists: admin / admin
     $stmt = $pdo->prepare('SELECT COUNT(*) AS cnt FROM users WHERE username = :username');

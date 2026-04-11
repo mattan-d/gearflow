@@ -5,7 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/auth.php';
 
 /** שם קטגוריית ציוד ליומן מצלמות — תאימות לכתובות ישנות (?calendar=cameras) */
-const GF_DAILY_CALENDAR_CATEGORY_CAMERAS = 'מצלמה';
+const GF_DAILY_CALENDAR_CATEGORY_CAMERAS = 'מצלמות';
 /** שם קטגוריית ציוד ליומן חדרי עריכה — תאימות לכתובות ישנות */
 const GF_DAILY_CALENDAR_CATEGORY_EDIT_ROOMS = 'חדרי עריכה';
 
@@ -168,10 +168,23 @@ try {
             $stmtEq = $pdo->prepare($sqlEq);
             $stmtEq->execute($paramsEq);
         } else {
-            $sqlEq = "SELECT id, name, code, TRIM(COALESCE(category,'')) AS category
-                      FROM equipment
-                      WHERE TRIM(COALESCE(category,'')) = :c";
-            $paramsEq = [':c' => $selectedCategory];
+            $accMain = gf_equipment_category_accessories_main();
+            $accSep = gf_equipment_category_sep();
+            if ($selectedCategory === $accMain) {
+                $sqlEq = "SELECT id, name, code, TRIM(COALESCE(category,'')) AS category
+                          FROM equipment
+                          WHERE TRIM(COALESCE(category,'')) = :c_exact
+                             OR TRIM(COALESCE(category,'')) LIKE :c_prefix";
+                $paramsEq = [
+                    ':c_exact' => $accMain,
+                    ':c_prefix' => $accMain . $accSep . '%',
+                ];
+            } else {
+                $sqlEq = "SELECT id, name, code, TRIM(COALESCE(category,'')) AS category
+                          FROM equipment
+                          WHERE TRIM(COALESCE(category,'')) = :c";
+                $paramsEq = [':c' => $selectedCategory];
+            }
             if ($searchQ !== '') {
                 $sqlEq .= " AND TRIM(COALESCE(name,'')) LIKE :q";
                 $paramsEq[':q'] = '%' . $searchQ . '%';

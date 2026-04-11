@@ -83,7 +83,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $purchaseDate = trim((string)($_POST['purchase_date'] ?? ''));
         $purchasePriceRaw = trim((string)($_POST['purchase_price'] ?? ''));
         $description  = trim($_POST['description'] ?? '');
-        $category     = trim($_POST['category'] ?? '');
+        $gfAcc = gf_equipment_category_accessories_main();
+        $mainSel = trim((string)($_POST['category_main'] ?? ''));
+        $subSel  = trim((string)($_POST['category_sub'] ?? ''));
+        $mainNew = trim((string)($_POST['category_main_new'] ?? ''));
+        $subNew  = trim((string)($_POST['category_sub_new'] ?? ''));
+        if ($mainSel === '__new__') {
+            $mainResolved = $mainNew;
+        } else {
+            $mainResolved = $mainSel;
+        }
+        $category = '';
+        if ($mainResolved === '') {
+            $category = '';
+        } elseif ($mainResolved === $gfAcc) {
+            if ($subSel === '__new__' && $subNew !== '') {
+                $category = gf_format_equipment_category($gfAcc, $subNew);
+            } elseif ($subSel === '__new__' && $subNew === '') {
+                $category = $gfAcc;
+            } elseif ($subSel === '' || $subSel === '_none_') {
+                $category = $gfAcc;
+            } else {
+                $category = $subSel;
+            }
+        } else {
+            $category = $mainResolved;
+        }
+        gf_register_equipment_category_name($pdo, $category);
         $location     = trim($_POST['location'] ?? '');
         $status       = $_POST['status'] ?? 'active';
         $serviceSupplierId = isset($_POST['service_supplier_id']) ? (int)$_POST['service_supplier_id'] : 0;
@@ -229,6 +255,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else {
                     $purchasePrice = (float)$purchasePriceRaw;
                 }
+            }
+            if ($error === '' && $mainSel === '__new__' && $mainNew === '') {
+                $error = 'יש להזין שם לקטגוריה הראשית החדשה.';
             }
         }
 
@@ -1168,6 +1197,61 @@ if (empty($bulkCategories)) {
 $isAdminForBulk = isset($me['role']) && ($me['role'] ?? '') === 'admin';
 $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
 
+$gfAcc = gf_equipment_category_accessories_main();
+$gfSep = gf_equipment_category_sep();
+$categoryMainOptions = ['מצלמות', 'חדרי עריכה', $gfAcc];
+try {
+    $stmtM = $pdo->prepare('SELECT name FROM equipment_categories WHERE instr(name, ?) = 0 ORDER BY name');
+    $stmtM->execute([$gfSep]);
+    foreach ($stmtM->fetchAll(PDO::FETCH_COLUMN) ?: [] as $mn) {
+        $mn = (string)$mn;
+        if ($mn !== '' && !in_array($mn, $categoryMainOptions, true)) {
+            $categoryMainOptions[] = $mn;
+        }
+    }
+} catch (Throwable $e) {
+}
+$categoryMainOptions = array_values(array_unique($categoryMainOptions));
+sort($categoryMainOptions, SORT_LOCALE_STRING);
+
+$categorySubOptions = [];
+try {
+    $stmtS = $pdo->prepare('SELECT name FROM equipment_categories WHERE name LIKE ? ORDER BY name');
+    $stmtS->execute([$gfAcc . $gfSep . '%']);
+    $categorySubOptions = $stmtS->fetchAll(PDO::FETCH_COLUMN) ?: [];
+} catch (Throwable $e) {
+}
+
+$eqCategoryCurrent = trim((string)($editingEquipment['category'] ?? ''));
+$parsedEqCat = gf_parse_stored_equipment_category($eqCategoryCurrent);
+$formMain = $parsedEqCat['main'];
+$formMainSelect = $formMain;
+$formMainNew = '';
+if ($formMain !== '' && !in_array($formMain, $categoryMainOptions, true)) {
+    $formMainSelect = '__new__';
+    $formMainNew = $formMain;
+    $categoryMainOptions[] = $formMain;
+    sort($categoryMainOptions, SORT_LOCALE_STRING);
+}
+if ($formMainSelect === '') {
+    $formMainSelect = 'מצלמות';
+}
+
+if ($formMain === $gfAcc && $eqCategoryCurrent !== '' && $eqCategoryCurrent !== $gfAcc && !in_array($eqCategoryCurrent, $categorySubOptions, true)) {
+    $categorySubOptions[] = $eqCategoryCurrent;
+    sort($categorySubOptions, SORT_LOCALE_STRING);
+}
+
+if ($formMain === $gfAcc) {
+    if ($eqCategoryCurrent === $gfAcc || ($parsedEqCat['sub'] ?? '') === '') {
+        $formSubSelect = '_none_';
+    } else {
+        $formSubSelect = $eqCategoryCurrent;
+    }
+} else {
+    $formSubSelect = '_none_';
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -1906,17 +1990,72 @@ $bulkWarehouse = trim((string)($me['warehouse'] ?? ''));
                         <?php endif; ?>
                     </div>
                     <div>
-                        <label for="category">קטגוריה</label>
-                        <?php
-                        $currentCategory = trim((string)($editingEquipment['category'] ?? ''));
-                        ?>
-                        <select id="category" name="category" <?= $isViewModeEq ? 'disabled' : '' ?>>
-                            <option value="">בחר קטגוריה...</option>
-                            <option value="מצלמה"   <?= $currentCategory === 'מצלמה'   ? 'selected' : '' ?>>מצלמה</option>
-                            <option value="מיקרופון" <?= $currentCategory === 'מיקרופון' ? 'selected' : '' ?>>מיקרופון</option>
-                            <option value="חצובה"   <?= $currentCategory === 'חצובה'   ? 'selected' : '' ?>>חצובה</option>
-                            <option value="תאורה"   <?= $currentCategory === 'תאורה'   ? 'selected' : '' ?>>תאורה</option>
-                        </select>
+                        <label for="category_main">קטגוריה</label>
+                        <?php if ($isViewModeEq): ?>
+                            <p style="margin:0.25rem 0 0;padding:0.4rem 0.5rem;border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;">
+                                <?= $eqCategoryCurrent !== '' ? htmlspecialchars($eqCategoryCurrent, ENT_QUOTES, 'UTF-8') : '—' ?>
+                            </p>
+                        <?php else: ?>
+                            <select id="category_main" name="category_main" style="margin-bottom:0.5rem;">
+                                <?php foreach ($categoryMainOptions as $mo): ?>
+                                    <option value="<?= htmlspecialchars($mo, ENT_QUOTES, 'UTF-8') ?>" <?= $formMainSelect === $mo ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($mo, ENT_QUOTES, 'UTF-8') ?>
+                                    </option>
+                                <?php endforeach; ?>
+                                <option value="__new__" <?= $formMainSelect === '__new__' ? 'selected' : '' ?>>קטגוריה ראשית חדשה…</option>
+                            </select>
+                            <div id="category_main_new_wrap" style="display:<?= $formMainSelect === '__new__' ? 'block' : 'none' ?>; margin-bottom:0.5rem;">
+                                <label for="category_main_new" class="muted-small" style="font-size:0.82rem;">שם קטגוריה ראשית חדשה</label>
+                                <input type="text"
+                                       id="category_main_new"
+                                       name="category_main_new"
+                                       value="<?= htmlspecialchars($formMainNew, ENT_QUOTES, 'UTF-8') ?>"
+                                       placeholder="למשל: אודיו"
+                                       style="width:100%;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;">
+                            </div>
+                            <div id="category_sub_wrap" style="display:<?= $formMainSelect === $gfAcc ? 'block' : 'none' ?>;">
+                                <label for="category_sub" class="muted-small" style="font-size:0.82rem;">תת־קטגוריה (בתוך <?= htmlspecialchars($gfAcc, ENT_QUOTES, 'UTF-8') ?>)</label>
+                                <select id="category_sub" name="category_sub" style="margin-bottom:0.35rem;">
+                                    <option value="_none_" <?= ($formSubSelect === '_none_') ? 'selected' : '' ?>>ללא תת־קטגוריה</option>
+                                    <?php foreach ($categorySubOptions as $so): ?>
+                                        <option value="<?= htmlspecialchars((string)$so, ENT_QUOTES, 'UTF-8') ?>" <?= ($formSubSelect === (string)$so) ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars((string)$so, ENT_QUOTES, 'UTF-8') ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                    <option value="__new__">תת־קטגוריה חדשה…</option>
+                                </select>
+                                <div id="category_sub_new_wrap" style="display:none;margin-top:0.35rem;">
+                                    <label for="category_sub_new" class="muted-small" style="font-size:0.82rem;">שם תת־קטגוריה חדשה</label>
+                                    <input type="text"
+                                           id="category_sub_new"
+                                           name="category_sub_new"
+                                           value=""
+                                           placeholder="למשל: חצובה"
+                                           style="width:100%;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;">
+                                </div>
+                            </div>
+                            <script>
+                            (function () {
+                                var main = document.getElementById('category_main');
+                                var mainNew = document.getElementById('category_main_new_wrap');
+                                var subWrap = document.getElementById('category_sub_wrap');
+                                var sub = document.getElementById('category_sub');
+                                var subNewWrap = document.getElementById('category_sub_new_wrap');
+                                var acc = <?= json_encode($gfAcc, JSON_UNESCAPED_UNICODE) ?>;
+                                function sync() {
+                                    if (!main) return;
+                                    if (mainNew) mainNew.style.display = main.value === '__new__' ? 'block' : 'none';
+                                    if (subWrap) subWrap.style.display = main.value === acc ? 'block' : 'none';
+                                    if (sub && subNewWrap) subNewWrap.style.display = sub.value === '__new__' ? 'block' : 'none';
+                                }
+                                if (main) {
+                                    main.addEventListener('change', sync);
+                                    if (sub) sub.addEventListener('change', sync);
+                                    sync();
+                                }
+                            })();
+                            </script>
+                        <?php endif; ?>
 
                         <label for="location">מחסן</label>
                         <?php
