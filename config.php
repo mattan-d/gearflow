@@ -563,7 +563,113 @@ function gf_validate_student_order_equipment_selection(PDO $pdo, array $equipmen
         return 'ניתן להזמין רק מצלמה, חדר עריכה או ציוד נלווה מהערכה.';
     }
 
+    foreach ($equipmentIds as $eid) {
+        $stmtC = $pdo->prepare('SELECT name, quantity FROM equipment_components WHERE equipment_id = :eid');
+        $stmtC->execute([':eid' => $eid]);
+        foreach ($stmtC->fetchAll(PDO::FETCH_ASSOC) as $cr) {
+            $cn = trim((string)($cr['name'] ?? ''));
+            if ($cn === '') {
+                continue;
+            }
+            $need = max(1, (int)($cr['quantity'] ?? 1));
+            $short = gf_equipment_component_shortage_qty($pdo, $eid, $cn);
+            if ($short >= $need) {
+                return 'לא ניתן להזמין את הפריט: הרכיב "' . $cn . '" מסומן כחסר במלאי. יש לפנות למנהל המחסן להשלמת המלאי.';
+            }
+        }
+    }
+
     return null;
+}
+
+function gf_equipment_component_shortage_qty(PDO $pdo, int $equipmentId, string $componentName): int
+{
+    $componentName = trim($componentName);
+    if ($equipmentId < 1 || $componentName === '') {
+        return 0;
+    }
+    try {
+        $stmt = $pdo->prepare('SELECT quantity_missing FROM equipment_component_shortages WHERE equipment_id = :eid AND component_name = :n LIMIT 1');
+        $stmt->execute([':eid' => $equipmentId, ':n' => $componentName]);
+        $v = $stmt->fetchColumn();
+
+        return $v !== false ? (int)$v : 0;
+    } catch (Throwable $e) {
+        return 0;
+    }
+}
+
+function gf_add_equipment_component_shortage(PDO $pdo, int $equipmentId, string $componentName, int $qty = 1): void
+{
+    if ($equipmentId < 1 || $qty < 1) {
+        return;
+    }
+    $componentName = trim($componentName);
+    if ($componentName === '') {
+        return;
+    }
+    $now = date('Y-m-d H:i:s');
+    try {
+        $stmt = $pdo->prepare('SELECT quantity_missing FROM equipment_component_shortages WHERE equipment_id = :eid AND component_name = :n LIMIT 1');
+        $stmt->execute([':eid' => $equipmentId, ':n' => $componentName]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (is_array($row)) {
+            $new = (int)($row['quantity_missing'] ?? 0) + $qty;
+            $pdo->prepare('UPDATE equipment_component_shortages SET quantity_missing = :q, updated_at = :u WHERE equipment_id = :eid AND component_name = :n')
+                ->execute([':q' => $new, ':u' => $now, ':eid' => $equipmentId, ':n' => $componentName]);
+        } else {
+            $pdo->prepare('INSERT INTO equipment_component_shortages (equipment_id, component_name, quantity_missing, updated_at) VALUES (:eid, :n, :q, :u)')
+                ->execute([':eid' => $equipmentId, ':n' => $componentName, ':q' => $qty, ':u' => $now]);
+        }
+    } catch (Throwable $e) {
+        // התעלמות
+    }
+}
+
+/**
+ * רכיבים שסומנו כנלקחים ולא הוחזרו — מתעדים חוסר לפי פריט ציוד פיזי.
+ */
+function gf_apply_component_shortages_from_order_checks(PDO $pdo, int $orderId): void
+{
+    if ($orderId < 1) {
+        return;
+    }
+    try {
+        $stmt = $pdo->prepare(
+            'SELECT occ.equipment_code, occ.component_name, occ.is_present, occ.returned
+             FROM order_component_checks occ
+             WHERE occ.order_id = :oid'
+        );
+        $stmt->execute([':oid' => $orderId]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $mapStmt = $pdo->prepare(
+            'SELECT e.id FROM order_equipment oe
+             INNER JOIN equipment e ON e.id = oe.equipment_id
+             WHERE oe.order_id = :oid AND TRIM(e.code) = TRIM(:code)
+             LIMIT 1'
+        );
+        foreach ($rows as $r) {
+            $code = trim((string)($r['equipment_code'] ?? ''));
+            $name = trim((string)($r['component_name'] ?? ''));
+            if ($code === '' || $name === '') {
+                continue;
+            }
+            if ((int)($r['is_present'] ?? 0) !== 1) {
+                continue;
+            }
+            if ((int)($r['returned'] ?? 0) === 1) {
+                continue;
+            }
+            $mapStmt->execute([':oid' => $orderId, ':code' => $code]);
+            $eid = (int)$mapStmt->fetchColumn();
+            if ($eid < 1) {
+                continue;
+            }
+            gf_add_equipment_component_shortage($pdo, $eid, $name, 1);
+        }
+    } catch (Throwable $e) {
+        // התעלמות
+    }
 }
 
 /** זמן לקיחה משוער להזמנה (תאריך + שעה או תחילת יום) */
@@ -735,6 +841,9 @@ function initialize_database(PDO $pdo): void
         if (!in_array('deletion_requested_at', $orderNames, true)) {
             $pdo->exec('ALTER TABLE orders ADD COLUMN deletion_requested_at TEXT');
         }
+        if (!in_array('return_completeness', $orderNames, true)) {
+            $pdo->exec('ALTER TABLE orders ADD COLUMN return_completeness TEXT');
+        }
     } catch (PDOException $e) {
         // מתעלמים משגיאות מיגרציה כדי לא להפיל את הטעינה
     }
@@ -843,6 +952,28 @@ function initialize_database(PDO $pdo): void
     $pdo->exec("
         CREATE INDEX IF NOT EXISTS idx_order_equipment_equipment_id
         ON order_equipment (equipment_id)
+    ");
+    try {
+        $oeCols = $pdo->query('PRAGMA table_info(order_equipment)')->fetchAll(PDO::FETCH_ASSOC);
+        $oeNames = array_column($oeCols, 'name');
+        if (!in_array('line_returned', $oeNames, true)) {
+            $pdo->exec('ALTER TABLE order_equipment ADD COLUMN line_returned INTEGER NOT NULL DEFAULT 0');
+        }
+        if (!in_array('line_condition', $oeNames, true)) {
+            $pdo->exec('ALTER TABLE order_equipment ADD COLUMN line_condition TEXT');
+        }
+    } catch (Throwable $e) {
+        // דילוג
+    }
+
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS equipment_component_shortages (
+            equipment_id INTEGER NOT NULL,
+            component_name TEXT NOT NULL,
+            quantity_missing INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (equipment_id, component_name)
+        )
     ");
 
     // ערכות ציוד נלווה לפי מצלמה (מצלמה אחת ↔ ערכה אחת)

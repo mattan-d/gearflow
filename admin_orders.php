@@ -355,7 +355,9 @@ $editingEquipmentIds = [];
 if ($editingOrder) {
     try {
         $stmtEditEquip = $pdo->prepare(
-            'SELECT e.id, e.name, e.code
+            'SELECT e.id, e.name, e.code,
+                    COALESCE(oe.line_returned, 0) AS line_returned,
+                    oe.line_condition AS line_condition
              FROM order_equipment oe
              JOIN equipment e ON e.id = oe.equipment_id
              WHERE oe.order_id = :oid
@@ -368,9 +370,11 @@ if ($editingOrder) {
     }
     if (empty($editingEquipmentRows) && (int)($editingOrder['equipment_id'] ?? 0) > 0) {
         $editingEquipmentRows[] = [
-            'id'   => (int)$editingOrder['equipment_id'],
-            'name' => (string)($editingOrder['equipment_name'] ?? ''),
-            'code' => (string)($editingOrder['equipment_code'] ?? ''),
+            'id'             => (int)$editingOrder['equipment_id'],
+            'name'           => (string)($editingOrder['equipment_name'] ?? ''),
+            'code'           => (string)($editingOrder['equipment_code'] ?? ''),
+            'line_returned'  => 0,
+            'line_condition' => null,
         ];
     }
     foreach ($editingEquipmentRows as $eqRow) {
@@ -786,6 +790,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $creatorUsername = (string)($orderRow['creator_username'] ?? '');
                     $borrowerNameForNotification = (string)($orderRow['borrower_name'] ?? '');
                     $todayFormModePost = (string)($_POST['current_today_mode'] ?? '');
+                    $returnCompletenessDb = (string)($orderRow['return_completeness'] ?? '');
+                    $loanReturnLineReturned = [];
+                    $loanReturnLineCondition = [];
 
                     if ($role === 'student' && !$isSpecialStatusUpdate) {
                         $fn = trim((string)($me['first_name'] ?? ''));
@@ -956,6 +963,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
 
+                    $oeReturnedPost = $_POST['oe_returned'] ?? null;
+                    $oeConditionPost = $_POST['oe_condition'] ?? null;
+                    if (
+                        $error === ''
+                        && ($role === 'admin' || $role === 'warehouse_manager')
+                        && is_array($oeReturnedPost)
+                        && ($currentStatus === 'on_loan' || $newStatus === 'returned')
+                    ) {
+                        $stmtOeIds = $pdo->prepare('SELECT equipment_id FROM order_equipment WHERE order_id = :oid');
+                        $stmtOeIds->execute([':oid' => $id]);
+                        $allOeIds = array_map('intval', $stmtOeIds->fetchAll(PDO::FETCH_COLUMN) ?: []);
+                        if ($allOeIds === []) {
+                            $prim = (int)($orderRow['equipment_id'] ?? 0);
+                            if ($prim > 0) {
+                                $allOeIds = [$prim];
+                            }
+                        }
+                        $allOeIds = array_values(array_unique(array_filter($allOeIds, static fn ($x) => $x > 0)));
+                        $lineReturned = [];
+                        $lineCondition = [];
+                        foreach ($allOeIds as $eid) {
+                            $lr = !empty($oeReturnedPost[$eid]) ? 1 : 0;
+                            $lc = trim((string)($oeConditionPost[$eid] ?? 'תקין'));
+                            if (!in_array($lc, ['תקין', 'תקול', 'חסר'], true)) {
+                                $lc = 'תקין';
+                            }
+                            if ($lr !== 1) {
+                                $lc = null;
+                            }
+                            $lineReturned[$eid] = $lr;
+                            $lineCondition[$eid] = $lc;
+                            try {
+                                $updOe = $pdo->prepare('UPDATE order_equipment SET line_returned = :lr, line_condition = :lc WHERE order_id = :oid AND equipment_id = :eid');
+                                $updOe->execute([':lr' => $lr, ':lc' => $lc, ':oid' => $id, ':eid' => $eid]);
+                            } catch (Throwable $e) {
+                                // התעלמות
+                            }
+                        }
+                        $nRet = count(array_filter($lineReturned, static fn ($v) => (int)$v === 1));
+                        $nTot = count($allOeIds);
+                        if ($nTot > 0) {
+                            if ($nRet >= $nTot) {
+                                $returnCompletenessDb = 'full';
+                            } elseif ($nRet > 0) {
+                                $returnCompletenessDb = 'partial';
+                            } else {
+                                $returnCompletenessDb = '';
+                            }
+                        }
+                        $condsAgg = [];
+                        foreach ($allOeIds as $eid) {
+                            if (!empty($lineReturned[$eid]) && ($lineCondition[$eid] ?? null) !== null && ($lineCondition[$eid] ?? '') !== '') {
+                                $condsAgg[] = (string)$lineCondition[$eid];
+                            }
+                        }
+                        if ($condsAgg !== []) {
+                            if (in_array('תקול', $condsAgg, true)) {
+                                $equipmentReturnConditionDb = 'תקול';
+                            } elseif (in_array('חסר', $condsAgg, true)) {
+                                $equipmentReturnConditionDb = 'חסר';
+                            } else {
+                                $equipmentReturnConditionDb = 'תקין';
+                            }
+                        }
+                        $loanReturnLineReturned = $lineReturned;
+                        $loanReturnLineCondition = $lineCondition;
+                        if ($newStatus === 'returned' && $currentStatus === 'on_loan' && $nRet < 1) {
+                            $error = 'יש לסמן לפחות פריט ציוד אחד כהוחזר לפני סגירת ההזמנה.';
+                        }
+                    }
+
                     if ($error === '' && $newStatus === 'ready' && $currentStatus !== 'ready') {
                         if (($currentTab ?? '') === 'today' && $todayFormModePost === 'prepare') {
                             if ($equipmentPreparedSave !== 1) {
@@ -1037,7 +1115,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                  equipment_prepared         = :equipment_prepared,
                                  updated_at                 = :updated_at,
                                  return_equipment_status    = :return_equipment_status,
-                                 equipment_return_condition = :equipment_return_condition
+                                 equipment_return_condition = :equipment_return_condition,
+                                 return_completeness        = :return_completeness
                              WHERE id = :id'
                         );
                         $stmt->execute([
@@ -1056,8 +1135,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':updated_at'                 => date('Y-m-d H:i:s'),
                             ':return_equipment_status'    => $returnEquipStatusDb,
                             ':equipment_return_condition' => $equipmentReturnConditionDb,
+                            ':return_completeness'        => $returnCompletenessDb !== '' ? $returnCompletenessDb : null,
                             ':id'                         => $id,
                         ]);
+
+                        if (
+                            $newStatus === 'returned'
+                            && $currentStatus === 'on_loan'
+                            && $loanReturnLineReturned !== []
+                        ) {
+                            foreach ($loanReturnLineReturned as $eidR => $lrR) {
+                                if ((int)$lrR !== 1) {
+                                    continue;
+                                }
+                                $condR = $loanReturnLineCondition[$eidR] ?? null;
+                                if ($condR === 'תקול') {
+                                    $pdo->prepare('UPDATE equipment SET status = \'out_of_service\', updated_at = :u WHERE id = :id')
+                                        ->execute([':u' => date('Y-m-d H:i:s'), ':id' => (int)$eidR]);
+                                } elseif ($condR === 'חסר') {
+                                    $pdo->prepare('UPDATE equipment SET status = \'missing\', updated_at = :u WHERE id = :id')
+                                        ->execute([':u' => date('Y-m-d H:i:s'), ':id' => (int)$eidR]);
+                                }
+                            }
+                            gf_apply_component_shortages_from_order_checks($pdo, $id);
+                        }
 
                         // החלפת ציוד בפועל: עדכון טבלת order_equipment לפי בחירת checkboxes (רק אם התקבלו מהטופס)
                         // במצבי "טאבים מיוחדים" / שדות disabled – לא נוגעים בקשרי הציוד.
@@ -2611,6 +2712,12 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         && in_array((string)($editingOrder['status'] ?? ''), ['pending', 'approved'], true)
         && $primaryEquipmentCategoryMain === 'מצלמות'
     );
+    $showPerItemReturnUi = (
+        $editingOrder !== null
+        && ($editingOrder['status'] ?? '') === 'on_loan'
+        && !$isViewModeOrder
+        && $role !== 'student'
+    );
     $initialCameraAccessoryIds = [];
     $equipmentMetaForCamera      = [];
     $accessoryCatalogJson        = '[]';
@@ -2865,6 +2972,12 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     && $role !== 'student'
                                 );
                                 ?>
+                                <?php if (!empty($showPerItemReturnUi) && count($editingEquipmentRows) > 0): ?>
+                                <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.35rem;align-items:center;">
+                                    <button type="button" class="btn small secondary oe-return-field" id="oe_select_all_btn">סמן הכל כהוחזר</button>
+                                    <button type="button" class="btn small secondary oe-return-field" id="oe_select_none_btn">בטל סימון</button>
+                                </div>
+                                <?php endif; ?>
                                 <?php foreach ($editingEquipmentRows as $eqIdx => $eq): ?>
                                 <div class="selected-equipment-row" data-equipment-id="<?= (int)($eq['id'] ?? 0) ?>" style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 4px;">
                                     <?php if ($showEquipmentPreparedChecklist): ?>
@@ -2874,6 +2987,39 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                                    <?= !empty($editingOrder['equipment_prepared']) ? 'checked' : '' ?>>
                                             <span><?= htmlspecialchars((string)($eq['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?><?= ((string)($eq['code'] ?? '') !== '') ? ' (' . htmlspecialchars((string)$eq['code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
                                         </label>
+                                    <?php elseif (!empty($showPerItemReturnUi)): ?>
+                                        <?php
+                                        $eidRow = (int)($eq['id'] ?? 0);
+                                        $lr = (int)($eq['line_returned'] ?? 0);
+                                        $lc = trim((string)($eq['line_condition'] ?? ''));
+                                        if ($lc === '' || !in_array($lc, ['תקין', 'תקול', 'חסר'], true)) {
+                                            $lc = 'תקין';
+                                        }
+                                        $eqCodeRow = (string)($eq['code'] ?? '');
+                                        $hasRowComponents = ($eqCodeRow !== '' && !empty($equipmentComponentsByCode[$eqCodeRow] ?? []));
+                                        $oidEdit = (int)$editingOrder['id'];
+                                        ?>
+                                        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.5rem;flex:1;">
+                                            <label style="display:flex;align-items:center;gap:0.35rem;margin:0;">
+                                                <input type="checkbox"
+                                                       class="oe-return-field oe-returned-cb"
+                                                       name="oe_returned[<?= $eidRow ?>]"
+                                                       value="1"
+                                                    <?= $lr ? 'checked' : '' ?>>
+                                                <span><?= htmlspecialchars((string)($eq['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?><?= $eqCodeRow !== '' ? ' (' . htmlspecialchars($eqCodeRow, ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
+                                            </label>
+                                            <select name="oe_condition[<?= $eidRow ?>]" class="oe-return-field oe-condition-select" style="padding:0.25rem 0.4rem;border-radius:6px;border:1px solid #d1d5db;font-size:0.88rem;">
+                                                <option value="תקין" <?= $lc === 'תקין' ? 'selected' : '' ?>>תקין</option>
+                                                <option value="תקול" <?= $lc === 'תקול' ? 'selected' : '' ?>>תקול</option>
+                                                <option value="חסר" <?= $lc === 'חסר' ? 'selected' : '' ?>>חסר</option>
+                                            </select>
+                                            <?php if ($hasRowComponents): ?>
+                                                <a href="#" class="equipment-components-link oe-return-field" style="font-size:0.85rem;white-space:nowrap;"
+                                                   data-equipment-code="<?= htmlspecialchars($eqCodeRow, ENT_QUOTES, 'UTF-8') ?>"
+                                                   data-order-id="<?= $oidEdit ?>"
+                                                   data-components-context="return">רכיבי ציוד</a>
+                                            <?php endif; ?>
+                                        </div>
                                     <?php else: ?>
                                         <span style="flex: 1;"><?= htmlspecialchars((string)($eq['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?><?= ((string)($eq['code'] ?? '') !== '') ? ' (' . htmlspecialchars((string)$eq['code'], ENT_QUOTES, 'UTF-8') . ')' : '' ?></span>
                                     <?php endif; ?>
@@ -2883,16 +3029,39 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                            data-order-id="<?= (int)$editingOrder['id'] ?>"
                                            data-components-context="prepare">רכיבי ציוד</a>
                                     <?php endif; ?>
-                                    <?php if (!$isViewModeOrder): ?>
+                                    <?php if (!$isViewModeOrder && empty($showPerItemReturnUi)): ?>
                                         <button type="button" class="equipment-list-trash" style="border: none; background: transparent; cursor: pointer; font-size: 0.85rem;" title="הסר ציוד" aria-label="הסר ציוד"><i data-lucide="trash-2" aria-hidden="true"></i></button>
                                     <?php endif; ?>
                                 </div>
                             <?php endforeach; ?>
-                            <?php if ($formEquipHasComponents): ?>
-                                <script type="application/json" data-components-for="<?= htmlspecialchars($editCodeForm, ENT_QUOTES, 'UTF-8') ?>">
-                                    <?= json_encode($equipmentComponentsByCode[$editCodeForm], JSON_UNESCAPED_UNICODE) ?>
+                            <?php
+                            if ($editingOrder) {
+                                $codesOut = [];
+                                foreach ($editingEquipmentRows as $eqR) {
+                                    $c = trim((string)($eqR['code'] ?? ''));
+                                    if ($c === '' || isset($codesOut[$c])) {
+                                        continue;
+                                    }
+                                    if (empty($equipmentComponentsByCode[$c] ?? [])) {
+                                        continue;
+                                    }
+                                    $codesOut[$c] = true;
+                                    ?>
+                                <script type="application/json" data-components-for="<?= htmlspecialchars($c, ENT_QUOTES, 'UTF-8') ?>">
+                                    <?= json_encode($equipmentComponentsByCode[$c], JSON_UNESCAPED_UNICODE) ?>
                                 </script>
-                            <?php endif; ?>
+                                    <?php
+                                    $chk = $componentChecksByOrderAndCode[(int)$editingOrder['id']][$c] ?? [];
+                                    if (!empty($chk)) {
+                                        ?>
+                                <script type="application/json" data-component-checks-for-order="<?= (int)$editingOrder['id'] ?>" data-component-checks-code="<?= htmlspecialchars($c, ENT_QUOTES, 'UTF-8') ?>">
+                                    <?= json_encode($chk, JSON_UNESCAPED_UNICODE) ?>
+                                </script>
+                                        <?php
+                                    }
+                                }
+                            }
+                            ?>
                             <?php endif; ?>
                         </div>
                         <?php if ($editingOrder): ?>
@@ -3125,6 +3294,30 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                         </button>
                                     <?php } ?>
                                 </div>
+                                <?php if (!empty($showPerItemReturnUi)): ?>
+                                    <?php
+                                    $rcStored = (string)($editingOrder['return_completeness'] ?? '');
+                                    $eqCondSumEarly = (string)($editingOrder['equipment_return_condition'] ?? '');
+                                    if ($eqCondSumEarly === '') {
+                                        $eqCondSumEarly = 'תקין';
+                                    }
+                                    ?>
+                                    <div style="margin-top:0.65rem;padding-top:0.65rem;border-top:1px solid #e5e7eb;">
+                                        <label for="return_completeness">היקף החזרה</label>
+                                        <select id="return_completeness" name="return_completeness" class="oe-return-field" style="margin-bottom:0.45rem;">
+                                            <option value="" <?= $rcStored === '' ? 'selected' : '' ?>>—</option>
+                                            <option value="full" <?= $rcStored === 'full' ? 'selected' : '' ?>>הוחזר במלאו</option>
+                                            <option value="partial" <?= $rcStored === 'partial' ? 'selected' : '' ?>>הוחזר חלקית</option>
+                                        </select>
+                                        <label for="equipment_return_condition">סטטוס ציוד מוחזר (סיכום לפי השורות)</label>
+                                        <input type="hidden" name="equipment_return_condition" id="equipment_return_condition" value="<?= htmlspecialchars($eqCondSumEarly, ENT_QUOTES, 'UTF-8') ?>">
+                                        <p id="equipment_return_condition_display" class="muted-small" style="margin:0.15rem 0 0.35rem 0;">
+                                            <?= htmlspecialchars($eqCondSumEarly === 'תקין' ? 'תקין' : ($eqCondSumEarly === 'תקול' ? 'לא תקין' : 'חסר'), ENT_QUOTES, 'UTF-8') ?>
+                                        </p>
+                                        <button type="button" class="btn oe-return-field" id="order_mark_returned_btn" disabled style="margin-top:0.35rem;">הוחזר</button>
+                                        <p class="muted-small" style="margin:0.35rem 0 0 0;font-size:0.82rem;">יש לסמן לפחות פריט אחד כהוחזר. ניתן גם להשתמש בכפתור «הוחזר» במצב הזמנה למעלה.</p>
+                                    </div>
+                                <?php endif; ?>
                             <?php endif; ?>
 
                             <?php if ($showReturnStatusField): ?>
@@ -3151,8 +3344,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 $isInNotReturnedTab = ($tab === 'not_returned' && $currentStatus === 'on_loan');
                                 // שדה "סטטוס ציוד מוחזר" יוצג בכל ההקשרים שבהם מוצג שדה "סטטוס החזרה"
                                 $showEquipReturnCombo = (
-                                    $showReturnStatusField
-                                    || ($tab === 'today' && $todayFormMode === 'return')
+                                    ($showReturnStatusField || ($tab === 'today' && $todayFormMode === 'return'))
+                                    && empty($showPerItemReturnUi)
                                 );
                                 ?>
                                 <?php if ($showEquipReturnCombo): ?>
@@ -3998,6 +4191,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const currentTabInput = document.querySelector('input[name="current_tab"]');
     const currentTabValue = '<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>';
     const isViewModeOrder = <?= $isViewModeOrder ? 'true' : 'false' ?>;
+    const showLoanReturnUi = <?= !empty($showPerItemReturnUi) ? 'true' : 'false' ?>;
 
     function buildReturnUrl() {
         let url = 'admin_orders.php?tab=' + encodeURIComponent(currentTabValue || 'today');
@@ -4062,11 +4256,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     // מצב עריכת הזמנה מטאבים "לא נלקח" / "לא הוחזר" – נעילה של רוב הפקדים
     const isEditFromSpecial = <?= ($editingOrder && ($tab === 'not_picked' || $tab === 'not_returned')) ? 'true' : 'false' ?>;
     if (isEditFromSpecial && orderModal) {
-        const allowedIds = new Set(['order_status', 'return_equipment_status', 'equipment_return_condition', 'toggle_equipment_column_btn']);
+        const allowedIds = new Set(['order_status', 'return_equipment_status', 'equipment_return_condition', 'toggle_equipment_column_btn', 'return_completeness']);
         const fields = orderModal.querySelectorAll('input, select, textarea, button');
         fields.forEach(function (el) {
             if (el.type === 'hidden') return;
             if (allowedIds.has(el.id)) return;
+            if (el.classList && el.classList.contains('oe-return-field')) return;
+            if (el.id === 'order_mark_returned_btn' || el.id === 'oe_select_all_btn' || el.id === 'oe_select_none_btn') return;
             // כפתורי סגירה/ביטול ושמירה נשארים פעילים
             if (el === orderModalClose || el === orderModalCancel || el.id === 'submit_order_btn') return;
             el.disabled = true;
@@ -4082,11 +4278,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     // מצב עריכת הזמנה בטאב "היום" במצב החזרה – רק שדות סטטוס פעילים
     const isEditFromTodayReturn = <?= ($editingOrder && $tab === 'today' && $todayFormMode === 'return') ? 'true' : 'false' ?>;
     if (isEditFromTodayReturn && orderModal) {
-        const allowedIdsTodayReturn = new Set(['order_status', 'equipment_return_condition', 'toggle_equipment_column_btn']);
+        const allowedIdsTodayReturn = new Set(['order_status', 'equipment_return_condition', 'toggle_equipment_column_btn', 'return_completeness']);
         const fieldsToday = orderModal.querySelectorAll('input, select, textarea, button');
         fieldsToday.forEach(function (el) {
             if (el.type === 'hidden') return;
             if (allowedIdsTodayReturn.has(el.id)) return;
+            if (el.classList && el.classList.contains('oe-return-field')) return;
+            if (el.id === 'order_mark_returned_btn' || el.id === 'oe_select_all_btn' || el.id === 'oe_select_none_btn') return;
             if (el === orderModalClose || el === orderModalCancel || el.id === 'submit_order_btn') return;
             el.disabled = true;
         });
@@ -4647,7 +4845,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     if (orderModal && orderStatusSelect && hasEquipComponentsInput && hasEquipComponentsInput.value === '1') {
         orderModal.querySelector('form')?.addEventListener('submit', function (e) {
             var statusVal = orderStatusSelect.value;
-            if (statusVal === 'returned') {
+            if (statusVal === 'returned' && !showLoanReturnUi) {
                 var ok = window.confirm('האם כל רכיבי הציוד הנלווים הוחזרו במלואם?');
                 if (!ok) {
                     e.preventDefault();
@@ -5243,6 +5441,68 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         });
         updateRejectionVisibility();
     }
+
+    (function initLoanReturnRowUi() {
+        if (!showLoanReturnUi || !orderModal) return;
+        var form = orderModal.querySelector('form');
+        if (!form) return;
+        function syncLoanReturnUi() {
+            var cbs = form.querySelectorAll('.oe-returned-cb');
+            var n = 0;
+            var t = cbs.length;
+            cbs.forEach(function (cb) {
+                if (cb.checked) n++;
+            });
+            var markBtn = document.getElementById('order_mark_returned_btn');
+            var retStatusBtns = form.querySelectorAll('.order-status-set-btn[data-status="returned"]');
+            retStatusBtns.forEach(function (b) {
+                b.disabled = n < 1;
+            });
+            if (markBtn) markBtn.disabled = n < 1;
+            var rc = document.getElementById('return_completeness');
+            if (rc && t > 0) {
+                if (n >= t) rc.value = 'full';
+                else if (n > 0) rc.value = 'partial';
+                else rc.value = '';
+            }
+            var conds = [];
+            form.querySelectorAll('.selected-equipment-row').forEach(function (row) {
+                var cb = row.querySelector('.oe-returned-cb');
+                var sel = row.querySelector('.oe-condition-select');
+                if (cb && cb.checked && sel) conds.push(sel.value);
+            });
+            var agg = 'תקין';
+            if (conds.indexOf('תקול') !== -1) agg = 'תקול';
+            else if (conds.indexOf('חסר') !== -1) agg = 'חסר';
+            var hid = document.getElementById('equipment_return_condition');
+            if (hid) hid.value = agg;
+            var disp = document.getElementById('equipment_return_condition_display');
+            if (disp) {
+                disp.textContent = agg === 'תקין' ? 'תקין' : (agg === 'תקול' ? 'לא תקין' : 'חסר');
+            }
+        }
+        document.getElementById('oe_select_all_btn') && document.getElementById('oe_select_all_btn').addEventListener('click', function () {
+            form.querySelectorAll('.oe-returned-cb').forEach(function (cb) {
+                cb.checked = true;
+            });
+            syncLoanReturnUi();
+        });
+        document.getElementById('oe_select_none_btn') && document.getElementById('oe_select_none_btn').addEventListener('click', function () {
+            form.querySelectorAll('.oe-returned-cb').forEach(function (cb) {
+                cb.checked = false;
+            });
+            syncLoanReturnUi();
+        });
+        form.querySelectorAll('.oe-returned-cb, .oe-condition-select').forEach(function (el) {
+            el.addEventListener('change', syncLoanReturnUi);
+        });
+        document.getElementById('order_mark_returned_btn') && document.getElementById('order_mark_returned_btn').addEventListener('click', function () {
+            var os = document.getElementById('order_status');
+            if (os) os.value = 'returned';
+            form.submit();
+        });
+        syncLoanReturnUi();
+    })();
 
     document.querySelectorAll('form.order-status-quick-form').forEach(function (form) {
         form.addEventListener('submit', function (e) {

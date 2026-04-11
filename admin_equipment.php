@@ -71,8 +71,36 @@ if ($editingEquipment !== null && !empty($editingEquipment['id'])) {
     $formComponentsList = $stmtFc->fetchAll(PDO::FETCH_ASSOC) ?: [];
 }
 
+$equipmentShortages = [];
+if ($editingEquipment !== null && !empty($editingEquipment['id'])) {
+    try {
+        $stSh = $pdo->prepare('SELECT component_name, quantity_missing, updated_at FROM equipment_component_shortages WHERE equipment_id = :eid ORDER BY component_name ASC');
+        $stSh->execute([':eid' => (int)$editingEquipment['id']]);
+        $equipmentShortages = $stSh->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        $equipmentShortages = [];
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
+
+    if ($action === 'clear_component_shortage') {
+        $eidClear = (int)($_POST['equipment_id'] ?? 0);
+        $cnameClear = trim((string)($_POST['component_name'] ?? ''));
+        if ($eidClear > 0 && $cnameClear !== '') {
+            try {
+                $pdo->prepare('DELETE FROM equipment_component_shortages WHERE equipment_id = :eid AND component_name = :n')
+                    ->execute([':eid' => $eidClear, ':n' => $cnameClear]);
+            } catch (Throwable $e) {
+                // התעלמות
+            }
+        }
+        if ($eidClear > 0) {
+            header('Location: admin_equipment.php?edit_id=' . $eidClear);
+            exit;
+        }
+    }
 
     if ($action === 'save') {
         $id           = isset($_POST['id']) ? (int)$_POST['id'] : 0;
@@ -2238,6 +2266,31 @@ if ($formMain === $gfAcc) {
                         <?php endif; ?>
                     </div>
                 </div>
+
+                <?php if ($editingEquipment && !empty($equipmentShortages)): ?>
+                    <div style="margin-top:0.75rem;padding:0.75rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
+                        <div class="muted-small" style="margin-bottom:0.45rem;font-weight:600;">רכיבים חסרים (מתועד מהחזרות)</div>
+                        <ul style="margin:0;padding-right:1.1rem;font-size:0.88rem;">
+                            <?php foreach ($equipmentShortages as $sh): ?>
+                                <li style="margin-bottom:0.35rem;">
+                                    <?= htmlspecialchars((string)($sh['component_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                    <?php if ((int)($sh['quantity_missing'] ?? 1) > 1): ?>
+                                        ×<?= (int)($sh['quantity_missing'] ?? 1) ?>
+                                    <?php endif; ?>
+                                    <?php if (!$isViewModeEq): ?>
+                                        <form method="post" action="admin_equipment.php" style="display:inline;margin-right:0.35rem;">
+                                            <input type="hidden" name="action" value="clear_component_shortage">
+                                            <input type="hidden" name="equipment_id" value="<?= (int)$editingEquipment['id'] ?>">
+                                            <input type="hidden" name="component_name" value="<?= htmlspecialchars((string)($sh['component_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                            <button type="submit" class="btn small secondary" style="padding:0.15rem 0.45rem;font-size:0.8rem;">הסרת סימון חוסר</button>
+                                        </form>
+                                    <?php endif; ?>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                        <p class="muted-small" style="margin:0.4rem 0 0 0;font-size:0.82rem;">לאחר השלמת המלאי בפועל, לחץ להסרת החוסר כדי לאפשר שוב הזמנה של הרכיב.</p>
+                    </div>
+                <?php endif; ?>
 
                 <?php
                 $itemsCountVal = 1;
