@@ -313,8 +313,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_notifications_s
         foreach (gf_order_notify_setting_keys() as $k) {
             $internal = isset($_POST['notify_order'][$k]['internal']) ? '1' : '0';
             $email    = isset($_POST['notify_order'][$k]['email']) ? '1' : '0';
+            $content  = trim((string)($_POST['notify_order'][$k]['content'] ?? ''));
             gf_set_app_setting($pdo, 'notify_order_' . $k . '_internal', $internal);
             gf_set_app_setting($pdo, 'notify_order_' . $k . '_email', $email);
+            gf_set_app_setting($pdo, 'notify_order_' . $k . '_content', $content);
         }
         $success = 'הגדרות התראות הזמנה נשמרו.';
     } catch (Throwable $e) {
@@ -358,6 +360,28 @@ $googleConnected    = google_mail_is_configured($googleCfg);
 $googleRedirectUri  = google_mail_oauth_redirect_uri();
 $googleHasSecret    = trim($googleCfg['client_secret'] ?? '') !== '';
 
+$notifyOrderLabelsStudent = [
+    'stu_approve'      => 'אישור הזמנה',
+    'stu_reject'       => 'דחיית הזמנה',
+    'stu_delete'       => 'מחיקת הזמנה',
+    'stu_edit_admin'   => 'עריכת הזמנה',
+    'stu_admin_placed' => 'הזמנת מנהל',
+];
+$notifyOrderLabelsAdmin = [
+    'adm_new_order'         => 'הזמנה חדשה',
+    'adm_student_changed'   => 'הזמנה שעברה שינוי על ידי הסטודנט',
+    'adm_cancel_request'    => 'בקשת ביטול',
+    'adm_student_cancelled' => 'ביטול על ידי סטודנט',
+];
+$notifyOrderState = [];
+foreach (gf_order_notify_setting_keys() as $k) {
+    $notifyOrderState[$k] = [
+        'internal' => gf_app_setting($pdo, 'notify_order_' . $k . '_internal', '1') === '1',
+        'email'    => gf_app_setting($pdo, 'notify_order_' . $k . '_email', '0') === '1',
+        'content'  => gf_app_setting($pdo, 'notify_order_' . $k . '_content', ''),
+    ];
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -393,7 +417,7 @@ $googleHasSecret    = trim($googleCfg['client_secret'] ?? '') !== '';
             font-size: 0.85rem;
         }
         main.settings-main {
-            max-width: 900px;
+            max-width: 1100px;
             margin: 1.5rem auto 2rem;
             padding: 0 1rem;
         }
@@ -516,9 +540,10 @@ $googleHasSecret    = trim($googleCfg['client_secret'] ?? '') !== '';
         }
         table.notify-order-table {
             width: 100%;
-            max-width: 720px;
+            max-width: 100%;
             border-collapse: collapse;
             margin-top: 0.5rem;
+            table-layout: fixed;
         }
         table.notify-order-table th,
         table.notify-order-table td {
@@ -534,7 +559,22 @@ $googleHasSecret    = trim($googleCfg['client_secret'] ?? '') !== '';
         }
         table.notify-order-table td.chk {
             text-align: center;
-            width: 110px;
+            width: 100px;
+        }
+        table.notify-order-table td.notify-order-content {
+            vertical-align: top;
+        }
+        table.notify-order-table td.notify-order-content textarea {
+            width: 100%;
+            min-height: 2.6rem;
+            max-height: 8rem;
+            padding: 0.35rem 0.45rem;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            font-size: 0.82rem;
+            font-family: inherit;
+            box-sizing: border-box;
+            resize: vertical;
         }
         .google-mail-section label {
             display: block;
@@ -693,15 +733,19 @@ $googleHasSecret    = trim($googleCfg['client_secret'] ?? '') !== '';
             <p class="muted-small">
                 בחרו לכל סוג אירוע האם לשלוח התראה פנימית במערכת ו/או מייל (נדרש חיבור Google בהגדרות למעלה).
                 מייל לסטודנט נשלח רק אם למשתמש יש כתובת תקינה וסומן &quot;מאשר קבלת מיילים&quot; בפרופיל.
+                בעמודת &quot;תוכן&quot; ניתן להגדיר טקסט מותאם; אם תשאירו ריק — יישלח הנוסח המובנה של המערכת.
+                ניתן להשתמש במצייני מיקום: <code dir="ltr">{order_id}</code>, <code dir="ltr">{message}</code>, <code dir="ltr">{reason}</code>
+                (הטקסט המלא שנוצר אוטומטית מוחלף ב־<code dir="ltr">{message}</code> כשממלאים תבנית).
             </p>
             <form method="post" action="admin_settings.php" style="margin-top:0.75rem;">
                 <h4 style="margin:0.75rem 0 0.35rem;font-size:0.98rem;color:#374151;">תלמיד</h4>
                 <table class="notify-order-table">
                     <thead>
                     <tr>
-                        <th>אירוע</th>
+                        <th style="width:18%;">אירוע</th>
                         <th class="chk">התראה פנימית</th>
                         <th class="chk">מייל</th>
+                        <th style="width:46%;">תוכן</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -716,6 +760,9 @@ $googleHasSecret    = trim($googleCfg['client_secret'] ?? '') !== '';
                                 <input type="checkbox" name="notify_order[<?= htmlspecialchars($nk, ENT_QUOTES, 'UTF-8') ?>][email]" value="1"
                                     <?= !empty($notifyOrderState[$nk]['email']) ? 'checked' : '' ?>>
                             </td>
+                            <td class="notify-order-content">
+                                <textarea name="notify_order[<?= htmlspecialchars($nk, ENT_QUOTES, 'UTF-8') ?>][content]" rows="2" placeholder="ריק = נוסח ברירת מחדל"><?= htmlspecialchars((string)($notifyOrderState[$nk]['content'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
@@ -724,9 +771,10 @@ $googleHasSecret    = trim($googleCfg['client_secret'] ?? '') !== '';
                 <table class="notify-order-table">
                     <thead>
                     <tr>
-                        <th>אירוע</th>
+                        <th style="width:18%;">אירוע</th>
                         <th class="chk">התראה פנימית</th>
                         <th class="chk">מייל</th>
+                        <th style="width:46%;">תוכן</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -740,6 +788,9 @@ $googleHasSecret    = trim($googleCfg['client_secret'] ?? '') !== '';
                             <td class="chk">
                                 <input type="checkbox" name="notify_order[<?= htmlspecialchars($nk, ENT_QUOTES, 'UTF-8') ?>][email]" value="1"
                                     <?= !empty($notifyOrderState[$nk]['email']) ? 'checked' : '' ?>>
+                            </td>
+                            <td class="notify-order-content">
+                                <textarea name="notify_order[<?= htmlspecialchars($nk, ENT_QUOTES, 'UTF-8') ?>][content]" rows="2" placeholder="ריק = נוסח ברירת מחדל"><?= htmlspecialchars((string)($notifyOrderState[$nk]['content'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
                             </td>
                         </tr>
                     <?php endforeach; ?>

@@ -673,7 +673,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $creatorName = (string)($me['username'] ?? ($me['first_name'] ?? 'סטודנט'));
                                 $msg = 'סטודנט ' . $creatorName . ' יצר הזמנה מחזורית חדשה.';
                                 $link = 'admin_orders.php?tab=pending';
-                                gf_notify_admins_order_event($pdo, 'adm_new_order', $msg, $link);
+                                gf_notify_admins_order_event($pdo, 'adm_new_order', $msg, $link, ['order_id' => (string)$firstOid]);
                             }
 
                             if ($role === 'student') {
@@ -735,7 +735,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $creatorName = (string)($me['username'] ?? ($me['first_name'] ?? 'סטודנט'));
                         $msg = 'סטודנט ' . $creatorName . ' יצר הזמנה חדשה.';
                         $link = 'admin_orders.php?tab=pending';
-                        gf_notify_admins_order_event($pdo, 'adm_new_order', $msg, $link);
+                        gf_notify_admins_order_event($pdo, 'adm_new_order', $msg, $link, ['order_id' => (string)$newOrderId]);
                     }
 
                     // הזמנה שנוצרה על ידי מנהל — התראה לסטודנט (שאול)
@@ -1190,7 +1190,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 $pdo,
                                 'adm_student_changed',
                                 'סטודנט ' . $creatorNameStu . ' עדכן הזמנה #' . $id . '.',
-                                'admin_orders.php?tab=pending'
+                                'admin_orders.php?tab=pending',
+                                ['order_id' => (string)$id]
                             );
                         } elseif (
                             $action === 'update'
@@ -1801,7 +1802,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $upd->execute([':u' => date('Y-m-d H:i:s'), ':n' => $newNotes, ':id' => $id]);
                         gf_try_mail_student_order_event($pdo, $me, $id, 'cancelled');
                         $msg = 'סטודנט ביטל הזמנה #' . $id . ': ' . $reason;
-                        gf_notify_admins_order_event($pdo, 'adm_student_cancelled', $msg, 'admin_orders.php?tab=pending');
+                        gf_notify_admins_order_event($pdo, 'adm_student_cancelled', $msg, 'admin_orders.php?tab=pending', [
+                            'order_id' => (string)$id,
+                            'reason'   => $reason,
+                        ]);
                         $success = 'ההזמנה בוטלה.';
                         if ($currentTabCancel && in_array($currentTabCancel, ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history', 'rejected_deleted'], true)) {
                             $redir = 'admin_orders.php?tab=' . urlencode((string)$currentTabCancel);
@@ -1850,7 +1854,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             ':id' => $id,
                         ]);
                         $msg = 'בקשת מחיקה להזמנה #' . $id . ': ' . $reason;
-                        gf_notify_admins_order_event($pdo, 'adm_cancel_request', $msg, 'admin_orders.php?tab=pending');
+                        gf_notify_admins_order_event($pdo, 'adm_cancel_request', $msg, 'admin_orders.php?tab=pending', [
+                            'order_id' => (string)$id,
+                            'reason'   => $reason,
+                        ]);
                         $success = 'בקשת המחיקה נשלחה למנהל.';
                         if ($currentTabDel && in_array($currentTabDel, ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history', 'rejected_deleted'], true)) {
                             $redir = 'admin_orders.php?tab=' . urlencode((string)$currentTabDel);

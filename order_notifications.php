@@ -28,6 +28,35 @@ function gf_order_notify_setting_keys(): array
     return array_merge($stu, $adm);
 }
 
+/**
+ * תוכן מותאם מהגדרות (ריק = ברירת מחדל מהקוד).
+ * תומך ב-placeholder: {order_id}, {message}, {reason}
+ *
+ * @return array{0: string, 1: string} פנימי, מבוא למייל (כשיש תוכן מותאם — שניהם זהים)
+ */
+function gf_order_notify_custom_bodies(
+    PDO $pdo,
+    string $eventKey,
+    string $defaultInternal,
+    string $defaultEmailIntro,
+    array $vars
+): array {
+    $tpl = trim(gf_app_setting($pdo, 'notify_order_' . $eventKey . '_content', ''));
+    if ($tpl === '') {
+        return [$defaultInternal, $defaultEmailIntro];
+    }
+    $vars = array_merge(['order_id' => '', 'reason' => ''], $vars);
+    if (!isset($vars['message'])) {
+        $vars['message'] = $defaultInternal;
+    }
+    $out = $tpl;
+    foreach ($vars as $k => $v) {
+        $out = str_replace('{' . $k . '}', (string)$v, $out);
+    }
+
+    return [$out, $out];
+}
+
 function gf_notification_create(PDO $pdo, ?int $userId, ?string $role, string $message, ?string $link = null): void
 {
     try {
@@ -145,7 +174,7 @@ function gf_mail_admins_and_warehouse(PDO $pdo, string $subject, string $bodyPla
     }
 }
 
-function gf_notify_admins_order_event(PDO $pdo, string $eventKey, string $message, ?string $link): void
+function gf_notify_admins_order_event(PDO $pdo, string $eventKey, string $message, ?string $link, array $vars = []): void
 {
     $emailSubjects = [
         'adm_new_order'         => 'הזמנה חדשה — מערכת השאלת ציוד',
@@ -153,13 +182,15 @@ function gf_notify_admins_order_event(PDO $pdo, string $eventKey, string $messag
         'adm_cancel_request'    => 'בקשת ביטול הזמנה',
         'adm_student_cancelled'   => 'ביטול הזמנה על ידי סטודנט',
     ];
+    $vars['message'] = $message;
+    [$bodyInternal] = gf_order_notify_custom_bodies($pdo, $eventKey, $message, $message, $vars);
     $ch = gf_order_notify_channels($pdo, $eventKey);
     if ($ch['internal']) {
-        gf_notification_create($pdo, null, 'admin', $message, $link);
-        gf_notification_create($pdo, null, 'warehouse_manager', $message, $link);
+        gf_notification_create($pdo, null, 'admin', $bodyInternal, $link);
+        gf_notification_create($pdo, null, 'warehouse_manager', $bodyInternal, $link);
     }
     if ($ch['email']) {
-        $lines = [$message, ''];
+        $lines = [$bodyInternal, ''];
         if ($link !== null && $link !== '') {
             $base = app_script_dir_url();
             $lines[] = 'קישור: ' . $base . '/' . ltrim($link, '/');
@@ -177,19 +208,29 @@ function gf_notify_student_order_event(
     ?string $link,
     int $orderId,
     string $emailSubject,
-    string $emailIntroLine
+    string $emailIntroLine,
+    array $vars = []
 ): void {
     if ($studentUserId <= 0) {
         return;
     }
+    $vars['order_id'] = $vars['order_id'] ?? (string)$orderId;
+    $vars['message'] = $vars['message'] ?? $internalMessage;
+    [$internalResolved, $emailIntroResolved] = gf_order_notify_custom_bodies(
+        $pdo,
+        $eventKey,
+        $internalMessage,
+        $emailIntroLine,
+        $vars
+    );
     $ch = gf_order_notify_channels($pdo, $eventKey);
     if ($ch['internal']) {
-        gf_notification_create($pdo, $studentUserId, null, $internalMessage, $link);
+        gf_notification_create($pdo, $studentUserId, null, $internalResolved, $link);
     }
     if ($ch['email']) {
         $row = gf_order_mail_get_order_row($pdo, $orderId);
         if ($row !== null) {
-            $body = gf_order_mail_format_plain_body($row, $emailIntroLine);
+            $body = gf_order_mail_format_plain_body($row, $emailIntroResolved);
             gf_mail_user_if_allowed($pdo, $studentUserId, $emailSubject, $body);
         }
     }
