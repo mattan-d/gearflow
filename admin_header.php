@@ -100,6 +100,13 @@ try {
     $customDocs = [];
 }
 
+/** תתי־תפריט «הודעות» — מסמכים מובנים (כמו ברשימת המסמכים) */
+$announcementBuiltinDocs = [
+    ['key' => 'consent_form', 'title' => 'הסכם השאלה'],
+    ['key' => 'warehouse_rules', 'title' => 'נוהלי מחסן'],
+    ['key' => 'opening_message', 'title' => 'הודעת פתיחה'],
+];
+
 $dailyCalendarsNav = [];
 try {
     $dailyCalendarsNav = gf_daily_calendars_for_nav($pdo, $role);
@@ -724,9 +731,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     <a href="admin_orders.php"><?= htmlspecialchars($navLabels['orders'], ENT_QUOTES, 'UTF-8') ?></a>
                 <?php endif; ?>
                 <div class="main-nav-item-wrapper">
-                    <a href="#">הודעות</a>
+                    <a href="admin_documents.php">הודעות</a>
                     <div class="main-nav-sub">
-                        <a href="admin_documents.php?doc=warehouse_rules">נהלי מחסן</a>
+                        <?php foreach ($announcementBuiltinDocs as $ab): ?>
+                            <?php
+                            $abKey = (string)($ab['key'] ?? '');
+                            if ($abKey === 'consent_form' && $role === 'student') {
+                                continue;
+                            }
+                            ?>
+                            <a href="admin_documents.php?doc=<?= htmlspecialchars($abKey, ENT_QUOTES, 'UTF-8') ?>">
+                                <?= htmlspecialchars((string)($ab['title'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                            </a>
+                        <?php endforeach; ?>
                         <?php foreach ($customDocs as $doc): ?>
                             <?php $docId = (int)($doc['id'] ?? 0); ?>
                             <a href="admin_documents.php?custom_id=<?= $docId ?>">

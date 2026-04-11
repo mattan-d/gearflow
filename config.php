@@ -176,6 +176,26 @@ function get_home_route_for_role(string $role): string
 }
 
 /**
+ * דף הבית שהוגדר בהגדרות לסטודנט (ללא הודעת פתיחה) — לשימוש אחרי «לא להציג שוב» לפני שהעוגייה נקראת בבקשה הבאה.
+ */
+function gf_student_configured_home_script(): string
+{
+    $fallback = 'admin_orders.php';
+    try {
+        $pdo = get_db();
+        $val = gf_app_setting($pdo, 'home_student', $fallback);
+        $allowed = ['admin_orders.php'];
+        if ($val !== '' && in_array($val, $allowed, true)) {
+            return $val;
+        }
+    } catch (Throwable $e) {
+        // ignore
+    }
+
+    return $fallback;
+}
+
+/**
  * יומנים יומיים לתפריט: למנהל/מחסן — כל היומנים; לסטודנט — רק יומנים מסומנים כגלויים.
  *
  * @return list<array{id:int|string,title:string,student_visible:int|string,sort_order:int|string}>

@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'dismi
     if ($role === 'student' && gf_app_setting(get_db(), 'opening_allow_student_dismiss', '0') === '1') {
         setcookie('gf_opening_home_dismissed', '1', time() + 365 * 24 * 3600, '/', '', false, true);
     }
-    header('Location: admin_orders.php');
+    header('Location: ' . gf_student_configured_home_script());
     exit;
 }
 
@@ -80,7 +80,11 @@ $showDismiss = ($role === 'student' && gf_app_setting($pdo, 'opening_allow_stude
 <main>
     <div class="card"><?= htmlspecialchars($content, ENT_QUOTES, 'UTF-8') ?></div>
     <div class="actions">
-        <a class="btn btn-primary" href="admin_orders.php">המשך להזמנות</a>
+        <?php
+        $continueHref = $role === 'student' ? gf_student_configured_home_script() : get_home_route_for_role($role);
+        $continueLabel = $role === 'student' ? 'המשך לדף הבית' : 'המשך';
+        ?>
+        <a class="btn btn-primary" href="<?= htmlspecialchars($continueHref, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($continueLabel, ENT_QUOTES, 'UTF-8') ?></a>
         <?php if ($showDismiss): ?>
             <form method="post" action="opening_message.php" style="margin:0;">
                 <input type="hidden" name="action" value="dismiss_opening">
