@@ -311,6 +311,84 @@ function gf_run_equipment_category_tree_migration(PDO $pdo): void
     }
 }
 
+/** קטגוריה ראשית של פריט — מצלמות / חדרי עריכה (הזמנה סטודנטים) */
+function gf_student_primary_category_main(): array
+{
+    return ['מצלמות', 'חדרי עריכה'];
+}
+
+function gf_student_may_order_equipment_category(string $fullCategory): bool
+{
+    $main = gf_parse_stored_equipment_category(trim($fullCategory))['main'];
+
+    return in_array($main, gf_student_primary_category_main(), true);
+}
+
+function gf_is_accessories_equipment_category(string $fullCategory): bool
+{
+    $t = trim($fullCategory);
+    if ($t === '') {
+        return false;
+    }
+    $acc = gf_equipment_category_accessories_main();
+
+    return $t === $acc || str_starts_with($t, $acc . gf_equipment_category_sep());
+}
+
+/**
+ * @param list<int> $equipmentIds
+ */
+function gf_validate_student_order_equipment_selection(PDO $pdo, array $equipmentIds): ?string
+{
+    $equipmentIds = array_values(array_filter(array_map('intval', $equipmentIds), static fn ($v) => $v > 0));
+    if ($equipmentIds === []) {
+        return 'יש לבחור ציוד.';
+    }
+    $cam = 0;
+    $room = 0;
+    foreach ($equipmentIds as $eid) {
+        $stmt = $pdo->prepare('SELECT TRIM(COALESCE(category, \'\')) FROM equipment WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $eid]);
+        $cat = trim((string)$stmt->fetchColumn());
+        if (!gf_student_may_order_equipment_category($cat)) {
+            return 'ניתן להזמין רק ציוד מקטגוריית מצלמות או חדר עריכה (לא ציוד נלווה או אחר).';
+        }
+        $main = gf_parse_stored_equipment_category($cat)['main'];
+        if ($main === 'מצלמות') {
+            $cam++;
+        } elseif ($main === 'חדרי עריכה') {
+            $room++;
+        }
+    }
+    if ($cam > 1) {
+        return 'בהשאלה רגילה ניתן לבחור מצלמה אחת בלבד.';
+    }
+    if ($room > 1) {
+        return 'ניתן לבחור חדר עריכה אחד בלבד.';
+    }
+    if ($cam === 1 && $room >= 1) {
+        return 'יש לבחור או מצלמה או חדר עריכה.';
+    }
+    if ($cam === 0 && $room === 0) {
+        return 'יש לבחור מצלמה או חדר עריכה.';
+    }
+
+    return null;
+}
+
+/** זמן לקיחה משוער להזמנה (תאריך + שעה או תחילת יום) */
+function gf_order_pickup_timestamp(string $startDate, string $startTime): int|false
+{
+    $st = trim($startTime);
+    $ds = trim($startDate);
+    if ($ds === '') {
+        return false;
+    }
+    $t = $st !== '' ? $st : '00:00';
+
+    return strtotime($ds . ' ' . $t);
+}
+
 function initialize_database(PDO $pdo): void
 {
     $pdo->exec(
@@ -446,6 +524,12 @@ function initialize_database(PDO $pdo): void
         }
         if (!in_array('recurring_series_id', $orderNames, true)) {
             $pdo->exec("ALTER TABLE orders ADD COLUMN recurring_series_id INTEGER");
+        }
+        if (!in_array('deletion_request_reason', $orderNames, true)) {
+            $pdo->exec('ALTER TABLE orders ADD COLUMN deletion_request_reason TEXT');
+        }
+        if (!in_array('deletion_requested_at', $orderNames, true)) {
+            $pdo->exec('ALTER TABLE orders ADD COLUMN deletion_requested_at TEXT');
         }
     } catch (PDOException $e) {
         // מתעלמים משגיאות מיגרציה כדי לא להפיל את הטעינה
@@ -732,7 +816,7 @@ function initialize_database(PDO $pdo): void
         'approved'     => 'מאושר',
         'ready'        => 'מוכנה',
         'on_loan'      => 'בהשאלה',
-        'returned'     => 'עבר',
+        'returned'     => 'הוחזר',
         'rejected'     => 'נדחה',
         'deleted'      => 'נמחק',
         'not_returned' => 'לא הוחזר',  // הזמנה בהשאלה שעבר תאריך ההחזרה
@@ -741,6 +825,11 @@ function initialize_database(PDO $pdo): void
     foreach ($statusDefaults as $code => $label) {
         $stmt = $pdo->prepare('INSERT OR IGNORE INTO order_status_labels (status, label_he) VALUES (:s, :l)');
         $stmt->execute([':s' => $code, ':l' => $label]);
+    }
+    try {
+        $pdo->exec("UPDATE order_status_labels SET label_he = 'הוחזר' WHERE status = 'returned'");
+    } catch (Throwable $e) {
+        // ignore
     }
     // צבעי ברירת מחדל (אם לא נקבע צבע)
     try {

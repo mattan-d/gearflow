@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/order_mail.php';
 
 require_admin_or_warehouse();
 
@@ -498,8 +499,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!$isSpecialStatusUpdate && !$isRecurringCreate && $startDate !== '' && $endDate !== '' && $startDate === $endDate && $startTime !== '' && $endTime !== '' && strcmp($endTime, $startTime) <= 0) {
             $error = 'באותו יום, שעת החזרה חייבת להיות מאוחרת משעת ההשאלה.';
         } else {
+            if (!$isSpecialStatusUpdate && $role === 'student' && ($action === 'create' || $action === 'update')) {
+                $stErr = gf_validate_student_order_equipment_selection($pdo, $equipmentIds);
+                if ($stErr !== null) {
+                    $error = $stErr;
+                }
+            }
             $conflicted = [];
-            if (!$isSpecialStatusUpdate && !$isRecurringCreate && count($equipmentIds) > 0) {
+            if ($error === '' && !$isSpecialStatusUpdate && !$isRecurringCreate && count($equipmentIds) > 0) {
                 $reqStart = $startDate . ' ' . ($startTime !== '' ? $startTime : '00:00');
                 $reqEnd   = $endDate . ' ' . ($endTime !== '' ? $endTime : '23:59');
                 $excludeId = ($action === 'update' && $id > 0) ? $id : 0;
@@ -1242,6 +1249,11 @@ $equipmentSql .= " ORDER BY name ASC";
 $equipmentStmt = $pdo->prepare($equipmentSql);
 $equipmentStmt->execute($equipmentParams);
 $equipmentOptions = $equipmentStmt->fetchAll(PDO::FETCH_ASSOC);
+if ($role === 'student') {
+    $equipmentOptions = array_values(array_filter($equipmentOptions, static function ($item) {
+        return gf_student_may_order_equipment_category(trim((string)($item['category'] ?? '')));
+    }));
+}
 
 // קטגוריות ייחודיות לצורך סינון
 $equipmentCategories = [];
@@ -1293,10 +1305,14 @@ $baseSql = 'SELECT o.id,
                    o.status,
                    o.recurring_series_id,
                    u.id AS borrower_user_id,
+                   u.email AS borrower_user_email,
+                   u.phone AS borrower_user_phone,
                    o.notes,
                    o.created_at,
                    o.updated_at,
                    o.creator_username,
+                   o.deletion_request_reason,
+                   o.deletion_requested_at,
                    e.name AS equipment_name,
                    e.code AS equipment_code,
                    (SELECT COUNT(*) FROM order_equipment oe WHERE oe.order_id = o.id) AS equipment_items_count
