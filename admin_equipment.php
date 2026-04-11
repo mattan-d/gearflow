@@ -469,6 +469,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([':id' => $id]);
             $success = 'הציוד נמחק.';
         }
+    } elseif ($action === 'bulk_equipment') {
+        $bulkIds = $_POST['equipment_ids'] ?? [];
+        if (!is_array($bulkIds)) {
+            $bulkIds = [];
+        }
+        $bulkIds = array_values(array_filter(array_map('intval', $bulkIds), static fn ($x) => $x > 0));
+        $bulkOp = trim((string)($_POST['bulk_operation'] ?? ''));
+        if ($bulkIds === []) {
+            $error = 'לא נבחרו פריטים.';
+        } elseif (!in_array($bulkOp, ['delete', 'set_status', 'out_of_stock'], true)) {
+            $error = 'יש לבחור פעולה.';
+        } else {
+            try {
+                $now = date('Y-m-d H:i:s');
+                if ($bulkOp === 'delete') {
+                    $del = $pdo->prepare('DELETE FROM equipment WHERE id = :id');
+                    foreach ($bulkIds as $bid) {
+                        $del->execute([':id' => $bid]);
+                    }
+                    $success = 'הפריטים הנבחרים נמחקו.';
+                } elseif ($bulkOp === 'out_of_stock') {
+                    $up = $pdo->prepare("UPDATE equipment SET status = 'out_of_stock', updated_at = :u WHERE id = :id");
+                    foreach ($bulkIds as $bid) {
+                        $up->execute([':u' => $now, ':id' => $bid]);
+                    }
+                    $success = 'הסטטוס עודכן ל״יצא מהמלאי״ לפריטים הנבחרים.';
+                } else {
+                    $ns = trim((string)($_POST['bulk_status'] ?? ''));
+                    $allowedBulk = ['active', 'out_of_service', 'missing', 'out_of_stock', 'disabled'];
+                    if (!in_array($ns, $allowedBulk, true)) {
+                        $error = 'סטטוס לא חוקי.';
+                    } else {
+                        $up = $pdo->prepare('UPDATE equipment SET status = :s, updated_at = :u WHERE id = :id');
+                        foreach ($bulkIds as $bid) {
+                            $up->execute([':s' => $ns, ':u' => $now, ':id' => $bid]);
+                        }
+                        $success = 'הסטטוס עודכן לפריטים הנבחרים.';
+                    }
+                }
+            } catch (Throwable $e) {
+                $error = 'הפעולה המרובית נכשלה (ייתכן שפריט משויך להזמנות).';
+            }
+        }
     } elseif ($action === 'import') {
         if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
             $error = 'קובץ CSV לא הועלה בהצלחה.';
@@ -1018,6 +1061,7 @@ $availabilityStartRaw = trim($_GET['availability_start'] ?? '');
 $availabilityEndRaw   = trim($_GET['availability_end'] ?? '');
 
 $sql = 'SELECT id, name, code, description, category, location, quantity_total, quantity_available, status, picture, created_at, updated_at,
+               last_inventory_count_date,
                (SELECT COUNT(*) FROM equipment_components ec WHERE ec.equipment_id = equipment.id) AS components_count
         FROM equipment';
 $conditions = [];
@@ -1372,6 +1416,48 @@ if ($formMain === $gfAcc) {
             padding: 1.5rem;
             box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
             margin-bottom: 1.5rem;
+        }
+        .equipment-bulk-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 60;
+            background: #111827;
+            color: #f9fafb;
+            padding: 0.65rem 1rem;
+            box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.35);
+        }
+        .equipment-bulk-footer-inner {
+            max-width: 1150px;
+            margin: 0 auto;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.6rem;
+            justify-content: flex-end;
+        }
+        .equipment-bulk-footer-count {
+            margin-left: auto;
+            font-size: 0.88rem;
+            color: #e5e7eb;
+        }
+        .equipment-bulk-footer .equipment-bulk-footer-label {
+            display: inline;
+            margin: 0;
+            color: #e5e7eb;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .equipment-bulk-select {
+            width: auto;
+            min-width: 10rem;
+            max-width: 14rem;
+            background: #fff;
+            color: #111827;
+        }
+        body.equipment-bulk-bar-open main {
+            padding-bottom: 4.5rem;
         }
         h2 {
             margin-top: 0;
@@ -2013,6 +2099,22 @@ if ($formMain === $gfAcc) {
                                <?= $isViewModeEq ? 'readonly' : '' ?>
                                value="<?= $editingEquipment ? htmlspecialchars((string)($editingEquipment['purchase_price'] ?? ''), ENT_QUOTES, 'UTF-8') : '' ?>">
 
+                        <label>ספירת מלאי אחרונה</label>
+                        <?php
+                        $lastInvRaw = $editingEquipment ? trim((string)($editingEquipment['last_inventory_count_date'] ?? '')) : '';
+                        $lastInvLabel = '—';
+                        if ($lastInvRaw !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $lastInvRaw)) {
+                            $tsLi = strtotime($lastInvRaw . ' 12:00:00');
+                            $lastInvLabel = $tsLi !== false ? date('d/m/Y', $tsLi) : $lastInvRaw;
+                        } elseif ($lastInvRaw !== '') {
+                            $lastInvLabel = $lastInvRaw;
+                        }
+                        ?>
+                        <p style="margin:0.25rem 0 0;padding:0.4rem 0.5rem;border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;font-size:0.95rem;">
+                            <?= htmlspecialchars($lastInvLabel, ENT_QUOTES, 'UTF-8') ?>
+                        </p>
+                        <p class="muted-small" style="margin:0.25rem 0 0;font-size:0.82rem;">מתעדכן אוטומטית כששומרים ספירת מלאי שבה מופיע הפריט.</p>
+
                         <label for="description">תיאור</label>
                         <textarea id="description" name="description" <?= $isViewModeEq ? 'readonly' : '' ?>><?= $editingEquipment ? htmlspecialchars($editingEquipment['description'] ?? '', ENT_QUOTES, 'UTF-8') : '' ?></textarea>
 
@@ -2620,9 +2722,31 @@ if ($formMain === $gfAcc) {
             <?php if (count($equipmentList) === 0): ?>
                 <p class="muted-small">אין פריטים בקטגוריה זו.</p>
             <?php else: ?>
-                <table>
+                <?php
+                $bulkFormQuery = array_filter([
+                    'q'                  => $searchTerm !== '' ? $searchTerm : null,
+                    'filter_status'      => $filterStatus !== '' ? $filterStatus : null,
+                    'filter_warehouse'   => $filterWarehouse !== '' ? $filterWarehouse : null,
+                    'availability_start' => $availabilityStartRaw !== '' ? $availabilityStartRaw : null,
+                    'availability_end'   => $availabilityEndRaw !== '' ? $availabilityEndRaw : null,
+                    'equipment_tab'      => ($equipmentTab !== 'all' && $equipmentTab !== '') ? $equipmentTab : null,
+                ]);
+                $bulkFormAction = 'admin_equipment.php';
+                if (!empty($bulkFormQuery)) {
+                    $bulkFormAction .= '?' . http_build_query($bulkFormQuery);
+                }
+                ?>
+                <form method="post" action="<?= htmlspecialchars($bulkFormAction, ENT_QUOTES, 'UTF-8') ?>" id="equipment_bulk_form" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;" aria-hidden="true">
+                    <input type="hidden" name="action" value="bulk_equipment">
+                    <input type="hidden" name="bulk_operation" id="equipment_bulk_operation" value="">
+                    <input type="hidden" name="bulk_status" id="equipment_bulk_status" value="">
+                </form>
+                <table class="equipment-list-table">
                     <thead>
                     <tr>
+                        <th style="width:2.5rem;text-align:center;">
+                            <input type="checkbox" id="equipment_select_all" title="בחר הכל בעמוד זה" aria-label="בחר הכל">
+                        </th>
                         <th>שם הציוד</th>
                         <th>מספר סידורי</th>
                         <th>תמונה</th>
@@ -2634,6 +2758,14 @@ if ($formMain === $gfAcc) {
                     <tbody>
                     <?php foreach ($equipmentList as $item): ?>
                         <tr>
+                            <td style="text-align:center;">
+                                <input type="checkbox"
+                                       form="equipment_bulk_form"
+                                       name="equipment_ids[]"
+                                       value="<?= (int)$item['id'] ?>"
+                                       class="equipment-bulk-cb"
+                                       aria-label="בחירת פריט">
+                            </td>
                             <td>
                                 <?php
                                 $hasComponents = (int)($item['components_count'] ?? 0) > 0;
@@ -2712,6 +2844,26 @@ if ($formMain === $gfAcc) {
                     <?php endforeach; ?>
                     </tbody>
                 </table>
+                <div id="equipment_bulk_footer" class="equipment-bulk-footer" hidden>
+                    <div class="equipment-bulk-footer-inner">
+                        <span id="equipment_bulk_footer_label" class="equipment-bulk-footer-count"></span>
+                        <label class="equipment-bulk-footer-label" for="equipment_bulk_action_select">פעולה</label>
+                        <select id="equipment_bulk_action_select" class="equipment-bulk-select">
+                            <option value="">בחר…</option>
+                            <option value="delete">מחיקה</option>
+                            <option value="set_status">שינוי סטטוס</option>
+                            <option value="out_of_stock">הוצא מהמלאי</option>
+                        </select>
+                        <select id="equipment_bulk_status_select" class="equipment-bulk-select" style="display:none;" aria-label="סטטוס חדש">
+                            <option value="active">תקין</option>
+                            <option value="out_of_service">תקול</option>
+                            <option value="missing">חסר</option>
+                            <option value="out_of_stock">יצא מהמלאי</option>
+                            <option value="disabled">מושבת</option>
+                        </select>
+                        <button type="button" class="btn small" id="equipment_bulk_apply_btn">בצע</button>
+                    </div>
+                </div>
             <?php endif; ?>
         <?php endif; ?>
     </div>
@@ -3100,6 +3252,85 @@ document.addEventListener('DOMContentLoaded', function () {
             equipmentFormComponentsTbody.appendChild(tr);
         });
     }
+
+    (function initEquipmentBulkBar() {
+        var bulkForm = document.getElementById('equipment_bulk_form');
+        var footer = document.getElementById('equipment_bulk_footer');
+        var selectAll = document.getElementById('equipment_select_all');
+        var actionSel = document.getElementById('equipment_bulk_action_select');
+        var statusSel = document.getElementById('equipment_bulk_status_select');
+        var applyBtn = document.getElementById('equipment_bulk_apply_btn');
+        var countLabel = document.getElementById('equipment_bulk_footer_label');
+        if (!bulkForm || !footer) return;
+        function getCbs() {
+            return document.querySelectorAll('.equipment-bulk-cb');
+        }
+        function sync() {
+            var cbs = getCbs();
+            var n = 0;
+            var i;
+            for (i = 0; i < cbs.length; i++) {
+                if (cbs[i].checked) n++;
+            }
+            if (countLabel) {
+                countLabel.textContent = n > 0 ? ('נבחרו ' + n + ' פריטים') : '';
+            }
+            footer.hidden = n < 1;
+            document.body.classList.toggle('equipment-bulk-bar-open', n >= 1);
+            if (selectAll) {
+                selectAll.indeterminate = n > 0 && n < cbs.length;
+                selectAll.checked = cbs.length > 0 && n === cbs.length;
+            }
+        }
+        getCbs().forEach(function (cb) {
+            cb.addEventListener('change', sync);
+        });
+        if (selectAll) {
+            selectAll.addEventListener('change', function () {
+                var on = selectAll.checked;
+                getCbs().forEach(function (cb) {
+                    cb.checked = on;
+                });
+                sync();
+            });
+        }
+        if (actionSel && statusSel) {
+            actionSel.addEventListener('change', function () {
+                statusSel.style.display = actionSel.value === 'set_status' ? 'inline-block' : 'none';
+            });
+        }
+        if (applyBtn) {
+            applyBtn.addEventListener('click', function () {
+                var op = actionSel ? actionSel.value : '';
+                if (!op) {
+                    alert('יש לבחור פעולה.');
+                    return;
+                }
+                var cbs = getCbs();
+                var any = false;
+                var j;
+                for (j = 0; j < cbs.length; j++) {
+                    if (cbs[j].checked) {
+                        any = true;
+                        break;
+                    }
+                }
+                if (!any) {
+                    alert('יש לבחור לפחות פריט אחד.');
+                    return;
+                }
+                if (op === 'delete' && !window.confirm('למחוק את הפריטים הנבחרים? פעולה זו אינה הפיכה.')) {
+                    return;
+                }
+                var opIn = document.getElementById('equipment_bulk_operation');
+                var stIn = document.getElementById('equipment_bulk_status');
+                if (opIn) opIn.value = op;
+                if (stIn) stIn.value = (op === 'set_status' && statusSel) ? statusSel.value : '';
+                bulkForm.submit();
+            });
+        }
+        sync();
+    })();
 });
 </script>
 </body>

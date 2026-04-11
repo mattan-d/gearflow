@@ -81,6 +81,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ':updated_at' => $updatedAt,
                     ]);
                 }
+                $countDateForEquip = date('Y-m-d');
+                $stmtCd = $pdo->prepare('SELECT count_date FROM inventory_counts WHERE id = :id LIMIT 1');
+                $stmtCd->execute([':id' => $countId]);
+                $cdRow = $stmtCd->fetch(PDO::FETCH_ASSOC);
+                if (is_array($cdRow) && trim((string)($cdRow['count_date'] ?? '')) !== '') {
+                    $countDateForEquip = trim((string)$cdRow['count_date']);
+                }
+                $stmtUpEqInv = $pdo->prepare('UPDATE equipment SET last_inventory_count_date = :d, updated_at = :u WHERE id = :id');
+                foreach (array_keys($statusByEquipment) as $equipmentIdRaw) {
+                    $eidUp = (int)$equipmentIdRaw;
+                    if ($eidUp <= 0) {
+                        continue;
+                    }
+                    try {
+                        $stmtUpEqInv->execute([
+                            ':d' => $countDateForEquip,
+                            ':u' => $updatedAt,
+                            ':id' => $eidUp,
+                        ]);
+                    } catch (Throwable $e) {
+                        // התעלמות אם העמודה עדיין לא קיימת בשרת ישן
+                    }
+                }
                 header('Location: admin_inventory_count.php?count_id=' . $countId . '&success=' . urlencode('ספירת המלאי נשמרה בהצלחה.'));
                 exit;
             } catch (Throwable $e) {

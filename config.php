@@ -742,6 +742,18 @@ function initialize_database(PDO $pdo): void
         if (!$hasPicture) {
             $pdo->exec("ALTER TABLE equipment ADD COLUMN picture TEXT");
         }
+        $columnsStmt2 = $pdo->query('PRAGMA table_info(equipment)');
+        $columns2     = $columnsStmt2->fetchAll(PDO::FETCH_ASSOC);
+        $hasLastInv   = false;
+        foreach ($columns2 as $col) {
+            if (($col['name'] ?? '') === 'last_inventory_count_date') {
+                $hasLastInv = true;
+                break;
+            }
+        }
+        if (!$hasLastInv) {
+            $pdo->exec('ALTER TABLE equipment ADD COLUMN last_inventory_count_date TEXT');
+        }
     } catch (PDOException $e) {
         // אם המיגרציה נכשלת לא נכשיל את הטעינה כולה – רק לא נוסיף את העמודה
     }
