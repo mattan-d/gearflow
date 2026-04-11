@@ -389,6 +389,20 @@ function gf_order_pickup_timestamp(string $startDate, string $startTime): int|fa
     return strtotime($ds . ' ' . $t);
 }
 
+/** קישור wa.me לפי מספר טלפון (ישראל: 0XXXXXXXXX → 972XXXXXXXXX) */
+function gf_whatsapp_url_from_phone(string $phone): ?string
+{
+    $digits = preg_replace('/\D+/', '', $phone);
+    if ($digits === '') {
+        return null;
+    }
+    if (str_starts_with($digits, '0')) {
+        $digits = '972' . substr($digits, 1);
+    }
+
+    return 'https://wa.me/' . $digits;
+}
+
 function initialize_database(PDO $pdo): void
 {
     $pdo->exec(

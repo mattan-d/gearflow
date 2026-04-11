@@ -608,6 +608,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                             $success = $createdCount > 1 ? "נוצרו {$createdCount} הזמנות בהצלחה." : 'הזמנה נוצרה בהצלחה.';
 
+                            if ($role === 'student') {
+                                $stmtFirst = $pdo->prepare('SELECT MIN(id) AS m FROM orders WHERE recurring_series_id = :s');
+                                $stmtFirst->execute([':s' => $recurringSeriesId]);
+                                $firstOid = (int)($stmtFirst->fetchColumn());
+                                if ($firstOid > 0) {
+                                    gf_try_mail_student_order_event($pdo, $me, $firstOid, 'created');
+                                }
+                            }
+
                             // התראה למנהלים על הזמנה מחזורית חדשה שיצר סטודנט
                             if ($role === 'student') {
                                 $creatorName = (string)($me['username'] ?? ($me['first_name'] ?? 'סטודנט'));
@@ -667,6 +676,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $success = 'הזמנה נוצרה בהצלחה.';
 
+                    if ($role === 'student') {
+                        gf_try_mail_student_order_event($pdo, $me, $newOrderId, 'created');
+                    }
+
                     // התראה למנהלים על הזמנה חדשה שיצר סטודנט
                     if ($role === 'student') {
                         $creatorName = (string)($me['username'] ?? ($me['first_name'] ?? 'סטודנט'));
@@ -693,6 +706,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $borrowerNameForNotification = (string)($orderRow['borrower_name'] ?? '');
                     $todayModePost = (string)($_POST['current_today_mode'] ?? '');
 
+                    if ($role === 'student' && !$isSpecialStatusUpdate) {
+                        $fn = trim((string)($me['first_name'] ?? ''));
+                        $ln = trim((string)($me['last_name'] ?? ''));
+                        $bn = trim($fn . ' ' . $ln);
+                        if ($bn === '') {
+                            $bn = (string)($me['username'] ?? '');
+                        }
+                        if (trim((string)($orderRow['borrower_name'] ?? '')) !== $bn) {
+                            $error = 'אין הרשאה לערוך הזמנה זו.';
+                        }
+                        if ($error === '' && !in_array($currentStatus, ['pending', 'approved'], true)) {
+                            $error = 'לא ניתן לערוך הזמנה במצב זה.';
+                        }
+                        if ($error === '') {
+                            $pickupCheck = gf_order_pickup_timestamp($startDate, $startTime);
+                            if ($pickupCheck === false || $pickupCheck <= $nowTs) {
+                                $error = 'לא ניתן לערוך הזמנה לאחר מועד הלקיחה.';
+                            }
+                        }
+                    }
+
                     // במצב עדכון מיוחד מטאבים "לא נלקח"/"לא הוחזר" – שומרים על פרטי ההזמנה המקוריים
                     // כדי לא לדרוס תאריכים וציוד בשדות שלא נשלחים מהטופס (inputs במצב disabled).
                     if ($isSpecialStatusUpdate) {
@@ -711,6 +745,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $action === 'update'
                         && ($currentTab ?? '') === 'today'
                         && $todayModePost === 'prepare'
+                        && $role !== 'student'
                     ) {
                         // טאב "היום / הכנת ציוד" – שדות מנוטרלים בצד הלקוח; נשמרים ערכי DB למעט סטטוס וציוד מוכן
                         $equipmentId     = (int)($orderRow['equipment_id'] ?? 0);
@@ -740,6 +775,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $action === 'update'
                         && ($currentTab ?? '') === 'today'
                         && $todayModePost === 'return'
+                        && $role !== 'student'
                     ) {
                         $purpose = (string)($orderRow['purpose'] ?? '');
                         $notes = (string)($orderRow['notes'] ?? '');
@@ -850,6 +886,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
                     }
 
+                    if (
+                        $error === ''
+                        && ($currentTab ?? '') === 'today'
+                        && $todayModePost === 'prepare'
+                        && in_array($role, ['admin', 'warehouse_manager'], true)
+                        && isset($_POST['equipment_ids'])
+                        && is_array($_POST['equipment_ids'])
+                    ) {
+                        $newEquipIdsPrep = [];
+                        foreach ($_POST['equipment_ids'] as $raw) {
+                            $eid = (int)$raw;
+                            if ($eid > 0 && !in_array($eid, $newEquipIdsPrep, true)) {
+                                $newEquipIdsPrep[] = $eid;
+                            }
+                        }
+                        $stmtOld = $pdo->prepare('SELECT equipment_id FROM order_equipment WHERE order_id = :oid');
+                        $stmtOld->execute([':oid' => $id]);
+                        $oldOe = array_map('intval', $stmtOld->fetchAll(PDO::FETCH_COLUMN));
+                        $primaryIdPrep = (int)($orderRow['equipment_id'] ?? 0);
+                        $existingIdsPrep = array_values(array_unique(array_filter(array_merge($primaryIdPrep > 0 ? [$primaryIdPrep] : [], $oldOe), static fn ($x) => $x > 0)));
+                        if ($primaryIdPrep > 0 && !in_array($primaryIdPrep, $newEquipIdsPrep, true)) {
+                            $error = 'יש לכלול את פריט הציוד הראשי (מצלמה/חדר עריכה) ברשימה.';
+                        }
+                        if ($error === '') {
+                            $addedPrep = array_diff($newEquipIdsPrep, $existingIdsPrep);
+                            foreach ($addedPrep as $eid) {
+                                $stmt = $pdo->prepare('SELECT TRIM(COALESCE(category, \'\')) FROM equipment WHERE id = :id');
+                                $stmt->execute([':id' => $eid]);
+                                $catPrep = trim((string)$stmt->fetchColumn());
+                                if (!gf_is_accessories_equipment_category($catPrep)) {
+                                    $error = 'בהכנת ציוד ניתן להוסיף רק ציוד נלווה.';
+                                    break;
+                                }
+                            }
+                        }
+                        if ($error === '') {
+                            $removedPrep = array_diff($existingIdsPrep, $newEquipIdsPrep);
+                            foreach ($removedPrep as $eid) {
+                                if ($eid === $primaryIdPrep) {
+                                    $error = 'לא ניתן להסיר את פריט הציוד הראשי מההזמנה.';
+                                    break;
+                                }
+                                $stmt = $pdo->prepare('SELECT TRIM(COALESCE(category, \'\')) FROM equipment WHERE id = :id');
+                                $stmt->execute([':id' => $eid]);
+                                $catPrep = trim((string)$stmt->fetchColumn());
+                                if (!gf_is_accessories_equipment_category($catPrep)) {
+                                    $error = 'בהכנת ציוד ניתן להסיר רק ציוד נלווה.';
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
                     if ($error === '') {
                         $stmt = $pdo->prepare(
                             'UPDATE orders
@@ -917,6 +1006,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         }
 
                         $success = 'הזמנה עודכנה בהצלחה.';
+                        if ($role === 'student') {
+                            gf_try_mail_student_order_event($pdo, $me, $id, 'updated');
+                        }
                     }
 
                     if ($error === '') {
@@ -1157,6 +1249,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $success = 'סטטוס ההזמנות עודכן.';
         }
     } elseif ($action === 'delete') {
+        if ($role === 'student') {
+            $error = 'לביטול הזמנה יש להשתמש בביטול מהרשימה (כולל סיבה).';
+        } else {
         $id = (int)($_POST['id'] ?? 0);
         $deleteScope = (string)($_POST['delete_scope'] ?? 'single');
         if (!in_array($deleteScope, ['single', 'series', 'future'], true)) {
@@ -1218,6 +1313,114 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 header('Location: ' . $redir);
                 exit;
+            }
+        }
+        }
+    } elseif ($action === 'student_cancel_order') {
+        $id = (int)($_POST['id'] ?? 0);
+        $reason = trim((string)($_POST['cancellation_reason'] ?? ''));
+        $currentTabCancel = $_POST['current_tab'] ?? null;
+        if ($role !== 'student' || $id <= 0 || $reason === '') {
+            $error = 'בקשה לא תקינה.';
+        } else {
+            $stmt = $pdo->prepare('SELECT * FROM orders WHERE id = :id');
+            $stmt->execute([':id' => $id]);
+            $or = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$or || !in_array((string)($or['status'] ?? ''), ['pending', 'approved'], true)) {
+                $error = 'לא ניתן לבטל הזמנה זו.';
+            } else {
+                $fn = trim((string)($me['first_name'] ?? ''));
+                $ln = trim((string)($me['last_name'] ?? ''));
+                $bn = trim($fn . ' ' . $ln);
+                if ($bn === '') {
+                    $bn = (string)($me['username'] ?? '');
+                }
+                if (trim((string)($or['borrower_name'] ?? '')) !== $bn) {
+                    $error = 'אין הרשאה.';
+                } else {
+                    $pickup = gf_order_pickup_timestamp((string)($or['start_date'] ?? ''), (string)($or['start_time'] ?? ''));
+                    if ($pickup === false || $pickup <= $nowTs) {
+                        $error = 'לא ניתן לבטל לאחר מועד הלקיחה.';
+                    } elseif ($pickup - $nowTs <= 48 * 3600) {
+                        $error = 'פחות מ-48 שעות לפני הלקיחה — יש לשלוח בקשת מחיקה מהרשימה.';
+                    } else {
+                        $prevNotes = trim((string)($or['notes'] ?? ''));
+                        $line = 'ביטול על ידי סטודנט: ' . $reason;
+                        $newNotes = $prevNotes !== '' ? $prevNotes . "\n" . $line : $line;
+                        $upd = $pdo->prepare("UPDATE orders SET status = 'deleted', updated_at = :u, notes = :n WHERE id = :id AND status IN ('pending','approved')");
+                        $upd->execute([':u' => date('Y-m-d H:i:s'), ':n' => $newNotes, ':id' => $id]);
+                        gf_try_mail_student_order_event($pdo, $me, $id, 'cancelled');
+                        $msg = 'סטודנט ביטל הזמנה #' . $id . ': ' . $reason;
+                        create_notification($pdo, null, 'admin', $msg, 'admin_orders.php?tab=pending');
+                        create_notification($pdo, null, 'warehouse_manager', $msg, 'admin_orders.php?tab=pending');
+                        $success = 'ההזמנה בוטלה.';
+                        if ($currentTabCancel && in_array($currentTabCancel, ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history', 'rejected_deleted'], true)) {
+                            $redir = 'admin_orders.php?tab=' . urlencode((string)$currentTabCancel);
+                            $ctm = $_POST['current_today_mode'] ?? null;
+                            if ($currentTabCancel === 'today' && $ctm !== null && $ctm !== '') {
+                                $redir .= '&today_mode=' . urlencode((string)$ctm);
+                            }
+                            header('Location: ' . $redir);
+                            exit;
+                        }
+                        header('Location: admin_orders.php?tab=pending');
+                        exit;
+                    }
+                }
+            }
+        }
+    } elseif ($action === 'student_deletion_request') {
+        $id = (int)($_POST['id'] ?? 0);
+        $reason = trim((string)($_POST['deletion_request_reason'] ?? ''));
+        $currentTabDel = $_POST['current_tab'] ?? null;
+        if ($role !== 'student' || $id <= 0 || $reason === '') {
+            $error = 'בקשה לא תקינה.';
+        } else {
+            $stmt = $pdo->prepare('SELECT * FROM orders WHERE id = :id');
+            $stmt->execute([':id' => $id]);
+            $or = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$or || !in_array((string)($or['status'] ?? ''), ['pending', 'approved'], true)) {
+                $error = 'לא ניתן לשלוח בקשה זו.';
+            } else {
+                $fn = trim((string)($me['first_name'] ?? ''));
+                $ln = trim((string)($me['last_name'] ?? ''));
+                $bn = trim($fn . ' ' . $ln);
+                if ($bn === '') {
+                    $bn = (string)($me['username'] ?? '');
+                }
+                if (trim((string)($or['borrower_name'] ?? '')) !== $bn) {
+                    $error = 'אין הרשאה.';
+                } else {
+                    $pickup = gf_order_pickup_timestamp((string)($or['start_date'] ?? ''), (string)($or['start_time'] ?? ''));
+                    if ($pickup === false || $pickup <= $nowTs) {
+                        $error = 'לא ניתן לשלוח בקשה לאחר מועד הלקיחה.';
+                    } elseif ($pickup - $nowTs > 48 * 3600) {
+                        $error = 'מעל 48 שעות לפני הלקיחה ניתן לבטל ישירות.';
+                    } else {
+                        $upd = $pdo->prepare('UPDATE orders SET deletion_request_reason = :r, deletion_requested_at = :t, updated_at = :u WHERE id = :id AND status IN (\'pending\',\'approved\')');
+                        $upd->execute([
+                            ':r' => $reason,
+                            ':t' => date('Y-m-d H:i:s'),
+                            ':u' => date('Y-m-d H:i:s'),
+                            ':id' => $id,
+                        ]);
+                        $msg = 'בקשת מחיקה להזמנה #' . $id . ': ' . $reason;
+                        create_notification($pdo, null, 'admin', $msg, 'admin_orders.php?tab=pending');
+                        create_notification($pdo, null, 'warehouse_manager', $msg, 'admin_orders.php?tab=pending');
+                        $success = 'בקשת המחיקה נשלחה למנהל.';
+                        if ($currentTabDel && in_array($currentTabDel, ['today', 'pending', 'future', 'not_picked', 'active', 'not_returned', 'history', 'rejected_deleted'], true)) {
+                            $redir = 'admin_orders.php?tab=' . urlencode((string)$currentTabDel);
+                            $ctm = $_POST['current_today_mode'] ?? null;
+                            if ($currentTabDel === 'today' && $ctm !== null && $ctm !== '') {
+                                $redir .= '&today_mode=' . urlencode((string)$ctm);
+                            }
+                            header('Location: ' . $redir);
+                            exit;
+                        }
+                        header('Location: admin_orders.php?tab=pending');
+                        exit;
+                    }
+                }
             }
         }
     } elseif ($action === 'duplicate') {
@@ -2545,8 +2748,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <input type="hidden" id="borrower_contact" name="borrower_contact"
                                value="<?= htmlspecialchars($editingOrder ? (string)($editingOrder['borrower_contact'] ?? '') : '', ENT_QUOTES, 'UTF-8') ?>">
 
-                        <h3 class="form-section-title">מטרה</h3>
-                        <label for="order_purpose">מטרה</label>
+                        <h3 class="form-section-title">מטרה (שם פרויקט, מרצה, קורס)</h3>
+                        <label for="order_purpose">מטרה (שם פרויקט, מרצה, קורס)</label>
                         <input
                             type="text"
                             id="order_purpose"
@@ -2573,9 +2776,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 ];
                             } elseif ($currentStatus === 'approved') {
                                 if ($tab === 'not_picked') {
-                                    // בטאב "לא נלקח" מאפשרים רק סגירה ל"עבר"
+                                    // בטאב "לא נלקח" מאפשרים רק סגירה להוחזר
                                     $orderStatusOptions = [
-                                        'returned' => 'עבר',
+                                        'returned' => 'הוחזר',
                                     ];
                                 } elseif ($isTodayPrepareCtx) {
                                     $orderStatusOptions = [
@@ -2611,14 +2814,14 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 ];
                             } elseif ($currentStatus === 'on_loan') {
                                 if ($tab === 'not_returned') {
-                                    // בטאב "לא הוחזר" מאפשרים רק סגירה ל"עבר"
+                                    // בטאב "לא הוחזר" מאפשרים רק סגירה להוחזר
                                     $orderStatusOptions = [
-                                        'returned' => 'עבר',
+                                        'returned' => 'הוחזר',
                                     ];
                                 } else {
                                     $orderStatusOptions = [
                                         'on_loan'  => 'בהשאלה (נוכחי)',
-                                        'returned' => 'עבר',
+                                        'returned' => 'הוחזר',
                                     ];
                                 }
                             } elseif ($currentStatus === 'rejected') {
@@ -2626,7 +2829,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             } elseif ($currentStatus === 'deleted') {
                                 $orderStatusOptions = ['deleted' => 'נמחק (נוכחי)'];
                             } elseif ($currentStatus === 'returned') {
-                                $orderStatusOptions = ['returned' => 'עבר (נוכחי)'];
+                                $orderStatusOptions = ['returned' => 'הוחזר (נוכחי)'];
                             }
 
                             $returnStatusValue = (string)($editingOrder['return_equipment_status'] ?? '');
@@ -2786,6 +2989,12 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             <?php endif; ?>
                         </div>
                         <div id="equipment_column_body" class="equipment-column-body <?= $isNewOrderMode ? '' : 'hidden' ?>">
+                            <?php
+                            $hideEquipmentCategoryUi = ($role === 'student')
+                                || ($tab === 'today' && $todayMode === 'prepare' && in_array($role, ['admin', 'warehouse_manager'], true));
+                            $showEquipmentBarcodeSearch = ($tab === 'today' && $todayMode === 'prepare' && in_array($role, ['admin', 'warehouse_manager'], true));
+                            ?>
+                            <?php if (!$hideEquipmentCategoryUi): ?>
                             <label for="equipment_category_filter">קטגוריית ציוד</label>
                             <select id="equipment_category_filter">
                                 <option value="all">כל הקטגוריות</option>
@@ -2795,6 +3004,14 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                            <?php else: ?>
+                            <label for="equipment_search_filter">חיפוש (שם / קוד)</label>
+                            <input type="search" id="equipment_search_filter" autocomplete="off" placeholder="הקלד לסינון…" style="width:100%;max-width:18rem;">
+                            <?php if ($showEquipmentBarcodeSearch): ?>
+                            <label for="equipment_barcode_input" style="margin-top:0.35rem;">ברקוד</label>
+                            <input type="text" id="equipment_barcode_input" autocomplete="off" inputmode="numeric" placeholder="סריקה או הקלדה" style="width:100%;max-width:18rem;">
+                            <?php endif; ?>
+                            <?php endif; ?>
 
                             <table>
                                 <thead>
@@ -2802,7 +3019,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     <th style="width:40px;">בחר</th>
                                     <th>שם הציוד</th>
                                     <th>קוד</th>
+                                    <?php if (!$hideEquipmentCategoryUi): ?>
                                     <th>קטגוריה</th>
+                                    <?php endif; ?>
                                 </tr>
                                 </thead>
                                 <tbody id="equipment_table_body">
@@ -2815,8 +3034,16 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                     $isChecked = $editingOrder
                                         ? in_array((int)$item['id'], $editingEquipmentIds, true)
                                         : false;
+                                    $searchBlob = $item['name'] . ' ' . $item['code'] . ' ' . $cat;
+                                    if (function_exists('mb_strtolower')) {
+                                        $searchBlob = mb_strtolower($searchBlob, 'UTF-8');
+                                    } else {
+                                        $searchBlob = strtolower($searchBlob);
+                                    }
                                     ?>
-                                    <tr data-category="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>" data-equipment-id="<?= (int)$item['id'] ?>">
+                                    <tr data-category="<?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?>"
+                                        data-equipment-id="<?= (int)$item['id'] ?>"
+                                        data-search-text="<?= htmlspecialchars($searchBlob, ENT_QUOTES, 'UTF-8') ?>">
                                         <td>
                                             <input type="checkbox"
                                                    name="equipment_ids[]"
@@ -2827,7 +3054,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                         </td>
                                         <td><?= htmlspecialchars($item['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td class="muted-small"><?= htmlspecialchars($item['code'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <?php if (!$hideEquipmentCategoryUi): ?>
                                         <td class="muted-small"><?= htmlspecialchars($cat, ENT_QUOTES, 'UTF-8') ?></td>
+                                        <?php endif; ?>
                                     </tr>
                                 <?php endforeach; ?>
                                 </tbody>
@@ -2933,7 +3162,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <th>סטטוס</th>
                         <th>תאריך השאלה</th>
                         <th>תאריך החזרה</th>
-                        <th>החברה</th>
+                        <th>קשר</th>
                         <th>טופס השאלה</th>
                         <th>הערות</th>
                         <th>פעולות</th>
@@ -3136,7 +3365,31 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             ?>
                         </td>
                         <td class="muted-small">
-                            <?= htmlspecialchars($order['borrower_contact'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                            <?php
+                            $emC = trim((string)($order['borrower_user_email'] ?? ''));
+                            $phC = trim((string)($order['borrower_user_phone'] ?? ''));
+                            $bcC = trim((string)($order['borrower_contact'] ?? ''));
+                            $links = [];
+                            if ($emC !== '' && filter_var($emC, FILTER_VALIDATE_EMAIL)) {
+                                $links[] = '<a href="mailto:' . htmlspecialchars($emC, ENT_QUOTES, 'UTF-8') . '">מייל</a>';
+                            }
+                            if ($phC !== '') {
+                                $telHref = preg_replace('/\s+/', '', $phC);
+                                $links[] = '<a href="tel:' . htmlspecialchars($telHref, ENT_QUOTES, 'UTF-8') . '">טלפון</a>';
+                                $wa = gf_whatsapp_url_from_phone($phC);
+                                if ($wa !== null) {
+                                    $links[] = '<a href="' . htmlspecialchars($wa, ENT_QUOTES, 'UTF-8') . '" target="_blank" rel="noopener noreferrer">ווטסאפ</a>';
+                                }
+                            }
+                            if ($links !== []) {
+                                echo implode(' · ', $links);
+                                if ($bcC !== '') {
+                                    echo '<br><span class="muted-small">' . htmlspecialchars($bcC, ENT_QUOTES, 'UTF-8') . '</span>';
+                                }
+                            } else {
+                                echo htmlspecialchars($bcC, ENT_QUOTES, 'UTF-8');
+                            }
+                            ?>
                         </td>
                         <td class="muted-small">
                             <?php
@@ -3157,58 +3410,72 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         </td>
                         <td class="muted-small">
                             <?= htmlspecialchars($order['notes'] ?? '', ENT_QUOTES, 'UTF-8') ?>
+                            <?php
+                            if (!empty($order['deletion_requested_at']) && in_array($role, ['admin', 'warehouse_manager'], true)): ?>
+                                <div class="muted-small" style="margin-top:0.25rem;color:#b45309;">
+                                    בקשת מחיקה: <?= htmlspecialchars((string)($order['deletion_request_reason'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                </div>
+                            <?php endif; ?>
                         </td>
                         <td>
                             <?php
-                            // סטודנט: יכול לערוך/למחוק רק הזמנות שלו בטאב "ממתין" ועד שעה מזמן יצירת ההזמנה.
                             if ($role === 'student') {
-                                $canEditOrDelete = false;
-                                if ($tab === 'pending') {
-                                    $createdAtTs = strtotime((string)($order['created_at'] ?? ''));
-                                    if ($createdAtTs !== false && $createdAtTs >= time() - 3600) {
-                                        $canEditOrDelete = true;
-                                    }
-                                }
-                                if ($canEditOrDelete): ?>
+                                $pickupTsRow = gf_order_pickup_timestamp((string)($order['start_date'] ?? ''), (string)($order['start_time'] ?? ''));
+                                $stSt = (string)($order['status'] ?? '');
+                                $canEditStudent = in_array($stSt, ['pending', 'approved'], true)
+                                    && $pickupTsRow !== false && $pickupTsRow > $nowTs;
+                                $secsUntilPickup = ($pickupTsRow !== false) ? ($pickupTsRow - $nowTs) : -1;
+                                $canDirectCancel = $canEditStudent && $secsUntilPickup > 48 * 3600;
+                                $canRequestDeletion = $canEditStudent && $secsUntilPickup > 0 && $secsUntilPickup <= 48 * 3600;
+                                ?>
                                     <div class="row-actions">
                                         <a href="admin_orders.php?view_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?><?= $tab === 'today' ? '&today_mode=' . urlencode($todayMode) : '' ?>" class="icon-btn" title="צפייה בהזמנה" aria-label="צפייה בהזמנה">
                                             <i data-lucide="eye" aria-hidden="true"></i>
                                         </a>
+                                        <?php if ($canEditStudent): ?>
                                         <a href="admin_orders.php?edit_id=<?= (int)$order['id'] ?>&tab=<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?><?= $tab === 'today' ? '&today_mode=' . urlencode($todayMode) : '' ?>" class="icon-btn" title="עריכה" aria-label="עריכה"><i data-lucide="pencil" aria-hidden="true"></i></a>
-                                        <?php if (!empty($order['recurring_series_id'])): ?>
+                                        <?php endif; ?>
+                                        <?php if ($canDirectCancel): ?>
                                             <div class="recurring-delete-wrap">
-                                                <button type="button" class="icon-btn recurring-delete-btn" aria-expanded="false" aria-haspopup="true" title="מחיקה" aria-label="מחיקה">
+                                                <button type="button" class="icon-btn recurring-delete-btn" aria-expanded="false" aria-haspopup="true" title="ביטול הזמנה" aria-label="ביטול הזמנה">
                                                     <i data-lucide="trash-2" aria-hidden="true"></i>
                                                 </button>
                                                 <div class="recurring-delete-popover" hidden role="menu">
-                                                    <form method="post" action="admin_orders.php" onsubmit="return confirm('לסמן את ההזמנה כנמחקה?');">
-                                                        <input type="hidden" name="action" value="delete">
-                                                        <input type="hidden" name="delete_scope" value="single">
+                                                    <form method="post" action="admin_orders.php" onsubmit="return (document.getElementById('cx_<?= (int)$order['id'] ?>').value.trim() !== '');">
+                                                        <input type="hidden" name="action" value="student_cancel_order">
                                                         <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
                                                         <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
                                                         <?php if ($tab === 'today'): ?>
                                                             <input type="hidden" name="current_today_mode" value="<?= htmlspecialchars($todayMode, ENT_QUOTES, 'UTF-8') ?>">
                                                         <?php endif; ?>
-                                                        <button type="submit">מחק הזמנה זו</button>
+                                                        <label for="cx_<?= (int)$order['id'] ?>">סיבת ביטול</label>
+                                                        <textarea id="cx_<?= (int)$order['id'] ?>" name="cancellation_reason" required rows="2" style="width:100%;max-width:14rem;"></textarea>
+                                                        <button type="submit" class="btn small" style="margin-top:0.35rem;">שלח ביטול</button>
                                                     </form>
                                                 </div>
                                             </div>
-                                        <?php else: ?>
-                                        <form method="post" action="admin_orders.php"
-                                              onsubmit="return confirm('למחוק את ההזמנה הזו?');">
-                                            <input type="hidden" name="action" value="delete">
-                                            <input type="hidden" name="delete_scope" value="single">
-                                            <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
-                                            <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
-                                            <?php if ($tab === 'today'): ?>
-                                                <input type="hidden" name="current_today_mode" value="<?= htmlspecialchars($todayMode, ENT_QUOTES, 'UTF-8') ?>">
-                                            <?php endif; ?>
-                                            <button type="submit" class="icon-btn" title="מחיקה" aria-label="מחיקה"><i data-lucide="trash-2" aria-hidden="true"></i></button>
-                                        </form>
+                                        <?php elseif ($canRequestDeletion): ?>
+                                            <div class="recurring-delete-wrap">
+                                                <button type="button" class="icon-btn recurring-delete-btn" aria-expanded="false" aria-haspopup="true" title="בקשת מחיקה" aria-label="בקשת מחיקה">
+                                                    <i data-lucide="trash-2" aria-hidden="true"></i>
+                                                </button>
+                                                <div class="recurring-delete-popover" hidden role="menu">
+                                                    <form method="post" action="admin_orders.php" onsubmit="return (document.getElementById('dr_<?= (int)$order['id'] ?>').value.trim() !== '');">
+                                                        <input type="hidden" name="action" value="student_deletion_request">
+                                                        <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                                        <input type="hidden" name="current_tab" value="<?= htmlspecialchars($tab, ENT_QUOTES, 'UTF-8') ?>">
+                                                        <?php if ($tab === 'today'): ?>
+                                                            <input type="hidden" name="current_today_mode" value="<?= htmlspecialchars($todayMode, ENT_QUOTES, 'UTF-8') ?>">
+                                                        <?php endif; ?>
+                                                        <label for="dr_<?= (int)$order['id'] ?>">סיבה (נשלח למנהל)</label>
+                                                        <textarea id="dr_<?= (int)$order['id'] ?>" name="deletion_request_reason" required rows="2" style="width:100%;max-width:14rem;"></textarea>
+                                                        <button type="submit" class="btn small" style="margin-top:0.35rem;">שלח בקשה</button>
+                                                    </form>
+                                                </div>
+                                            </div>
                                         <?php endif; ?>
                                     </div>
-                                <?php endif;
-                            } else {
+                            <?php } else {
                                 // למנהל/מנהל מחסן: פעולות בטאבים today, pending, future, active, not_picked, not_returned, rejected_deleted
                                 // בטאב "לא נלקח" ו"לא הוחזר" אין צורך בשכפול.
                                 $adminTabsAllowed = in_array($tab, ['today', 'pending', 'future', 'active', 'not_picked', 'not_returned', 'rejected_deleted'], true);
@@ -3326,7 +3593,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                             } elseif ($order['status'] === 'on_loan') {
                                                 $options = [
                                                     'on_loan'  => 'בהשאלה (נוכחי)',
-                                                    'returned' => 'עבר',
+                                                    'returned' => 'הוחזר',
                                                 ];
                                             }
                                             if (!empty($options)): ?>
@@ -3364,6 +3631,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const equipmentIdHidden = document.getElementById('equipment_id_hidden'); // במצב עריכה
     const equipmentCheckboxes = Array.from(document.querySelectorAll('input[name="equipment_ids[]"]'));
     const categoryFilter = document.getElementById('equipment_category_filter');
+    const equipmentSearchFilter = document.getElementById('equipment_search_filter');
+    const equipmentBarcodeInput = document.getElementById('equipment_barcode_input');
     const equipmentTableBody = document.getElementById('equipment_table_body');
     const addEquipmentBtn = document.getElementById('add_equipment_btn');
     const selectedEquipmentSummary = document.getElementById('selected_equipment_summary');
@@ -3503,6 +3772,9 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         fieldsPrep.forEach(function (el) {
             if (el.type === 'hidden') return;
             if (allowedIdsTodayPrepare.has(el.id)) return;
+            if (el.name === 'equipment_ids[]') return;
+            if (el.id === 'equipment_search_filter' || el.id === 'equipment_barcode_input') return;
+            if (el.id === 'add_equipment_btn') return;
             if (el.classList && el.classList.contains('equipment-components-link')) return;
             if (el.classList && el.classList.contains('equipment-prepared-item-check')) return;
             if (el === orderModalClose || el === orderModalCancel || el.id === 'submit_order_btn') return;
@@ -3695,6 +3967,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         const recurringReady = isRecurringReady();
         const datesReady = normalDatesReady || recurringReady;
         const categoryValue = categoryFilter ? categoryFilter.value : 'all';
+        const searchQ = equipmentSearchFilter ? equipmentSearchFilter.value.trim() : '';
 
         equipmentCheckboxes.forEach(function (cb) {
             cb.disabled = !datesReady;
@@ -3705,11 +3978,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             rows.forEach(function (row) {
                 const cat = row.getAttribute('data-category');
                 const eqId = parseInt(row.getAttribute('data-equipment-id'), 10);
-                const categoryMatch = categoryValue === 'all' || categoryValue === cat;
+                const categoryMatch = !categoryFilter ? true : (categoryValue === 'all' || categoryValue === cat);
+                const blob = row.getAttribute('data-search-text') || '';
+                const searchMatch = !searchQ ? true : (blob.indexOf(searchQ.toLowerCase()) !== -1);
                 const available = useAvailability ? (unavailableEquipmentIds.indexOf(eqId) === -1) : true;
                 // מציגים את רשימת הציוד גם לפני בחירת תאריכים (לפי בקשה),
                 // אך מנטרלים בחירה בפועל עד שהטווח מוכן.
-                const show = categoryMatch && (datesReady ? available : true);
+                const show = categoryMatch && searchMatch && (datesReady ? available : true);
                 row.style.display = show ? '' : 'none';
                 const checkbox = row.querySelector('input[type="checkbox"]');
                 if (checkbox) {
@@ -4125,10 +4400,39 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         });
     });
 
-    // סינון טבלת הציוד לפי קטגוריה
+    // סינון טבלת הציוד לפי קטגוריה / חיפוש טקסט
     if (categoryFilter && equipmentTableBody) {
         categoryFilter.addEventListener('change', function () {
             applyEquipmentVisibility();
+        });
+    }
+    if (equipmentSearchFilter && equipmentTableBody) {
+        equipmentSearchFilter.addEventListener('input', function () {
+            applyEquipmentVisibility();
+        });
+    }
+    if (equipmentBarcodeInput && equipmentTableBody) {
+        equipmentBarcodeInput.addEventListener('change', function () {
+            const v = equipmentBarcodeInput.value.trim();
+            if (!v) {
+                return;
+            }
+            const rows = equipmentTableBody.querySelectorAll('tr');
+            rows.forEach(function (row) {
+                const cb = row.querySelector('input[type="checkbox"][name="equipment_ids[]"]');
+                if (!cb) {
+                    return;
+                }
+                const code = cb.getAttribute('data-code') || '';
+                if (code === v) {
+                    if (!cb.disabled) {
+                        cb.checked = true;
+                        cb.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    row.scrollIntoView({ block: 'nearest' });
+                }
+            });
+            equipmentBarcodeInput.value = '';
         });
     }
 
