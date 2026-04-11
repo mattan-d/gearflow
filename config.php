@@ -336,6 +336,93 @@ function gf_is_accessories_equipment_category(string $fullCategory): bool
 }
 
 /**
+ * מזהה ערכת ציוד לפי מזהה מצלמה, או null אם אין ערכה.
+ */
+function gf_equipment_kit_id_for_camera(PDO $pdo, int $cameraEquipmentId): ?int
+{
+    if ($cameraEquipmentId < 1) {
+        return null;
+    }
+    $stmt = $pdo->prepare('SELECT id FROM equipment_kits WHERE camera_equipment_id = :cid LIMIT 1');
+    $stmt->execute([':cid' => $cameraEquipmentId]);
+    $id = (int)($stmt->fetchColumn() ?: 0);
+
+    return $id > 0 ? $id : null;
+}
+
+/**
+ * @return list<int>
+ */
+function gf_equipment_kit_item_ids(PDO $pdo, int $cameraEquipmentId): array
+{
+    $kitId = gf_equipment_kit_id_for_camera($pdo, $cameraEquipmentId);
+    if ($kitId === null) {
+        return [];
+    }
+    $stmt = $pdo->prepare(
+        'SELECT equipment_id FROM equipment_kit_items WHERE kit_id = :kid ORDER BY equipment_id ASC'
+    );
+    $stmt->execute([':kid' => $kitId]);
+    $out = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_COLUMN, 0) as $row) {
+        $eid = (int)$row;
+        if ($eid > 0) {
+            $out[] = $eid;
+        }
+    }
+
+    return $out;
+}
+
+function gf_equipment_kit_contains(PDO $pdo, int $cameraEquipmentId, int $accessoryEquipmentId): bool
+{
+    if ($cameraEquipmentId < 1 || $accessoryEquipmentId < 1) {
+        return false;
+    }
+    $kitId = gf_equipment_kit_id_for_camera($pdo, $cameraEquipmentId);
+    if ($kitId === null) {
+        return false;
+    }
+    $stmt = $pdo->prepare(
+        'SELECT 1 FROM equipment_kit_items WHERE kit_id = :kid AND equipment_id = :eid LIMIT 1'
+    );
+    $stmt->execute([':kid' => $kitId, ':eid' => $accessoryEquipmentId]);
+
+    return (bool)$stmt->fetchColumn();
+}
+
+/**
+ * מפתח: מזהה מצלמה (מחרוזת למסך JSON) → רשימת מזהי ציוד נלווה בערכה.
+ *
+ * @return array<string, list<int>>
+ */
+function gf_equipment_kits_map_all(PDO $pdo): array
+{
+    $stmt = $pdo->query(
+        'SELECT ek.camera_equipment_id, eki.equipment_id
+         FROM equipment_kits ek
+         JOIN equipment_kit_items eki ON eki.kit_id = ek.id
+         ORDER BY ek.camera_equipment_id ASC, eki.equipment_id ASC'
+    );
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    $map  = [];
+    foreach ($rows as $r) {
+        $cam = (int)($r['camera_equipment_id'] ?? 0);
+        $eid = (int)($r['equipment_id'] ?? 0);
+        if ($cam < 1 || $eid < 1) {
+            continue;
+        }
+        $key = (string)$cam;
+        if (!isset($map[$key])) {
+            $map[$key] = [];
+        }
+        $map[$key][] = $eid;
+    }
+
+    return $map;
+}
+
+/**
  * @param list<int> $equipmentIds
  */
 function gf_validate_student_order_equipment_selection(PDO $pdo, array $equipmentIds): ?string
@@ -344,33 +431,48 @@ function gf_validate_student_order_equipment_selection(PDO $pdo, array $equipmen
     if ($equipmentIds === []) {
         return 'יש לבחור ציוד.';
     }
-    $cam = 0;
-    $room = 0;
+    $camId  = 0;
+    $roomId = 0;
     foreach ($equipmentIds as $eid) {
         $stmt = $pdo->prepare('SELECT TRIM(COALESCE(category, \'\')) FROM equipment WHERE id = :id LIMIT 1');
         $stmt->execute([':id' => $eid]);
         $cat = trim((string)$stmt->fetchColumn());
-        if (!gf_student_may_order_equipment_category($cat)) {
-            return 'ניתן להזמין רק ציוד מקטגוריית מצלמות או חדר עריכה (לא ציוד נלווה או אחר).';
-        }
         $main = gf_parse_stored_equipment_category($cat)['main'];
         if ($main === 'מצלמות') {
-            $cam++;
+            if ($camId > 0) {
+                return 'בהשאלה רגילה ניתן לבחור מצלמה אחת בלבד.';
+            }
+            $camId = $eid;
         } elseif ($main === 'חדרי עריכה') {
-            $room++;
+            if ($roomId > 0) {
+                return 'ניתן לבחור חדר עריכה אחד בלבד.';
+            }
+            $roomId = $eid;
         }
     }
-    if ($cam > 1) {
-        return 'בהשאלה רגילה ניתן לבחור מצלמה אחת בלבד.';
-    }
-    if ($room > 1) {
-        return 'ניתן לבחור חדר עריכה אחד בלבד.';
-    }
-    if ($cam === 1 && $room >= 1) {
+    if ($camId > 0 && $roomId > 0) {
         return 'יש לבחור או מצלמה או חדר עריכה.';
     }
-    if ($cam === 0 && $room === 0) {
+    if ($camId === 0 && $roomId === 0) {
         return 'יש לבחור מצלמה או חדר עריכה.';
+    }
+    foreach ($equipmentIds as $eid) {
+        $stmt = $pdo->prepare('SELECT TRIM(COALESCE(category, \'\')) FROM equipment WHERE id = :id LIMIT 1');
+        $stmt->execute([':id' => $eid]);
+        $cat = trim((string)$stmt->fetchColumn());
+        $main = gf_parse_stored_equipment_category($cat)['main'];
+        if ($main === 'מצלמות' || $main === 'חדרי עריכה') {
+            continue;
+        }
+        if (gf_is_accessories_equipment_category($cat)) {
+            if ($camId === 0 || !gf_equipment_kit_contains($pdo, $camId, $eid)) {
+                return 'פריט נלווה מותר רק כחלק מהערכה של המצלמה שנבחרה.';
+            }
+
+            continue;
+        }
+
+        return 'ניתן להזמין רק מצלמה, חדר עריכה או ציוד נלווה מהערכה.';
     }
 
     return null;
@@ -654,6 +756,23 @@ function initialize_database(PDO $pdo): void
         CREATE INDEX IF NOT EXISTS idx_order_equipment_equipment_id
         ON order_equipment (equipment_id)
     ");
+
+    // ערכות ציוד נלווה לפי מצלמה (מצלמה אחת ↔ ערכה אחת)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS equipment_kits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            camera_equipment_id INTEGER NOT NULL UNIQUE,
+            updated_at TEXT NOT NULL
+        )
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS equipment_kit_items (
+            kit_id INTEGER NOT NULL,
+            equipment_id INTEGER NOT NULL,
+            PRIMARY KEY (kit_id, equipment_id)
+        )
+    ");
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_equipment_kit_items_equipment ON equipment_kit_items (equipment_id)');
 
     // טבלת שעות פתיחת מחסנים – שורות מייצגות שעות פתוחות בלבד
     $pdo->exec("

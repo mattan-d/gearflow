@@ -679,6 +679,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         <a href="admin_equipment.php"><?= htmlspecialchars($navLabels['equipment'], ENT_QUOTES, 'UTF-8') ?></a>
                         <div class="main-nav-sub">
                             <a href="admin_equipment.php">ניהול ציוד</a>
+                            <a href="admin_equipment_kits.php">ניהול ערכות</a>
                             <a href="admin_inventory_count.php">ספירת מלאי</a>
                         </div>
                     </div>

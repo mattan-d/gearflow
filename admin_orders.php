@@ -546,6 +546,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             && in_array($currentTab, ['not_picked', 'not_returned'], true)
         );
 
+        if (!$isSpecialStatusUpdate && !empty($_POST['include_equipment_kit']) && ($action === 'create' || $action === 'update')) {
+            $cameraForKit = 0;
+            foreach ($equipmentIds as $eid) {
+                $stmtCamKit = $pdo->prepare('SELECT TRIM(COALESCE(category, \'\')) FROM equipment WHERE id = :id LIMIT 1');
+                $stmtCamKit->execute([':id' => $eid]);
+                $catCamKit = trim((string)$stmtCamKit->fetchColumn());
+                if (gf_parse_stored_equipment_category($catCamKit)['main'] === 'מצלמות') {
+                    $cameraForKit = $eid;
+                    break;
+                }
+            }
+            if ($cameraForKit > 0) {
+                foreach (gf_equipment_kit_item_ids($pdo, $cameraForKit) as $kid) {
+                    if ($kid > 0 && !in_array($kid, $equipmentIds, true)) {
+                        $equipmentIds[] = $kid;
+                    }
+                }
+            }
+        }
+
         if (!$isSpecialStatusUpdate && (count($equipmentIds) === 0 || $borrowerName === '')) {
             $error = 'יש למלא ציוד ושם שואל.';
         } elseif (!$isSpecialStatusUpdate && $recurringEnabled && !$isRecurringCreate && $action === 'create') {
@@ -1528,6 +1548,28 @@ foreach ($equipmentOptions as $item) {
     }
 }
 sort($equipmentCategories, SORT_NATURAL | SORT_FLAG_CASE);
+
+$equipmentMainById = [];
+foreach ($equipmentOptions as $item) {
+    $equipmentMainById[(int)($item['id'] ?? 0)] = gf_parse_stored_equipment_category(trim((string)($item['category'] ?? '')))['main'];
+}
+$equipmentMainByIdJson = json_encode($equipmentMainById, JSON_UNESCAPED_UNICODE);
+$equipmentKitsMapJson   = json_encode(gf_equipment_kits_map_all($pdo), JSON_UNESCAPED_UNICODE);
+
+$orderKitCheckboxChecked = false;
+if ($editingOrder && (int)($editingOrder['equipment_id'] ?? 0) > 0) {
+    $camEidForKit = (int)$editingOrder['equipment_id'];
+    $kitIdsOrder  = gf_equipment_kit_item_ids($pdo, $camEidForKit);
+    if ($kitIdsOrder !== []) {
+        $orderKitCheckboxChecked = true;
+        foreach ($kitIdsOrder as $kid) {
+            if (!in_array($kid, $editingEquipmentIds, true)) {
+                $orderKitCheckboxChecked = false;
+                break;
+            }
+        }
+    }
+}
 
 // טאבים וסינון
 $today     = date('Y-m-d');
@@ -3309,6 +3351,17 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 הוסף
                             </button>
                             <div class="muted-small" id="selected_equipment_summary" style="margin-top:0.3rem;"></div>
+                            <?php if (empty($showAdminCameraAccessoryPanel)): ?>
+                            <div id="order_equipment_kit_wrap" class="order-equipment-kit-wrap" style="display:none;margin-top:0.55rem;">
+                                <label style="display:flex;align-items:flex-start;gap:0.45rem;font-size:0.88rem;cursor:pointer;">
+                                    <input type="checkbox" name="include_equipment_kit" value="1" id="include_equipment_kit"
+                                           <?= !empty($orderKitCheckboxChecked) ? 'checked' : '' ?>
+                                           <?= $isViewModeOrder ? 'disabled' : '' ?>
+                                           style="margin-top:0.15rem;">
+                                    <span><strong>ערכה</strong> — להזמין את המצלמה יחד עם ציוד הנלווה המוגדר לערכה</span>
+                                </label>
+                            </div>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <?php endif; ?>
@@ -3893,6 +3946,8 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 <script>
 (function () {
     const students = <?= json_encode($students, JSON_UNESCAPED_UNICODE) ?>;
+    const equipmentMainById = <?= $equipmentMainByIdJson ?>;
+    const equipmentKitsMap = <?= $equipmentKitsMapJson ?>;
 
     const startInput = document.getElementById('start_date');
     const endInput = document.getElementById('end_date');
@@ -4251,6 +4306,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             var t = e.target;
             if (t && t.name === 'equipment_ids[]') {
                 updateEquipmentState();
+                updateOrderKitCheckboxVisibility();
             }
         });
     }
@@ -4320,6 +4376,35 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         return getEquipmentCheckboxes().some(function (cb) { return cb.checked; });
     }
 
+    function updateOrderKitCheckboxVisibility() {
+        const wrap = document.getElementById('order_equipment_kit_wrap');
+        const kitCb = document.getElementById('include_equipment_kit');
+        if (!wrap || !kitCb) {
+            return;
+        }
+        const checked = getEquipmentCheckboxes().filter(function (cb) { return cb.checked; });
+        let camId = 0;
+        checked.forEach(function (inp) {
+            const id = parseInt(inp.value, 10);
+            if (!id) {
+                return;
+            }
+            const main = equipmentMainById[id];
+            if (main === 'מצלמות') {
+                camId = id;
+            }
+        });
+        const kit = equipmentKitsMap[camId] || equipmentKitsMap[String(camId)];
+        if (camId > 0 && kit && kit.length) {
+            wrap.style.display = '';
+        } else {
+            wrap.style.display = 'none';
+            if (!kitCb.disabled) {
+                kitCb.checked = false;
+            }
+        }
+    }
+
     function updateSelectedEquipmentSummary() {
         const checked = getEquipmentCheckboxes().filter(function (cb) { return cb.checked; });
 
@@ -4329,6 +4414,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             if (submitBtn && !isViewModeOrder) {
                 submitBtn.disabled = false;
             }
+            updateOrderKitCheckboxVisibility();
             return;
         }
 
@@ -4401,6 +4487,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                 equipmentIdHidden.value = firstRow ? (firstRow.getAttribute('data-equipment-id') || '') : '';
             }
         }
+        updateOrderKitCheckboxVisibility();
     }
 
     if (selectedEquipmentList) {
