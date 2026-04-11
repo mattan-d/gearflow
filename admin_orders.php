@@ -1090,21 +1090,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'update_status') {
         $id     = (int)($_POST['id'] ?? 0);
         $status = $_POST['status'] ?? 'pending';
+        $rejectionReasonQuick = trim((string)($_POST['rejection_reason'] ?? ''));
 
         if ($id > 0) {
             // מביאים את הסטטוס הנוכחי כדי לבדוק מעבר חוקי + שם יוצר ההזמנה
-            $stmt = $pdo->prepare('SELECT status, creator_username, borrower_name FROM orders WHERE id = :id');
+            $stmt = $pdo->prepare('SELECT status, creator_username, borrower_name, notes FROM orders WHERE id = :id');
             $stmt->execute([':id' => $id]);
             $row = $stmt->fetch(PDO::FETCH_ASSOC);
             $currentStatus   = $row['status'] ?? null;
             $creatorUsername = (string)($row['creator_username'] ?? '');
             $borrowerNameForNotification = (string)($row['borrower_name'] ?? '');
+            $notesDb = trim((string)($row['notes'] ?? ''));
 
             $allowedNext = [];
             if ($currentStatus === 'pending') {
                 $allowedNext = ['approved', 'rejected', 'deleted', 'ready'];
             } elseif ($currentStatus === 'approved') {
-                $allowedNext = ['on_loan', 'ready', 'rejected', 'deleted'];
+                // כולל סגירה להוחזר (למשל טאב "לא נלקח")
+                $allowedNext = ['on_loan', 'ready', 'rejected', 'deleted', 'returned'];
             } elseif ($currentStatus === 'ready') {
                 $allowedNext = ['on_loan', 'approved', 'deleted'];
             } elseif ($currentStatus === 'on_loan') {
@@ -1118,9 +1121,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } elseif (!in_array($status, $allowedNext, true)) {
                 $error = 'שינוי סטטוס זה אינו מותר לפי כללי המעבר.';
             } else {
+                $notesUpdate = $notesDb;
+                if ($status === 'rejected' && $rejectionReasonQuick !== '') {
+                    $notesUpdate = $notesDb !== '' ? $notesDb . "\n" . 'סיבה לדחייה: ' . $rejectionReasonQuick : 'סיבה לדחייה: ' . $rejectionReasonQuick;
+                }
                 $stmt = $pdo->prepare(
                     'UPDATE orders
                      SET status = :status,
+                         notes = :notes,
                          equipment_prepared = CASE
                              WHEN :status = \'ready\' THEN 1
                              WHEN :status = \'on_loan\' THEN 0
@@ -1131,6 +1139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
                 $stmt->execute([
                     ':status'     => $status,
+                    ':notes'      => $notesUpdate,
                     ':updated_at' => date('Y-m-d H:i:s'),
                     ':id'         => $id,
                 ]);
@@ -1172,6 +1181,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     header('Location: admin_orders.php?tab=rejected_deleted');
                     exit;
                 }
+                if ($status === 'returned') {
+                    header('Location: admin_orders.php?tab=history');
+                    exit;
+                }
             }
         }
     } elseif ($action === 'update_status_bulk') {
@@ -1198,7 +1211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($currentStatus === 'pending') {
                     $allowedNext = ['approved', 'rejected', 'deleted', 'ready'];
                 } elseif ($currentStatus === 'approved') {
-                    $allowedNext = ['on_loan', 'ready', 'rejected', 'deleted'];
+                    $allowedNext = ['on_loan', 'ready', 'rejected', 'deleted', 'returned'];
                 } elseif ($currentStatus === 'ready') {
                     $allowedNext = ['on_loan', 'approved', 'deleted'];
                 } elseif ($currentStatus === 'on_loan') {
@@ -1573,21 +1586,22 @@ switch ($tab) {
 
     case 'today':
     default:
-        // היום – מפוצל לתת־מצבים:
-        // הכנת ציוד: ממתין/מאושר ביום הלקיחה
-        // קבלת ציוד: מוכנה ביום הלקיחה
-        // החזרה: on_loan עם החזרה היום
+        // היום – מפוצל לתת־מצבים (מותאם גם להכנה/השאלה/החזרה לפני מועד מתוכנן ביומן)
         if ($todayMode === 'return') {
-            $where = " WHERE o.status = 'on_loan'
-                       AND DATE(o.end_date) = :today";
+            // החזרה: כל מה שבהשאלה (גם לפני מועד ההחזרה המתוכנן / מועד ההשאלה ביומן)
+            $where = " WHERE o.status = 'on_loan'";
         } elseif ($todayMode === 'prepare') {
+            // הכנת ציוד + אפשרות מעבר להשאלה: ממתין/מאושר, גם לפני יום הלקיחה המתוכנן (כל עוד טווח ההשאה לא הסתיים)
             $where = " WHERE o.status IN ('pending', 'approved')
-                       AND DATE(o.start_date) = :today";
+                       AND DATE(o.end_date) >= :today";
         } else {
+            // קבלת ציוד (מוכנה): גם אם מועד הלקיחה המתוכנן עדיין בעתיד
             $where = " WHERE o.status = 'ready'
-                       AND DATE(o.start_date) = :today";
+                       AND DATE(o.end_date) >= :today";
         }
-        $params[':today'] = $today;
+        if ($todayMode !== 'return') {
+            $params[':today'] = $today;
+        }
         break;
 }
 
@@ -1853,16 +1867,21 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             background: #e5e7eb;
             color: #9ca3af;
         }
-        #bulk_update_btn:not([disabled]) {
-            background: linear-gradient(135deg, #4f46e5, #6366f1);
-            color: #ffffff;
+        .order-status-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem;
+            align-items: center;
+            margin-top: 0.25rem;
         }
-        .order-status-select {
-            width: 90px;
-            max-width: 90px;
-            font-size: 0.7rem;
-            padding-right: 0.25rem;
-            padding-left: 0.25rem;
+        .order-status-actions .btn.small {
+            font-size: 0.8rem;
+            padding: 0.25rem 0.55rem;
+        }
+        .order-status-row-btn {
+            font-size: 0.68rem !important;
+            padding: 0.2rem 0.4rem !important;
+            margin-inline-start: 0.15rem;
         }
         .icon-btn {
             border: none;
@@ -2619,8 +2638,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 $formEquipHasComponents = ($editCodeForm !== '' && !empty($equipmentComponentsByCode[$editCodeForm] ?? []));
                                 $showEquipmentPreparedChecklist = (
                                     $tab === 'today' && $todayMode === 'prepare'
-                                    && (string)($editingOrder['status'] ?? '') === 'approved'
-                                    && (string)($editingOrder['start_date'] ?? '') === date('Y-m-d')
+                                    && in_array((string)($editingOrder['status'] ?? ''), ['pending', 'approved'], true)
                                     && !$isViewModeOrder
                                     && $role !== 'student'
                                 );
@@ -2864,14 +2882,28 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             );
                             ?>
                             <h3 class="form-section-title">מצב הזמנה</h3>
-                            <label for="order_status">מצב הזמנה</label>
-                            <select id="order_status" name="order_status" <?= $isViewModeOrder ? 'disabled' : '' ?>>
-                                <?php foreach ($orderStatusOptions as $val => $label): ?>
-                                    <option value="<?= htmlspecialchars($val, ENT_QUOTES, 'UTF-8') ?>" <?= $val === $currentStatus || ($tab === 'not_picked' && $val === 'returned') ? 'selected' : '' ?>>
-                                        <?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+                            <?php
+                            $currentStatusLabelForm = $orderStatusOptions[$currentStatus] ?? $currentStatus;
+                            ?>
+                            <p class="muted-small" style="margin:0 0 0.5rem 0;">
+                                נוכחי: <strong><?= htmlspecialchars($currentStatusLabelForm, ENT_QUOTES, 'UTF-8') ?></strong>
+                            </p>
+                            <input type="hidden" name="order_status" id="order_status" value="<?= htmlspecialchars($currentStatus, ENT_QUOTES, 'UTF-8') ?>">
+                            <?php if (!$isViewModeOrder): ?>
+                                <div class="order-status-actions" role="group" aria-label="שינוי סטטוס">
+                                    <?php foreach ($orderStatusOptions as $val => $label) {
+                                        if ($val === $currentStatus) {
+                                            continue;
+                                        }
+                                        $btnLabel = preg_replace('/\s*\(נוכחי\)\s*$/u', '', (string)$label);
+                                        $btnLabel = trim($btnLabel);
+                                        ?>
+                                        <button type="button" class="btn small neutral order-status-set-btn" data-status="<?= htmlspecialchars($val, ENT_QUOTES, 'UTF-8') ?>">
+                                            <?= htmlspecialchars($btnLabel, ENT_QUOTES, 'UTF-8') ?>
+                                        </button>
+                                    <?php } ?>
+                                </div>
+                            <?php endif; ?>
 
                             <?php if ($showReturnStatusField): ?>
                                 <label for="return_equipment_status">סטטוס החזרה</label>
@@ -3116,15 +3148,6 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     <div class="card">
         <div class="toolbar" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;">
             <h2>רשימת הזמנות</h2>
-            <?php if ($role === 'admin' || $role === 'warehouse_manager'): ?>
-                <form method="post" action="admin_orders.php" id="bulk_status_form">
-                    <input type="hidden" name="action" value="update_status_bulk">
-                    <input type="hidden" name="changes_json" id="changes_json" value="">
-                    <button type="submit" class="btn small neutral" id="bulk_update_btn" disabled>
-                        עדכון שינויים
-                    </button>
-                </form>
-            <?php endif; ?>
         </div>
         <div class="tabs">
             <a href="admin_orders.php?tab=today"   class="<?= $tab === 'today'   ? 'active' : '' ?>">היום</a>
@@ -3563,52 +3586,53 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                         <?php endif; ?>
 
                                         <?php
-                                        // קומבו בוקס שינוי סטטוס – בסוף טור הפעולות
-                                        // בטאבים "לא נלקח" ו"לא הוחזר" לא מציגים קומבו סטטוס.
-                                        if ($tab !== 'not_picked' && $tab !== 'not_returned') {
-                                            $options = [];
-                                            if ($order['status'] === 'pending') {
-                                                $options = [
-                                                    'pending'  => 'ממתין (נוכחי)',
-                                                    'approved' => 'מאושר',
-                                                    'rejected' => 'נדחה',
-                                                    'deleted'  => 'נמחק',
-                                                    'ready'    => 'מוכנה',
-                                                ];
-                                            } elseif ($order['status'] === 'approved') {
-                                                $options = [
-                                                    'approved' => 'מאושר (נוכחי)',
+                                        $stRow = (string)($order['status'] ?? '');
+                                        $nextRow = [];
+                                        if ($stRow === 'pending') {
+                                            $nextRow = [
+                                                'approved' => 'מאושר',
+                                                'rejected' => 'נדחה',
+                                                'deleted'  => 'נמחק',
+                                                'ready'    => 'מוכנה',
+                                            ];
+                                        } elseif ($stRow === 'approved') {
+                                            if ($tab === 'not_picked') {
+                                                $nextRow = ['returned' => 'הוחזר'];
+                                            } else {
+                                                $nextRow = [
                                                     'on_loan'  => 'בהשאלה',
                                                     'ready'    => 'מוכנה',
                                                     'rejected' => 'נדחה',
                                                     'deleted'  => 'נמחק',
-                                                ];
-                                            } elseif ($order['status'] === 'ready') {
-                                                $options = [
-                                                    'ready'    => 'מוכנה (נוכחי)',
-                                                    'on_loan'  => 'בהשאלה',
-                                                    'approved' => 'מאושר',
-                                                    'deleted'  => 'נמחק',
-                                                ];
-                                            } elseif ($order['status'] === 'on_loan') {
-                                                $options = [
-                                                    'on_loan'  => 'בהשאלה (נוכחי)',
-                                                    'returned' => 'הוחזר',
                                                 ];
                                             }
-                                            if (!empty($options)): ?>
-                                                <select name="status"
-                                                        class="muted-small order-status-select"
-                                                        data-order-id="<?= (int)$order['id'] ?>"
-                                                        data-current-status="<?= htmlspecialchars($order['status'], ENT_QUOTES, 'UTF-8') ?>">
-                                                    <?php foreach ($options as $value => $label): ?>
-                                                        <option value="<?= $value ?>" <?= $value === $order['status'] ? 'selected' : '' ?>>
-                                                            <?= $label ?>
-                                                        </option>
-                                                    <?php endforeach; ?>
-                                                </select>
-                                            <?php endif;
-                                        } ?>
+                                        } elseif ($stRow === 'ready') {
+                                            $nextRow = [
+                                                'on_loan'  => 'בהשאלה',
+                                                'approved' => 'מאושר',
+                                                'deleted'  => 'נמחק',
+                                            ];
+                                        } elseif ($stRow === 'on_loan') {
+                                            $nextRow = ['returned' => 'הוחזר'];
+                                        }
+                                        foreach ($nextRow as $nv => $nl) {
+                                            $dataConfirm = 'לעדכן את סטטוס ההזמנה?';
+                                            if ($nv === 'deleted') {
+                                                $dataConfirm = 'לסמן את ההזמנה כנמחקה?';
+                                            } elseif ($nv === 'rejected') {
+                                                $dataConfirm = 'לדחות את הבקשה?';
+                                            }
+                                            ?>
+                                            <form method="post" action="admin_orders.php" class="order-status-quick-form" style="display:inline;"
+                                                  data-reject="<?= $nv === 'rejected' ? '1' : '0' ?>"
+                                                  data-confirm-msg="<?= htmlspecialchars($dataConfirm, ENT_QUOTES, 'UTF-8') ?>">
+                                                <input type="hidden" name="action" value="update_status">
+                                                <input type="hidden" name="id" value="<?= (int)$order['id'] ?>">
+                                                <input type="hidden" name="status" value="<?= htmlspecialchars($nv, ENT_QUOTES, 'UTF-8') ?>">
+                                                <input type="hidden" name="rejection_reason" value="">
+                                                <button type="submit" class="btn small neutral order-status-row-btn"><?= htmlspecialchars($nl, ENT_QUOTES, 'UTF-8') ?></button>
+                                            </form>
+                                        <?php } ?>
                                     </div>
                                 <?php endif;
                             } ?>
@@ -3663,8 +3687,6 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const openOrderModalBtn = document.getElementById('open_order_modal_btn');
     const orderModalClose = document.getElementById('order_modal_close');
     const orderModalCancel = document.getElementById('order_modal_cancel');
-    const bulkUpdateBtn = document.getElementById('bulk_update_btn');
-    const changesJsonInput = document.getElementById('changes_json');
     const originalStartInput = document.querySelector('input[name="original_start_date"]');
     const originalEndInput = document.querySelector('input[name="original_end_date"]');
     const isDuplicateMode = !!(originalStartInput || originalEndInput);
@@ -3761,8 +3783,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const showEquipmentPreparedChecklist = <?= ($editingOrder
         && $tab === 'today'
         && $todayMode === 'prepare'
-        && (string)($editingOrder['status'] ?? '') === 'approved'
-        && (string)($editingOrder['start_date'] ?? '') === date('Y-m-d')
+        && in_array((string)($editingOrder['status'] ?? ''), ['pending', 'approved'], true)
         && !$isViewModeOrder
         && $role !== 'student') ? 'true' : 'false' ?>;
     const preparedInitiallyChecked = <?= (!empty($editingOrder['equipment_prepared'])) ? 'true' : 'false' ?>;
@@ -4676,43 +4697,40 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         });
     }
 
-    // מעקב אחרי שינויים בסטטוסי הזמנות לטובת כפתור "עדכון שינויים"
-    const statusChanges = {};
-    const statusSelects = Array.from(document.querySelectorAll('.order-status-select'));
-    if (bulkUpdateBtn && changesJsonInput && statusSelects.length > 0) {
-        statusSelects.forEach(function (sel) {
-            sel.addEventListener('change', function () {
-                const id = sel.getAttribute('data-order-id');
-                const current = sel.getAttribute('data-current-status') || '';
-                const value = sel.value;
-                if (!id) return;
-                if (value === current) {
-                    delete statusChanges[id];
-                } else {
-                    statusChanges[id] = value;
-                }
-                const hasChanges = Object.keys(statusChanges).length > 0;
-                bulkUpdateBtn.disabled = !hasChanges;
-                if (hasChanges) {
-                    const payload = Object.keys(statusChanges).map(function (orderId) {
-                        return {id: parseInt(orderId, 10), status: statusChanges[orderId]};
-                    });
-                    changesJsonInput.value = JSON.stringify(payload);
-                } else {
-                    changesJsonInput.value = '';
-                }
-            });
-        });
-    }
-
-    // הצגת/הסתרת שדה "סיבה לדחייה" בהתאם למצב הזמנה שנבחר
+    // הצגת/הסתרת שדה "סיבה לדחייה" בהתאם למצב הזמנה (כפתורי סטטוס / שדה נסתר)
     if (orderStatusSelect && rejectionWrapper) {
         function updateRejectionVisibility() {
             rejectionWrapper.style.display = orderStatusSelect.value === 'rejected' ? 'block' : 'none';
         }
-        orderStatusSelect.addEventListener('change', updateRejectionVisibility);
+        document.querySelectorAll('.order-status-set-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const v = btn.getAttribute('data-status') || '';
+                orderStatusSelect.value = v;
+                updateRejectionVisibility();
+            });
+        });
         updateRejectionVisibility();
     }
+
+    document.querySelectorAll('form.order-status-quick-form').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            if (form.getAttribute('data-reject') === '1') {
+                const r = window.prompt('סיבת דחייה (אופציונלי):');
+                if (r === null) {
+                    e.preventDefault();
+                    return;
+                }
+                const inp = form.querySelector('input[name="rejection_reason"]');
+                if (inp) {
+                    inp.value = r || '';
+                }
+            }
+            const msg = form.getAttribute('data-confirm-msg') || '';
+            if (msg && !window.confirm(msg)) {
+                e.preventDefault();
+            }
+        });
+    });
 
     // חיבור אירועים למעבר חודשים
     calPrev.addEventListener('click', function () {

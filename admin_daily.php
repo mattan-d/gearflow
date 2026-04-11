@@ -199,31 +199,49 @@ try {
     $equipmentRows = [];
 }
 
-// הזמנות החופפות ליום הנבחר (כולל הזמנות רב-יומיות)
+// הזמנות החופפות ליום הנבחר (כולל הזמנות רב-יומיות; פריט ראשי + ציוד נלווה מ־order_equipment — תואם למנהל ההזמנות)
 $ordersByEquipment = [];
 try {
-    $sql = "SELECT
-                o.id,
-                o.equipment_id,
-                o.borrower_name,
-                o.start_date,
-                o.end_date,
-                COALESCE(o.start_time, '09:00') AS start_time,
-                COALESCE(o.end_time,   '17:00') AS end_time,
-                o.status
-            FROM orders o
-            WHERE o.start_date <= ? AND o.end_date >= ?
-              AND o.status != 'deleted'";
-    $params = [$day, $day];
+    $baseCols = 'o.id, o.borrower_name, o.start_date, o.end_date,
+                COALESCE(o.start_time, \'09:00\') AS start_time,
+                COALESCE(o.end_time,   \'17:00\') AS end_time,
+                o.status';
+    $dateCond = 'o.start_date <= ? AND o.end_date >= ? AND o.status != \'deleted\'';
 
     if (!empty($equipmentRows)) {
         $ids = array_map(static fn($r) => (int)($r['id'] ?? 0), $equipmentRows);
         $ids = array_values(array_filter($ids, static fn($v) => $v > 0));
         if (!empty($ids)) {
             $ph = implode(',', array_fill(0, count($ids), '?'));
-            $sql .= " AND o.equipment_id IN ($ph)";
-            $params = array_merge($params, $ids);
+            $sql = "SELECT * FROM (
+                SELECT $baseCols, o.equipment_id AS equipment_id
+                FROM orders o
+                WHERE $dateCond
+                  AND o.equipment_id IN ($ph)
+                UNION
+                SELECT $baseCols, oe.equipment_id AS equipment_id
+                FROM orders o
+                INNER JOIN order_equipment oe ON oe.order_id = o.id
+                WHERE $dateCond
+                  AND oe.equipment_id IN ($ph)
+            ) AS order_day_rows";
+            $params = array_merge(
+                [$day, $day],
+                $ids,
+                [$day, $day],
+                $ids
+            );
+        } else {
+            $sql = "SELECT $baseCols, o.equipment_id
+                    FROM orders o
+                    WHERE $dateCond";
+            $params = [$day, $day];
         }
+    } else {
+        $sql = "SELECT $baseCols, o.equipment_id
+                FROM orders o
+                WHERE $dateCond";
+        $params = [$day, $day];
     }
     $stmtO = $pdo->prepare($sql);
     $stmtO->execute($params);
@@ -329,7 +347,7 @@ function gf_status_color(string $status): array {
         case 'on_loan':
             return ['bg' => '#86efac', 'fg' => '#052e16', 'label' => 'בהשאלה'];
         case 'returned':
-            return ['bg' => '#e5e7eb', 'fg' => '#111827', 'label' => 'עבר'];
+            return ['bg' => '#e5e7eb', 'fg' => '#111827', 'label' => 'הוחזר'];
         case 'rejected':
             return ['bg' => '#fecaca', 'fg' => '#7f1d1d', 'label' => 'נדחה'];
         case 'ready':
@@ -833,10 +851,15 @@ if ($activeCalendarRow !== null) {
             if (window.lucide) lucide.createIcons();
         }
         function closeModal() {
+            var hadSrc = modalFrame.src && modalFrame.src !== 'about:blank';
             modal.style.display = 'none';
             modal.setAttribute('aria-hidden', 'true');
             // מנקה את ה-iframe כדי לעצור תהליכים פנימיים
             modalFrame.src = 'about:blank';
+            // ריענון הגריד אחרי עריכה/צפייה בהזמנה מהיומן — נתונים זהים למנהל ההזמנות
+            if (!dailyReadOnly && hadSrc) {
+                window.location.reload();
+            }
         }
         modalClose.addEventListener('click', closeModal);
         modal.addEventListener('click', function (e) {
