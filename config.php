@@ -1227,7 +1227,14 @@ function initialize_database(PDO $pdo): void
     ");
     try {
         $dcCnt = (int)$pdo->query('SELECT COUNT(*) FROM daily_calendars')->fetchColumn();
-        if ($dcCnt === 0) {
+        $seeded = gf_app_setting($pdo, 'daily_calendars_seeded', '0') === '1';
+        // אם כבר יש יומנים — מסמנים שברירות המחדל כבר הוחלו (מסד קיים), בלי להכניס מחדש אחרי מחיקה
+        if ($dcCnt > 0) {
+            if (!$seeded) {
+                gf_set_app_setting($pdo, 'daily_calendars_seeded', '1');
+            }
+        } elseif (!$seeded) {
+            // טבלה ריקה רק בהתקנה ראשונית — לא אחרי שהמשתמש מחק את כל היומנים
             $insDc = $pdo->prepare(
                 'INSERT INTO daily_calendars (title, equipment_category, student_visible, sort_order) VALUES (:t, :c, :sv, :so)'
             );
@@ -1237,6 +1244,7 @@ function initialize_database(PDO $pdo): void
             $insDc->execute([
                 ':t' => 'יומן חדרי עריכה', ':c' => 'חדרי עריכה', ':sv' => 1, ':so' => 2,
             ]);
+            gf_set_app_setting($pdo, 'daily_calendars_seeded', '1');
         }
     } catch (Throwable $e) {
         // התעלמות — DB ישן או שגיאת מיגרציה

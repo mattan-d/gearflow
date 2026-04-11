@@ -12,6 +12,39 @@ require_admin();
 $me  = current_user();
 $pdo = get_db();
 
+// התראות הזמנה — חייב להיות מוגדר תמיד לפני כל פלט HTML (מניעת Undefined variable בשרתים עם גרסה חלקית של הקובץ)
+$notifyOrderLabelsStudent = [
+    'stu_approve'      => 'אישור הזמנה',
+    'stu_reject'       => 'דחיית הזמנה',
+    'stu_delete'       => 'מחיקת הזמנה',
+    'stu_edit_admin'   => 'עריכת הזמנה',
+    'stu_admin_placed' => 'הזמנת מנהל',
+];
+$notifyOrderLabelsAdmin = [
+    'adm_new_order'         => 'הזמנה חדשה',
+    'adm_student_changed'   => 'הזמנה שעברה שינוי על ידי הסטודנט',
+    'adm_cancel_request'    => 'בקשת ביטול',
+    'adm_student_cancelled' => 'ביטול על ידי סטודנט',
+];
+$notifyOrderState = [];
+try {
+    foreach (gf_order_notify_setting_keys() as $k) {
+        $notifyOrderState[$k] = [
+            'internal' => gf_app_setting($pdo, 'notify_order_' . $k . '_internal', '1') === '1',
+            'email'    => gf_app_setting($pdo, 'notify_order_' . $k . '_email', '0') === '1',
+            'content'  => gf_app_setting($pdo, 'notify_order_' . $k . '_content', ''),
+        ];
+    }
+} catch (Throwable $e) {
+    foreach (array_merge(array_keys($notifyOrderLabelsStudent), array_keys($notifyOrderLabelsAdmin)) as $k) {
+        $notifyOrderState[$k] = [
+            'internal' => true,
+            'email'    => false,
+            'content'  => '',
+        ];
+    }
+}
+
 // קריאת שעות ברירת מחדל
 $defaults = [];
 $stmt = $pdo->query('SELECT day_of_week, open_time, close_time FROM default_hours ORDER BY day_of_week ASC');
@@ -359,28 +392,6 @@ $googleCfg          = google_mail_load_config($pdo);
 $googleConnected    = google_mail_is_configured($googleCfg);
 $googleRedirectUri  = google_mail_oauth_redirect_uri();
 $googleHasSecret    = trim($googleCfg['client_secret'] ?? '') !== '';
-
-$notifyOrderLabelsStudent = [
-    'stu_approve'      => 'אישור הזמנה',
-    'stu_reject'       => 'דחיית הזמנה',
-    'stu_delete'       => 'מחיקת הזמנה',
-    'stu_edit_admin'   => 'עריכת הזמנה',
-    'stu_admin_placed' => 'הזמנת מנהל',
-];
-$notifyOrderLabelsAdmin = [
-    'adm_new_order'         => 'הזמנה חדשה',
-    'adm_student_changed'   => 'הזמנה שעברה שינוי על ידי הסטודנט',
-    'adm_cancel_request'    => 'בקשת ביטול',
-    'adm_student_cancelled' => 'ביטול על ידי סטודנט',
-];
-$notifyOrderState = [];
-foreach (gf_order_notify_setting_keys() as $k) {
-    $notifyOrderState[$k] = [
-        'internal' => gf_app_setting($pdo, 'notify_order_' . $k . '_internal', '1') === '1',
-        'email'    => gf_app_setting($pdo, 'notify_order_' . $k . '_email', '0') === '1',
-        'content'  => gf_app_setting($pdo, 'notify_order_' . $k . '_content', ''),
-    ];
-}
 
 ?>
 <!DOCTYPE html>

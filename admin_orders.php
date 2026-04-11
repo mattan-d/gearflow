@@ -550,7 +550,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!$isSpecialStatusUpdate && !$isRecurringCreate && $startDate !== '' && $endDate !== '' && $startDate === $endDate && $startTime !== '' && $endTime !== '' && strcmp($endTime, $startTime) <= 0) {
             $error = 'באותו יום, שעת החזרה חייבת להיות מאוחרת משעת ההשאלה.';
         } else {
-            if (!$isSpecialStatusUpdate && $role === 'student' && ($action === 'create' || $action === 'update')) {
+            if (
+                !$isSpecialStatusUpdate
+                && (
+                    ($role === 'student' && ($action === 'create' || $action === 'update'))
+                    || ($role !== 'student' && $action === 'create')
+                )
+            ) {
                 $stErr = gf_validate_student_order_equipment_selection($pdo, $equipmentIds);
                 if ($stErr !== null) {
                     $error = $stErr;
@@ -1898,16 +1904,27 @@ $equipmentSql .= " ORDER BY name ASC";
 
 $equipmentStmt = $pdo->prepare($equipmentSql);
 $equipmentStmt->execute($equipmentParams);
-$equipmentOptions = $equipmentStmt->fetchAll(PDO::FETCH_ASSOC);
+$equipmentOptionsAll = $equipmentStmt->fetchAll(PDO::FETCH_ASSOC);
+$equipmentOptions = $equipmentOptionsAll;
 if ($role === 'student') {
-    $equipmentOptions = array_values(array_filter($equipmentOptions, static function ($item) {
+    $equipmentOptions = array_values(array_filter($equipmentOptionsAll, static function ($item) {
         return gf_student_may_order_equipment_category(trim((string)($item['category'] ?? '')));
     }));
 }
+// טבלת בחירת ציוד: הזמנה חדשה / שכפול — רק מצלמות וחדרי עריכה (גם למנהל); בעריכת הזמנה קיימת — כל הציוד הרלוונטי
+$equipmentPickerRows = $equipmentOptions;
+if ($role !== 'student') {
+    $narrowPicker = ($editingOrder === null) || $isDuplicateMode;
+    if ($narrowPicker) {
+        $equipmentPickerRows = array_values(array_filter($equipmentOptionsAll, static function ($item) {
+            return gf_student_may_order_equipment_category(trim((string)($item['category'] ?? '')));
+        }));
+    }
+}
 
-// קטגוריות ייחודיות לצורך סינון
+// קטגוריות ייחודיות לצורך סינון (לפי מה שמוצג בטבלת הבחירה)
 $equipmentCategories = [];
-foreach ($equipmentOptions as $item) {
+foreach ($equipmentPickerRows as $item) {
     $cat = trim((string)($item['category'] ?? ''));
     if ($cat === '') {
         $cat = 'ללא קטגוריה';
@@ -2092,7 +2109,7 @@ if ($tab === 'today') {
     if (!in_array($sortDirGet, ['asc', 'desc'], true)) {
         $sortDirGet = 'asc';
     }
-    if (!in_array($sortByGet, ['borrower', 'status', 'time'], true)) {
+    if (!in_array($sortByGet, ['borrower', 'status', 'time', 'date'], true)) {
         $sortByGet = 'time';
     }
     $todaySortBy  = $sortByGet;
@@ -2102,7 +2119,10 @@ if ($tab === 'today') {
         $orderByClause = ' ORDER BY o.borrower_name ' . $dirSql . ', o.id ASC';
     } elseif ($sortByGet === 'status') {
         $orderByClause = ' ORDER BY o.status ' . $dirSql . ', o.start_date ASC, COALESCE(o.start_time, \'00:00\') ASC, o.id ASC';
+    } elseif ($sortByGet === 'date') {
+        $orderByClause = ' ORDER BY o.start_date ' . $dirSql . ', o.id ASC';
     } else {
+        // שעת השאלה: כרונולוגי לפי תאריך + שעה
         if ($sortDirGet === 'desc') {
             $orderByClause = ' ORDER BY o.start_date DESC, COALESCE(o.start_time, \'00:00\') DESC, o.id DESC';
         } else {
@@ -2601,19 +2621,19 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
         .row-today-loan {
             background-color: #dcfce7; /* בהשאלה – ירוק בהיר */
         }
-        .today-sort-bar {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 0.5rem 0.75rem;
-            margin-top: 0.5rem;
+        .orders-list-table-today tbody tr:nth-child(even) td {
+            background: transparent;
         }
-        .today-sort-bar a {
+        th .th-sort {
             text-decoration: none;
-            font-size: 0.85rem;
+            font-size: inherit;
+            font-weight: inherit;
             color: #2563eb;
         }
-        .today-sort-bar a.active-sort {
+        th .th-sort:hover {
+            text-decoration: underline;
+        }
+        th .th-sort.active-sort {
             font-weight: 700;
             color: #111827;
         }
@@ -3838,7 +3858,7 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                                 </tr>
                                 </thead>
                                 <tbody id="equipment_table_body">
-                                <?php foreach ($equipmentOptions as $item): ?>
+                                <?php foreach ($equipmentPickerRows as $item): ?>
                                     <?php
                                     $cat = trim((string)($item['category'] ?? ''));
                                     if ($cat === '') {
@@ -3967,40 +3987,42 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             <a href="admin_orders.php?tab=history"      class="<?= $tab === 'history'      ? 'active' : '' ?>">היסטוריה</a>
             <a href="admin_orders.php?tab=rejected_deleted" class="<?= $tab === 'rejected_deleted' ? 'active' : '' ?>">נמחק / נדחה</a>
         </div>
-        <?php if ($tab === 'today'): ?>
-            <div class="today-sort-bar muted-small">
-                <span>מיון:</span>
-                <?php
-                $todaySortHref = static function (string $key, string $curBy, string $curDir): string {
-                    $dir = 'asc';
-                    if ($curBy === $key) {
-                        $dir = $curDir === 'asc' ? 'desc' : 'asc';
-                    }
-
-                    return 'admin_orders.php?tab=today&sort=' . rawurlencode($key) . '&dir=' . rawurlencode($dir);
-                };
-                ?>
-                <a href="<?= htmlspecialchars($todaySortHref('time', $todaySortBy, $todaySortDir), ENT_QUOTES, 'UTF-8') ?>"
-                   class="<?= $todaySortBy === 'time' ? 'active-sort' : '' ?>">שעת השאלה<?= $todaySortBy === 'time' ? ($todaySortDir === 'asc' ? ' ↑' : ' ↓') : '' ?></a>
-                <a href="<?= htmlspecialchars($todaySortHref('borrower', $todaySortBy, $todaySortDir), ENT_QUOTES, 'UTF-8') ?>"
-                   class="<?= $todaySortBy === 'borrower' ? 'active-sort' : '' ?>">שם מזמין<?= $todaySortBy === 'borrower' ? ($todaySortDir === 'asc' ? ' ↑' : ' ↓') : '' ?></a>
-                <a href="<?= htmlspecialchars($todaySortHref('status', $todaySortBy, $todaySortDir), ENT_QUOTES, 'UTF-8') ?>"
-                   class="<?= $todaySortBy === 'status' ? 'active-sort' : '' ?>">סטטוס<?= $todaySortBy === 'status' ? ($todaySortDir === 'asc' ? ' ↑' : ' ↓') : '' ?></a>
-            </div>
-        <?php endif; ?>
         <?php if (count($orders) === 0): ?>
             <p class="muted-small">עדיין לא נוצרו הזמנות במערכת לטאב זה.</p>
         <?php else: ?>
             <div class="orders-table-wrapper" style="max-height:60vh;overflow-y:auto;border-radius:12px;">
-                <table>
+                <?php if ($tab === 'today') {
+                    $todaySortHref = static function (string $key, string $curBy, string $curDir): string {
+                        $dir = 'asc';
+                        if ($curBy === $key) {
+                            $dir = $curDir === 'asc' ? 'desc' : 'asc';
+                        }
+
+                        return 'admin_orders.php?tab=today&sort=' . rawurlencode($key) . '&dir=' . rawurlencode($dir);
+                    };
+                } ?>
+                <table class="orders-list-table<?= $tab === 'today' ? ' orders-list-table-today' : '' ?>">
                     <thead>
                     <tr>
                         <th>#</th>
                         <th>רצף מחזורי</th>
-                        <th>שם המזמין</th>
+                        <th><?php if ($tab === 'today'): ?>
+                            <a href="<?= htmlspecialchars($todaySortHref('borrower', $todaySortBy, $todaySortDir), ENT_QUOTES, 'UTF-8') ?>"
+                               class="th-sort<?= $todaySortBy === 'borrower' ? ' active-sort' : '' ?>">שם המזמין<?= $todaySortBy === 'borrower' ? ($todaySortDir === 'asc' ? ' ↑' : ' ↓') : '' ?></a>
+                        <?php else: ?>שם המזמין<?php endif; ?></th>
                         <th>שם הפריט</th>
-                        <th>סטטוס</th>
-                        <th>תאריך השאלה</th>
+                        <th><?php if ($tab === 'today'): ?>
+                            <a href="<?= htmlspecialchars($todaySortHref('status', $todaySortBy, $todaySortDir), ENT_QUOTES, 'UTF-8') ?>"
+                               class="th-sort<?= $todaySortBy === 'status' ? ' active-sort' : '' ?>">סטטוס<?= $todaySortBy === 'status' ? ($todaySortDir === 'asc' ? ' ↑' : ' ↓') : '' ?></a>
+                        <?php else: ?>סטטוס<?php endif; ?></th>
+                        <th><?php if ($tab === 'today'): ?>
+                            <a href="<?= htmlspecialchars($todaySortHref('date', $todaySortBy, $todaySortDir), ENT_QUOTES, 'UTF-8') ?>"
+                               class="th-sort<?= $todaySortBy === 'date' ? ' active-sort' : '' ?>">תאריך השאלה<?= $todaySortBy === 'date' ? ($todaySortDir === 'asc' ? ' ↑' : ' ↓') : '' ?></a>
+                        <?php else: ?>תאריך השאלה<?php endif; ?></th>
+                        <th><?php if ($tab === 'today'): ?>
+                            <a href="<?= htmlspecialchars($todaySortHref('time', $todaySortBy, $todaySortDir), ENT_QUOTES, 'UTF-8') ?>"
+                               class="th-sort<?= $todaySortBy === 'time' ? ' active-sort' : '' ?>">שעת השאלה<?= $todaySortBy === 'time' ? ($todaySortDir === 'asc' ? ' ↑' : ' ↓') : '' ?></a>
+                        <?php else: ?>שעת השאלה<?php endif; ?></th>
                         <th>תאריך החזרה</th>
                         <th>קשר</th>
                         <th>טופס השאלה</th>
@@ -4193,12 +4215,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         <td class="muted-small">
                             <?php
                             $startDateDisplay = (string)($order['start_date'] ?? '');
+                            echo $startDateDisplay !== '' ? htmlspecialchars($startDateDisplay, ENT_QUOTES, 'UTF-8') : '—';
+                            ?>
+                        </td>
+                        <td class="muted-small">
+                            <?php
                             $startTimeDisplay = (string)($order['start_time'] ?? '');
-                            $startCombined = $startDateDisplay;
-                            if ($startTimeDisplay !== '') {
-                                $startCombined .= ' ' . $startTimeDisplay;
-                            }
-                            echo htmlspecialchars($startCombined, ENT_QUOTES, 'UTF-8');
+                            echo $startTimeDisplay !== '' ? htmlspecialchars($startTimeDisplay, ENT_QUOTES, 'UTF-8') : '—';
                             ?>
                         </td>
                         <td class="muted-small">
