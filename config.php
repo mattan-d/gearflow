@@ -123,6 +123,31 @@ function get_home_route_for_role(string $role): string
     return $fallback;
 }
 
+/**
+ * יומנים יומיים לתפריט: למנהל/מחסן — כל היומנים; לסטודנט — רק יומנים מסומנים כגלויים.
+ *
+ * @return list<array{id:int|string,title:string,student_visible:int|string,sort_order:int|string}>
+ */
+function gf_daily_calendars_for_nav(PDO $pdo, string $role): array
+{
+    try {
+        $stmt = $pdo->query('SELECT id, title, student_visible, sort_order FROM daily_calendars ORDER BY sort_order ASC, id ASC');
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        return [];
+    }
+    if ($role === 'student') {
+        return array_values(array_filter($rows, static function ($r) {
+            return (int)($r['student_visible'] ?? 0) === 1;
+        }));
+    }
+    if (in_array($role, ['admin', 'warehouse_manager'], true)) {
+        return $rows;
+    }
+
+    return [];
+}
+
 function initialize_database(PDO $pdo): void
 {
     $pdo->exec(
@@ -483,6 +508,33 @@ function initialize_database(PDO $pdo): void
     foreach ($defaultSettings as $k => $v) {
         $stmt = $pdo->prepare('INSERT OR IGNORE INTO app_settings (key, value) VALUES (:k, :v)');
         $stmt->execute([':k' => $k, ':v' => $v]);
+    }
+
+    // יומנים יומיים (שם תצוגה, קטגוריית ציוד, נראות לסטודנטים)
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS daily_calendars (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            equipment_category TEXT NOT NULL,
+            student_visible INTEGER NOT NULL DEFAULT 1,
+            sort_order INTEGER NOT NULL DEFAULT 0
+        )
+    ");
+    try {
+        $dcCnt = (int)$pdo->query('SELECT COUNT(*) FROM daily_calendars')->fetchColumn();
+        if ($dcCnt === 0) {
+            $insDc = $pdo->prepare(
+                'INSERT INTO daily_calendars (title, equipment_category, student_visible, sort_order) VALUES (:t, :c, :sv, :so)'
+            );
+            $insDc->execute([
+                ':t' => 'יומן מצלמות', ':c' => 'מצלמה', ':sv' => 1, ':so' => 1,
+            ]);
+            $insDc->execute([
+                ':t' => 'יומן חדרי עריכה', ':c' => 'חדרי עריכה', ':sv' => 1, ':so' => 2,
+            ]);
+        }
+    } catch (Throwable $e) {
+        // התעלמות — DB ישן או שגיאת מיגרציה
     }
 
     // טבלת תוויות סטטוסי הזמנה (לשינוי שם בעברית מבלי לפגוע בקוד)

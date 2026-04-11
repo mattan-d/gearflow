@@ -100,6 +100,13 @@ try {
     $customDocs = [];
 }
 
+$dailyCalendarsNav = [];
+try {
+    $dailyCalendarsNav = gf_daily_calendars_for_nav($pdo, $role);
+} catch (Throwable $e) {
+    $dailyCalendarsNav = [];
+}
+
 // התראות – קריאה בלבד (מחיקה מטופלת ב־notification_action.php כדי למנוע headers already sent)
 $userId = isset($me['id']) ? (int)$me['id'] : 0;
 $notifRedirectUri = $_SERVER['REQUEST_URI'] ?? 'admin.php';
@@ -678,13 +685,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     <a href="admin_orders.php"><?= htmlspecialchars($navLabels['orders'], ENT_QUOTES, 'UTF-8') ?></a>
                     <a href="admin_users.php"><?= htmlspecialchars($navLabels['users'], ENT_QUOTES, 'UTF-8') ?></a>
                     <a href="admin_suppliers.php"><?= htmlspecialchars($navLabels['suppliers'], ENT_QUOTES, 'UTF-8') ?></a>
-                    <div class="main-nav-item-wrapper">
-                        <a href="admin_daily.php?calendar=cameras">יומן</a>
-                        <div class="main-nav-sub">
-                            <a href="admin_daily.php?calendar=cameras">יומן מצלמות</a>
-                            <a href="admin_daily.php?calendar=edit_rooms">יומן חדרי עריכה</a>
+                    <?php if (!empty($dailyCalendarsNav)): ?>
+                        <div class="main-nav-item-wrapper">
+                            <a href="admin_daily.php?calendar_id=<?= (int)$dailyCalendarsNav[0]['id'] ?>">יומן</a>
+                            <div class="main-nav-sub">
+                                <?php foreach ($dailyCalendarsNav as $dcNav): ?>
+                                    <a href="admin_daily.php?calendar_id=<?= (int)($dcNav['id'] ?? 0) ?>">
+                                        <?= htmlspecialchars((string)($dcNav['title'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                    </a>
+                                <?php endforeach; ?>
+                            </div>
                         </div>
-                    </div>
+                    <?php endif; ?>
                     <a href="admin_reports.php"><?= htmlspecialchars($navLabels['reports'], ENT_QUOTES, 'UTF-8') ?></a>
                     <div class="main-nav-item-wrapper">
                         <a href="admin.php"><?= htmlspecialchars($navLabels['system'], ENT_QUOTES, 'UTF-8') ?></a>
@@ -696,6 +708,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                     </div>
                 <?php else: ?>
+                    <?php if (!empty($dailyCalendarsNav)): ?>
+                        <div class="main-nav-item-wrapper">
+                            <a href="admin_daily.php?calendar_id=<?= (int)$dailyCalendarsNav[0]['id'] ?>">יומן</a>
+                            <div class="main-nav-sub">
+                                <?php foreach ($dailyCalendarsNav as $dcNav): ?>
+                                    <a href="admin_daily.php?calendar_id=<?= (int)($dcNav['id'] ?? 0) ?>">
+                                        <?= htmlspecialchars((string)($dcNav['title'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                    </a>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
                     <a href="admin_orders.php"><?= htmlspecialchars($navLabels['orders'], ENT_QUOTES, 'UTF-8') ?></a>
                 <?php endif; ?>
                 <div class="main-nav-item-wrapper">

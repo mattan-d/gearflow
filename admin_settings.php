@@ -137,6 +137,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['category_action'])) {
     }
 }
 
+// יומנים יומיים (שם + קטגוריית ציוד + נראות לסטודנטים)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['daily_calendar_action'])) {
+    $dca = (string)($_POST['daily_calendar_action'] ?? '');
+    if ($dca === 'add') {
+        $dcTitle = trim((string)($_POST['daily_cal_title'] ?? ''));
+        $dcCat   = trim((string)($_POST['daily_cal_category'] ?? ''));
+        $dcVis   = isset($_POST['daily_cal_student_visible']) ? 1 : 0;
+        if ($dcTitle === '' || $dcCat === '') {
+            $error = $error ?: 'יש למלא שם יומן ולבחור סוג ציוד (קטגוריה).';
+        } else {
+            try {
+                $maxSo = (int)$pdo->query('SELECT COALESCE(MAX(sort_order), 0) FROM daily_calendars')->fetchColumn();
+                $insDc = $pdo->prepare(
+                    'INSERT INTO daily_calendars (title, equipment_category, student_visible, sort_order) VALUES (:t, :c, :sv, :so)'
+                );
+                $insDc->execute([':t' => $dcTitle, ':c' => $dcCat, ':sv' => $dcVis, ':so' => $maxSo + 1]);
+                $success = 'היומן נוסף בהצלחה.';
+            } catch (Throwable $e) {
+                $error = $error ?: 'שגיאה בהוספת יומן.';
+            }
+        }
+    } elseif ($dca === 'save') {
+        $dcId    = (int)($_POST['daily_cal_id'] ?? 0);
+        $dcTitle = trim((string)($_POST['daily_cal_title'] ?? ''));
+        $dcCat   = trim((string)($_POST['daily_cal_category'] ?? ''));
+        $dcVis   = isset($_POST['daily_cal_student_visible']) ? 1 : 0;
+        if ($dcId <= 0 || $dcTitle === '' || $dcCat === '') {
+            $error = $error ?: 'נתונים לא תקינים לעדכון יומן.';
+        } else {
+            try {
+                $upDc = $pdo->prepare(
+                    'UPDATE daily_calendars SET title = :t, equipment_category = :c, student_visible = :sv WHERE id = :id'
+                );
+                $upDc->execute([':t' => $dcTitle, ':c' => $dcCat, ':sv' => $dcVis, ':id' => $dcId]);
+                $success = 'היומן עודכן בהצלחה.';
+            } catch (Throwable $e) {
+                $error = $error ?: 'שגיאה בעדכון יומן.';
+            }
+        }
+    } elseif ($dca === 'delete') {
+        $dcId = (int)($_POST['daily_cal_id'] ?? 0);
+        if ($dcId > 0) {
+            try {
+                $delDc = $pdo->prepare('DELETE FROM daily_calendars WHERE id = :id');
+                $delDc->execute([':id' => $dcId]);
+                $success = 'היומן נמחק.';
+            } catch (Throwable $e) {
+                $error = $error ?: 'שגיאה במחיקת יומן.';
+            }
+        }
+    }
+}
+
 // קריאת קטגוריות
 $categories = [];
 try {
@@ -144,6 +197,28 @@ try {
     $categories = $stmtCats->fetchAll(PDO::FETCH_ASSOC) ?: [];
 } catch (Throwable $e) {
     $categories = [];
+}
+
+// אפשרויות קטגוריה לטפסי יומן (כולל "ללא קטגוריה" כמו במסך ניהול יומי)
+$dailyCalendarCategoryOptions = [];
+foreach ($categories as $c) {
+    $n = trim((string)($c['name'] ?? ''));
+    if ($n !== '') {
+        $dailyCalendarCategoryOptions[] = $n;
+    }
+}
+if (!in_array('ללא קטגוריה', $dailyCalendarCategoryOptions, true)) {
+    array_unshift($dailyCalendarCategoryOptions, 'ללא קטגוריה');
+}
+
+$dailyCalendarsSettings = [];
+try {
+    $stmtDcList = $pdo->query(
+        'SELECT id, title, equipment_category, student_visible, sort_order FROM daily_calendars ORDER BY sort_order ASC, id ASC'
+    );
+    $dailyCalendarsSettings = $stmtDcList->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Throwable $e) {
+    $dailyCalendarsSettings = [];
 }
 
 // סטטוסי הזמנה – קריאה ועריכה (שם + צבע)
@@ -622,6 +697,95 @@ $googleHasSecret    = trim($googleCfg['client_secret'] ?? '') !== '';
                                    placeholder="שם קטגוריה חדש"
                                    style="flex:1;padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;">
                             <button type="submit" class="btn small">הוספת קטגוריה</button>
+                        </form>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="category-section">
+            <h3 style="margin-top:1.5rem;margin-bottom:0.5rem;font-size:1.05rem;">יומנים יומיים</h3>
+            <p class="muted-small">
+                יומנים מוצגים בתפריט הראשי תחת &quot;יומן&quot;. לכל יומן נקבעים שם וקטגוריית ציוד (אותה קטגוריה כמו בפריטי הציוד).
+                יומן שלא מסומן כגלוי לסטודנטים יוצג רק למנהל מערכת ולמנהל מחסן.
+            </p>
+            <table class="category-table" style="max-width:780px;">
+                <thead>
+                <tr>
+                    <th style="width:28%;">שם היומן</th>
+                    <th style="width:26%;">קטגוריית ציוד</th>
+                    <th style="width:18%;">גלוי לסטודנטים</th>
+                    <th>פעולות</th>
+                </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($dailyCalendarsSettings as $dcRow): ?>
+                    <?php
+                    $dcId = (int)($dcRow['id'] ?? 0);
+                    $dcTitle = (string)($dcRow['title'] ?? '');
+                    $dcEqCat = (string)($dcRow['equipment_category'] ?? '');
+                    $dcStud  = (int)($dcRow['student_visible'] ?? 0) === 1;
+                    ?>
+                    <tr>
+                        <td colspan="4" style="padding:0.5rem 0.6rem;">
+                            <div style="display:flex;flex-wrap:wrap;gap:0.65rem;align-items:center;justify-content:space-between;">
+                                <form method="post" action="admin_settings.php" style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin:0;flex:1;">
+                                    <input type="hidden" name="daily_calendar_action" value="save">
+                                    <input type="hidden" name="daily_cal_id" value="<?= $dcId ?>">
+                                    <input type="text"
+                                           name="daily_cal_title"
+                                           value="<?= htmlspecialchars($dcTitle, ENT_QUOTES, 'UTF-8') ?>"
+                                           required
+                                           placeholder="שם היומן"
+                                           style="flex:1;min-width:140px;max-width:220px;padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;">
+                                    <select name="daily_cal_category"
+                                            required
+                                            style="min-width:150px;max-width:220px;padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.9rem;">
+                                        <?php foreach ($dailyCalendarCategoryOptions as $opt): ?>
+                                            <option value="<?= htmlspecialchars($opt, ENT_QUOTES, 'UTF-8') ?>" <?= $dcEqCat === $opt ? 'selected' : '' ?>>
+                                                <?= htmlspecialchars($opt, ENT_QUOTES, 'UTF-8') ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <label style="display:flex;align-items:center;gap:0.35rem;white-space:nowrap;font-size:0.88rem;">
+                                        <input type="checkbox" name="daily_cal_student_visible" value="1" <?= $dcStud ? 'checked' : '' ?>>
+                                        גלוי לסטודנטים
+                                    </label>
+                                    <button type="submit" class="btn small">שמירה</button>
+                                </form>
+                                <form method="post" action="admin_settings.php"
+                                      style="margin:0;"
+                                      onsubmit="return confirm('למחוק את היומן &quot;<?= htmlspecialchars($dcTitle, ENT_QUOTES, 'UTF-8') ?>&quot;?');">
+                                    <input type="hidden" name="daily_calendar_action" value="delete">
+                                    <input type="hidden" name="daily_cal_id" value="<?= $dcId ?>">
+                                    <button type="submit" class="btn small" style="background:#f87171;">מחיקה</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                <tr>
+                    <td colspan="4" style="background:#f9fafb;">
+                        <form method="post" action="admin_settings.php" style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;margin:0;">
+                            <input type="hidden" name="daily_calendar_action" value="add">
+                            <strong style="font-size:0.88rem;color:#374151;">יומן חדש:</strong>
+                            <input type="text"
+                                   name="daily_cal_title"
+                                   value=""
+                                   placeholder="שם היומן"
+                                   style="flex:1;min-width:140px;max-width:200px;padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;">
+                            <select name="daily_cal_category"
+                                    style="min-width:150px;max-width:220px;padding:0.3rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;font-size:0.9rem;">
+                                <?php foreach ($dailyCalendarCategoryOptions as $opt): ?>
+                                    <option value="<?= htmlspecialchars($opt, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($opt, ENT_QUOTES, 'UTF-8') ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <label style="display:flex;align-items:center;gap:0.35rem;white-space:nowrap;font-size:0.88rem;">
+                                <input type="checkbox" name="daily_cal_student_visible" value="1" checked>
+                                גלוי לסטודנטים
+                            </label>
+                            <button type="submit" class="btn small">הוספת יומן</button>
                         </form>
                     </td>
                 </tr>

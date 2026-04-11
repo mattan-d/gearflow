@@ -4,28 +4,28 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/auth.php';
 
-/** שם קטגוריית ציוד ליומן מצלמות — חייב להתאים ל־equipment.category (ברירת מחדל תואמת לזריעה ב־config.php) */
+/** שם קטגוריית ציוד ליומן מצלמות — תאימות לכתובות ישנות (?calendar=cameras) */
 const GF_DAILY_CALENDAR_CATEGORY_CAMERAS = 'מצלמה';
-/** שם קטגוריית ציוד ליומן חדרי עריכה */
+/** שם קטגוריית ציוד ליומן חדרי עריכה — תאימות לכתובות ישנות */
 const GF_DAILY_CALENDAR_CATEGORY_EDIT_ROOMS = 'חדרי עריכה';
 
-// דף ניהול יומי – מנהל/מנהל מחסן בלבד
 $me = current_user();
 if ($me === null) {
     header('Location: login.php');
     exit;
 }
 $role = (string)($me['role'] ?? 'student');
-if (!in_array($role, ['admin', 'warehouse_manager'], true)) {
-    http_response_code(403);
-    echo 'Forbidden';
-    exit;
-}
 
 $pdo = get_db();
 
 $action = isset($_GET['action']) ? trim((string)$_GET['action']) : '';
 if ($action === 'order_json') {
+    if (!in_array($role, ['admin', 'warehouse_manager', 'student'], true)) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode(['ok' => false, 'error' => 'Forbidden'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
     header('Content-Type: application/json; charset=UTF-8');
     $orderId = isset($_GET['order_id']) ? (int)$_GET['order_id'] : 0;
     if ($orderId <= 0) {
@@ -74,12 +74,47 @@ if ($day === '' || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) {
     $day = $todayYmd;
 }
 
-$calendarParam = isset($_GET['calendar']) ? trim((string)$_GET['calendar']) : '';
-$calendarMode = in_array($calendarParam, ['cameras', 'edit_rooms'], true) ? $calendarParam : '';
+$calendarIdGet = isset($_GET['calendar_id']) ? (int)$_GET['calendar_id'] : 0;
+$activeCalendarRow = null;
+if ($calendarIdGet > 0) {
+    $stmtCal = $pdo->prepare('SELECT id, title, equipment_category, student_visible FROM daily_calendars WHERE id = :id LIMIT 1');
+    $stmtCal->execute([':id' => $calendarIdGet]);
+    $activeCalendarRow = $stmtCal->fetch(PDO::FETCH_ASSOC) ?: null;
+}
 
-if ($calendarMode === 'cameras') {
+if ($calendarIdGet > 0 && $activeCalendarRow === null) {
+    http_response_code(404);
+    echo 'יומן לא נמצא';
+    exit;
+}
+
+$isStaffDaily = in_array($role, ['admin', 'warehouse_manager'], true);
+$isStudentCalendarOk = ($role === 'student'
+    && $activeCalendarRow !== null
+    && (int)($activeCalendarRow['student_visible'] ?? 0) === 1);
+
+if (!$isStaffDaily && !$isStudentCalendarOk) {
+    http_response_code(403);
+    echo 'Forbidden';
+    exit;
+}
+
+if ($role === 'student' && ($calendarIdGet <= 0 || $activeCalendarRow === null)) {
+    http_response_code(403);
+    echo 'Forbidden';
+    exit;
+}
+
+$isDailyReadOnly = ($role === 'student');
+
+$calendarParam = isset($_GET['calendar']) ? trim((string)$_GET['calendar']) : '';
+$legacyCalendarMode = in_array($calendarParam, ['cameras', 'edit_rooms'], true) ? $calendarParam : '';
+
+if ($activeCalendarRow !== null) {
+    $selectedCategory = trim((string)$activeCalendarRow['equipment_category']);
+} elseif ($legacyCalendarMode === 'cameras') {
     $selectedCategory = GF_DAILY_CALENDAR_CATEGORY_CAMERAS;
-} elseif ($calendarMode === 'edit_rooms') {
+} elseif ($legacyCalendarMode === 'edit_rooms') {
     $selectedCategory = GF_DAILY_CALENDAR_CATEGORY_EDIT_ROOMS;
 } else {
     $selectedCategory = isset($_GET['category']) ? trim((string)$_GET['category']) : 'all';
@@ -88,6 +123,8 @@ if ($calendarMode === 'cameras') {
     }
 }
 $searchQ = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
+
+$calendarFilterActive = ($activeCalendarRow !== null || $legacyCalendarMode !== '');
 
 // קטגוריות ציוד (כולל "ללא קטגוריה")
 $categories = [];
@@ -295,17 +332,22 @@ $prevDay = date('Y-m-d', strtotime($day . ' -1 day'));
 $nextDay = date('Y-m-d', strtotime($day . ' +1 day'));
 
 $dailyNavQuery = ['category' => $selectedCategory, 'q' => $searchQ];
-if ($calendarMode !== '') {
-    $dailyNavQuery['calendar'] = $calendarMode;
+if ($activeCalendarRow !== null) {
+    $dailyNavQuery['calendar_id'] = (string)$calendarIdGet;
+} elseif ($legacyCalendarMode !== '') {
+    $dailyNavQuery['calendar'] = $legacyCalendarMode;
 }
 $hrefDailyPrev = 'admin_daily.php?' . htmlspecialchars(http_build_query(array_merge(['day' => $prevDay], $dailyNavQuery)), ENT_QUOTES, 'UTF-8');
 $hrefDailyNext = 'admin_daily.php?' . htmlspecialchars(http_build_query(array_merge(['day' => $nextDay], $dailyNavQuery)), ENT_QUOTES, 'UTF-8');
 
 $pageTitleMain = 'ניהול יומי';
 $pageTitleSuffix = 'מערכת השאלת ציוד';
-if ($calendarMode === 'cameras') {
+if ($activeCalendarRow !== null) {
+    $tCal = trim((string)($activeCalendarRow['title'] ?? ''));
+    $pageTitleMain = $tCal !== '' ? $tCal : 'יומן';
+} elseif ($legacyCalendarMode === 'cameras') {
     $pageTitleMain = 'יומן מצלמות';
-} elseif ($calendarMode === 'edit_rooms') {
+} elseif ($legacyCalendarMode === 'edit_rooms') {
     $pageTitleMain = 'יומן חדרי עריכה';
 }
 
@@ -401,6 +443,8 @@ if ($calendarMode === 'cameras') {
         .order-cell-link:hover .tiny { filter: brightness(0.95); }
         td.js-daily-slot { cursor: pointer; }
         td.js-daily-slot:hover { background: #f9fafb; }
+        table.daily.daily--readonly td.js-daily-slot { cursor: default; }
+        table.daily.daily--readonly td.js-daily-slot:hover { background: transparent; }
         td.js-daily-slot.selected { background: #eef2ff; }
         td.js-daily-slot.selected .cell { box-shadow: inset 0 0 0 1px rgba(79,70,229,0.35); }
         .order-details {
@@ -479,19 +523,21 @@ if ($calendarMode === 'cameras') {
         <div class="topbar">
             <div>
                 <h2 style="margin:0 0 0.15rem;font-size:1.25rem;"><?= htmlspecialchars($pageTitleMain, ENT_QUOTES, 'UTF-8') ?></h2>
-                <div class="muted">תצוגת הזמנות לפי יום ושעות השאלה (07:00–22:00, חצי שעה)<?= $calendarMode !== '' ? ' · קטגוריה: ' . htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8') : '' ?></div>
+                <div class="muted">תצוגת הזמנות לפי יום ושעות השאלה (07:00–22:00, חצי שעה)<?= $calendarFilterActive ? ' · קטגוריה: ' . htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8') : '' ?><?= $isDailyReadOnly ? ' · צפייה בלבד' : '' ?></div>
             </div>
         </div>
 
         <form method="get" action="admin_daily.php" class="filters-row" id="daily_filters_form">
-            <?php if ($calendarMode !== ''): ?>
-                <input type="hidden" name="calendar" value="<?= htmlspecialchars($calendarMode, ENT_QUOTES, 'UTF-8') ?>">
+            <?php if ($activeCalendarRow !== null): ?>
+                <input type="hidden" name="calendar_id" value="<?= (int)$calendarIdGet ?>">
+            <?php elseif ($legacyCalendarMode !== ''): ?>
+                <input type="hidden" name="calendar" value="<?= htmlspecialchars($legacyCalendarMode, ENT_QUOTES, 'UTF-8') ?>">
             <?php endif; ?>
             <div class="filter-block" style="min-width:170px;">
                 <label for="day_input">בחירת תאריך</label>
                 <input id="day_input" type="date" name="day" value="<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>" onchange="this.form.submit()">
             </div>
-            <?php if ($calendarMode === ''): ?>
+            <?php if (!$calendarFilterActive): ?>
             <div class="filter-block" style="min-width:190px;">
                 <label for="cat_input">בחירת קטגוריה</label>
                 <select id="cat_input" name="category" onchange="this.form.submit()">
@@ -542,7 +588,7 @@ if ($calendarMode === 'cameras') {
                 </div>
 
                 <div class="grid-wrap">
-                    <table class="daily">
+                    <table class="daily<?= $isDailyReadOnly ? ' daily--readonly' : '' ?>">
                         <thead>
                         <tr>
                             <th rowspan="2">פריט ציוד</th>
@@ -680,7 +726,7 @@ if ($calendarMode === 'cameras') {
                 </div>
 
                 <div class="modal-backdrop" id="daily_order_modal" aria-hidden="true">
-                    <div class="modal-card" role="dialog" aria-modal="true" aria-label="עריכת הזמנה">
+                    <div class="modal-card" role="dialog" aria-modal="true" aria-label="<?= $isDailyReadOnly ? 'צפייה בהזמנה' : 'עריכת הזמנה' ?>">
                         <div class="modal-header">
                             <h3 class="modal-title" id="daily_order_modal_title">עריכת הזמנה</h3>
                             <button type="button" class="modal-close" id="daily_order_modal_close" title="סגירה" aria-label="סגירה">
@@ -720,6 +766,8 @@ if ($calendarMode === 'cameras') {
         var modalTitle = document.getElementById('daily_order_modal_title');
         if (!panel || !kv || !title || !closeBtn || !openFull || !modal || !modalClose || !modalFrame || !modalTitle) return;
 
+        var dailyReadOnly = <?= $isDailyReadOnly ? 'true' : 'false' ?>;
+
         function hide() {
             panel.style.display = 'none';
         }
@@ -733,8 +781,13 @@ if ($calendarMode === 'cameras') {
         }
 
         function openModal(orderId) {
-            modalTitle.textContent = 'עריכת הזמנה #' + orderId;
-            modalFrame.src = 'admin_orders.php?edit_id=' + encodeURIComponent(orderId);
+            if (dailyReadOnly) {
+                modalTitle.textContent = 'צפייה בהזמנה #' + orderId;
+                modalFrame.src = 'admin_orders.php?view_id=' + encodeURIComponent(orderId);
+            } else {
+                modalTitle.textContent = 'עריכת הזמנה #' + orderId;
+                modalFrame.src = 'admin_orders.php?edit_id=' + encodeURIComponent(orderId);
+            }
             modal.style.display = 'flex';
             modal.setAttribute('aria-hidden', 'false');
             if (window.lucide) lucide.createIcons();
@@ -838,27 +891,29 @@ if ($calendarMode === 'cameras') {
             openNewOrderModal('<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>', start, end, eqId);
         }
 
-        document.querySelectorAll('td.js-daily-slot').forEach(function (td) {
-            td.addEventListener('click', function () {
-                if (clickTimer) window.clearTimeout(clickTimer);
-                clickTimer = window.setTimeout(function () {
-                    clickTimer = null;
-                    handleSlotClick(td);
-                }, 280);
+        if (!dailyReadOnly) {
+            document.querySelectorAll('td.js-daily-slot').forEach(function (td) {
+                td.addEventListener('click', function () {
+                    if (clickTimer) window.clearTimeout(clickTimer);
+                    clickTimer = window.setTimeout(function () {
+                        clickTimer = null;
+                        handleSlotClick(td);
+                    }, 280);
+                });
+                td.addEventListener('dblclick', function (e) {
+                    e.preventDefault();
+                    if (clickTimer) {
+                        window.clearTimeout(clickTimer);
+                        clickTimer = null;
+                    }
+                    clearSelection();
+                    var slotMin = parseInt(td.getAttribute('data-slot-min') || '-1', 10);
+                    var eqId = parseInt(td.getAttribute('data-equipment-id') || '0', 10);
+                    if (slotMin < GRID_MIN || slotMin >= GRID_MAX || !eqId) return;
+                    openNewOrderModalStartOnly('<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>', slotMin, eqId);
+                });
             });
-            td.addEventListener('dblclick', function (e) {
-                e.preventDefault();
-                if (clickTimer) {
-                    window.clearTimeout(clickTimer);
-                    clickTimer = null;
-                }
-                clearSelection();
-                var slotMin = parseInt(td.getAttribute('data-slot-min') || '-1', 10);
-                var eqId = parseInt(td.getAttribute('data-equipment-id') || '0', 10);
-                if (slotMin < GRID_MIN || slotMin >= GRID_MAX || !eqId) return;
-                openNewOrderModalStartOnly('<?= htmlspecialchars($day, ENT_QUOTES, 'UTF-8') ?>', slotMin, eqId);
-            });
-        });
+        }
 
         function escapeHtml(s) {
             s = String(s == null ? '' : s);
