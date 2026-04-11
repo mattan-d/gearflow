@@ -292,6 +292,29 @@ if ($loadId > 0) {
     );
     $stmt->execute([':id' => $loadId]);
     $editingOrder = $stmt->fetch() ?: null;
+    if ($editingOrder) {
+        $editingOrder['borrower_user_email'] = '';
+        $editingOrder['borrower_user_phone'] = '';
+        $bn = trim((string)($editingOrder['borrower_name'] ?? ''));
+        if ($bn !== '') {
+            try {
+                $stmtBu = $pdo->prepare(
+                    "SELECT email, phone FROM users
+                     WHERE role = 'student'
+                       AND (username = :bn OR TRIM(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) = :bn2)
+                     LIMIT 1"
+                );
+                $stmtBu->execute([':bn' => $bn, ':bn2' => $bn]);
+                $buRow = $stmtBu->fetch(PDO::FETCH_ASSOC);
+                if ($buRow) {
+                    $editingOrder['borrower_user_email'] = trim((string)($buRow['email'] ?? ''));
+                    $editingOrder['borrower_user_phone'] = trim((string)($buRow['phone'] ?? ''));
+                }
+            } catch (Throwable $e) {
+                // ignore
+            }
+        }
+    }
 }
 $editingEquipmentRows = [];
 $editingEquipmentIds = [];
@@ -2903,6 +2926,59 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
             opacity: 0.92;
             cursor: default;
         }
+        .gf-phone-wrap {
+            position: relative;
+            display: inline-block;
+        }
+        .gf-phone-trigger {
+            display: inline-block;
+            padding: 0.35rem 0.5rem;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            color: #111827;
+            font: inherit;
+            cursor: pointer;
+            min-width: 0;
+        }
+        .gf-phone-wrap.open .gf-phone-trigger {
+            border-color: #93c5fd;
+            background: #eff6ff;
+        }
+        .gf-phone-popover {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 6px;
+            display: none;
+            flex-direction: row;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.45rem 0.55rem;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
+            z-index: 100;
+        }
+        .gf-phone-wrap.open .gf-phone-popover {
+            display: flex;
+        }
+        .gf-phone-popover-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: #f3f4f6;
+            color: #111827;
+            text-decoration: none;
+            transition: background 0.15s;
+        }
+        .gf-phone-popover-item:hover {
+            background: #e5e7eb;
+        }
     </style>
 </head>
 <body>
@@ -3350,20 +3426,32 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                         $initialEmail = '';
                         $initialPhone = '';
                         if ($editingOrder) {
-                            $initialEmail = '';
-                            $initialPhone = '';
+                            $initialEmail = trim((string)($editingOrder['borrower_user_email'] ?? ''));
+                            $initialPhone = trim((string)($editingOrder['borrower_user_phone'] ?? ''));
+                            $split = gf_split_borrower_contact((string)($editingOrder['borrower_contact'] ?? ''));
+                            if ($initialEmail === '' && $split['email'] !== '') {
+                                $initialEmail = $split['email'];
+                            }
+                            if ($initialPhone === '' && $split['phone'] !== '') {
+                                $initialPhone = $split['phone'];
+                            }
                         } else {
                             $initialEmail = (string)($me['email'] ?? '');
                             $initialPhone = (string)($me['phone'] ?? '');
                         }
+                        $mailtoSubject = ($editingOrder && $isViewModeOrder) ? ('הזמנה #' . (int)$editingOrder['id']) : '';
                         ?>
                         <?php if ($isViewModeOrder): ?>
+                            <?php if ($initialEmail !== '' && filter_var($initialEmail, FILTER_VALIDATE_EMAIL)): ?>
                             <a
-                                href="mailto:<?= htmlspecialchars($initialEmail, ENT_QUOTES, 'UTF-8') ?>"
+                                href="<?= htmlspecialchars(gf_mailto_href($initialEmail, $mailtoSubject), ENT_QUOTES, 'UTF-8') ?>"
                                 id="borrower_email"
-                                style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#111827;min-width:0;">
+                                style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#2563eb;font-weight:500;min-width:0;">
                                 <?= htmlspecialchars($initialEmail, ENT_QUOTES, 'UTF-8') ?>
                             </a>
+                            <?php else: ?>
+                            <span id="borrower_email" class="muted-small">—</span>
+                            <?php endif; ?>
                         <?php else: ?>
                             <input
                                 type="text"
@@ -3376,12 +3464,13 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
 
                         <label for="borrower_phone">טלפון</label>
                         <?php if ($isViewModeOrder): ?>
-                            <a
-                                href="tel:<?= htmlspecialchars($initialPhone, ENT_QUOTES, 'UTF-8') ?>"
-                                id="borrower_phone"
-                                style="display:inline-block;padding:0.35rem 0.5rem;border-radius:8px;border:1px solid #d1d5db;background:#f9fafb;text-decoration:none;color:#111827;min-width:0;">
-                                <?= htmlspecialchars($initialPhone, ENT_QUOTES, 'UTF-8') ?>
-                            </a>
+                            <?php if ($initialPhone !== ''): ?>
+                            <span id="borrower_phone" style="display:inline-block;">
+                                <?= gf_html_phone_contact_menu($initialPhone) ?>
+                            </span>
+                            <?php else: ?>
+                            <span id="borrower_phone" class="muted-small">—</span>
+                            <?php endif; ?>
                         <?php else: ?>
                             <input
                                 type="text"
@@ -4121,25 +4210,28 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
                             $emC = trim((string)($order['borrower_user_email'] ?? ''));
                             $phC = trim((string)($order['borrower_user_phone'] ?? ''));
                             $bcC = trim((string)($order['borrower_contact'] ?? ''));
-                            $links = [];
+                            $splitC = gf_split_borrower_contact($bcC);
+                            if ($emC === '' && $splitC['email'] !== '') {
+                                $emC = $splitC['email'];
+                            }
+                            if ($phC === '' && $splitC['phone'] !== '') {
+                                $phC = $splitC['phone'];
+                            }
+                            $mailtoSubRow = 'הזמנה #' . (int)$order['id'];
+                            $outContact = [];
                             if ($emC !== '' && filter_var($emC, FILTER_VALIDATE_EMAIL)) {
-                                $links[] = '<a href="mailto:' . htmlspecialchars($emC, ENT_QUOTES, 'UTF-8') . '">מייל</a>';
+                                $outContact[] = '<a href="' . htmlspecialchars(gf_mailto_href($emC, $mailtoSubRow), ENT_QUOTES, 'UTF-8') . '" style="color:#2563eb;font-weight:500;">'
+                                    . htmlspecialchars($emC, ENT_QUOTES, 'UTF-8') . '</a>';
                             }
                             if ($phC !== '') {
-                                $telHref = preg_replace('/\s+/', '', $phC);
-                                $links[] = '<a href="tel:' . htmlspecialchars($telHref, ENT_QUOTES, 'UTF-8') . '">טלפון</a>';
-                                $wa = gf_whatsapp_url_from_phone($phC);
-                                if ($wa !== null) {
-                                    $links[] = '<a href="' . htmlspecialchars($wa, ENT_QUOTES, 'UTF-8') . '" target="_blank" rel="noopener noreferrer">ווטסאפ</a>';
-                                }
+                                $outContact[] = gf_html_phone_contact_menu($phC);
                             }
-                            if ($links !== []) {
-                                echo implode(' · ', $links);
-                                if ($bcC !== '') {
-                                    echo '<br><span class="muted-small">' . htmlspecialchars($bcC, ENT_QUOTES, 'UTF-8') . '</span>';
-                                }
-                            } else {
+                            if ($outContact !== []) {
+                                echo implode('<br>', $outContact);
+                            } elseif ($bcC !== '') {
                                 echo htmlspecialchars($bcC, ENT_QUOTES, 'UTF-8');
+                            } else {
+                                echo '—';
                             }
                             ?>
                         </td>
@@ -4379,6 +4471,52 @@ if ($role === 'admin' || $role === 'warehouse_manager') {
     const students = <?= json_encode($students, JSON_UNESCAPED_UNICODE) ?>;
     const equipmentMainById = <?= $equipmentMainByIdJson ?>;
     const equipmentKitsMap = <?= $equipmentKitsMapJson ?>;
+
+    document.addEventListener('click', function (e) {
+        var trigger = e.target.closest && e.target.closest('.gf-phone-trigger');
+        if (trigger) {
+            e.preventDefault();
+            e.stopPropagation();
+            var wrap = trigger.closest('.gf-phone-wrap');
+            if (!wrap) {
+                return;
+            }
+            var wasOpen = wrap.classList.contains('open');
+            document.querySelectorAll('.gf-phone-wrap.open').forEach(function (w) {
+                w.classList.remove('open');
+                var b = w.querySelector('.gf-phone-trigger');
+                if (b) {
+                    b.setAttribute('aria-expanded', 'false');
+                }
+            });
+            if (!wasOpen) {
+                wrap.classList.add('open');
+                trigger.setAttribute('aria-expanded', 'true');
+            }
+            return;
+        }
+        if (!e.target.closest || !e.target.closest('.gf-phone-wrap')) {
+            document.querySelectorAll('.gf-phone-wrap.open').forEach(function (w) {
+                w.classList.remove('open');
+                var b = w.querySelector('.gf-phone-trigger');
+                if (b) {
+                    b.setAttribute('aria-expanded', 'false');
+                }
+            });
+        }
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') {
+            return;
+        }
+        document.querySelectorAll('.gf-phone-wrap.open').forEach(function (w) {
+            w.classList.remove('open');
+            var b = w.querySelector('.gf-phone-trigger');
+            if (b) {
+                b.setAttribute('aria-expanded', 'false');
+            }
+        });
+    });
 
     const startInput = document.getElementById('start_date');
     const endInput = document.getElementById('end_date');
